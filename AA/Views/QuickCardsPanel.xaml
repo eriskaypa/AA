@@ -1,0 +1,28 @@
+<UserControl x:Class="AA.Views.QuickCardsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}"
+                BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="0,0,0,6">
+            <DockPanel>
+                <TextBlock Text="Quick Cards" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                <TextBlock Text="Double-click a card to open it. Drag to move, drag the corner to resize, right-click to edit."
+                           Foreground="{DynamicResource Muted}" Margin="14,0,0,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                    <Button Content="+ Quick card" Style="{StaticResource AccentButton}" Click="Add_Click"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+            <Grid>
+                <ScrollViewer x:Name="Scroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                    <Canvas x:Name="CardCanvas" Background="Transparent"/>
+                </ScrollViewer>
+                <TextBlock x:Name="EmptyHint" IsHitTestVisible="False" Foreground="{DynamicResource Muted}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                           Text="No quick cards yet for this vessel.&#x0a;Click '+ Quick card' to add a shortcut to a file, folder, or web link."/>
+            </Grid>
+        </Border>
+    </DockPanel>
+</UserControl>

@@ -1,0 +1,35 @@
+Create a Windows WPF C# application with the following features. Make it into a maximum loveable product with a sleek UI, using Consolas as font and a highly intuitive interface.
+App Name: AA
+
+Stores and registers text, rich text, links, files (PDF, DOCX, XLSX, PPTX), photos (JPEG, JPG, PNG, TIFF, bitmap, HEIC) and videos (.MOV, .mp4, .wmv, etc) into containers.
+Each container should have:
+-a text field with ALL MS-WORD features that are possible, with interactive and responsive buttons (no limit to characters)
+-a file bank (for all files, categorized by type) that is accessible to that container and to other containers IF they are explicitly linked by the user - THE UI for this should be similar to that of OneDrive where users can drag and drop files and use an add file and add folder command, and cut/copy/and paste accordingly.
+-each file in a container may also be linked to any item within a hierarchy, which is seen below.
+
+
+
+A hierarchy should exist that will guide the use of containers and how they interact with each other:
+
+I. Equipment
+-The user can make their own entries for equipment. Each equipment can then have 1. Procedures 2. Components 3. Tasks
+-Each equipment can be related to any number of tasks or any procedures, which therefore automatically relates the equipment to any sub-hierarchy of that procedure or task.
+-Each equipment contains a container and relationships
+
+II. Tasks
+-The user can make their own entries for tasks, or all tasks created for each equipment and or procedure are automatically added to the task bank. 
+-Each task can then have 1. Subtasks 2. Deadline 3. Recurring event logic 
+-Each task should be able to be displayed in the app's own calendar or schedule matrix
+-Each task can be related to any number of equipment or any procedures, DO NOT automatically relate a task to any sub-hierarchy of a procedure or equipment.
+-Each task contains a container and relationships
+
+
+III. Procedures
+
+-The user can make their own entries for procedures, or all procedures created for each equipment and are automatically added to the procedure bank. 
+-Each procedure can then have 1. Checklists 2. Logic to add tasks and equipment for each step
+-Each checklist in each procedure may use banked tasks, or the user may create one
+-Each procedure contains a container and relationships
+
+based on the above, the user should be able build relationships
+each container or item can then be inspected, and the relationship shown thru a 2D map 

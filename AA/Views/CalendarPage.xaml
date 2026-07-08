@@ -1,0 +1,105 @@
+<UserControl x:Class="AA.Views.CalendarPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="320"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4" Padding="8">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Calendar" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource Accent}" Margin="0,0,0,8"/>
+                <Calendar x:Name="Cal" Background="{DynamicResource Panel}" Foreground="{DynamicResource Fg}" SelectedDatesChanged="Cal_SelectedDatesChanged"/>
+            </DockPanel>
+        </Border>
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{DynamicResource BorderB}"/>
+        <Border Grid.Column="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" Padding="8" BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
+                    <DockPanel>
+                        <TextBlock x:Name="DayLabel" Text="Schedule Matrix" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource Accent}"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                            <TextBlock Text="Text:" VerticalAlignment="Center" Foreground="{DynamicResource Muted}" Margin="0,0,4,0"/>
+                            <Button x:Name="FontSmaller" Content="A-" Click="FontSmaller_Click" MinWidth="30" Margin="0,0,2,0" ToolTip="Smaller list text"/>
+                            <Button x:Name="FontBigger" Content="A+" Click="FontBigger_Click" MinWidth="30" Margin="0,0,10,0" ToolTip="Bigger list text"/>
+                            <RadioButton x:Name="RbDay" Content="Day" GroupName="View" IsChecked="True" Foreground="{DynamicResource Fg}" Margin="6,0" Checked="View_Changed"/>
+                            <RadioButton x:Name="RbWeek" Content="Week" GroupName="View" Foreground="{DynamicResource Fg}" Margin="6,0" Checked="View_Changed"/>
+                            <RadioButton x:Name="RbMonth" Content="Month" GroupName="View" Foreground="{DynamicResource Fg}" Margin="6,0" Checked="View_Changed"/>
+                            <RadioButton x:Name="RbAll" Content="All Upcoming" GroupName="View" Foreground="{DynamicResource Fg}" Margin="6,0" Checked="View_Changed"/>
+                            <RadioButton x:Name="RbAgenda" Content="Agenda" GroupName="View" Foreground="{DynamicResource Fg}" Margin="6,0" Checked="View_Changed"
+                                         ToolTip="All upcoming tasks grouped by day."/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <ListView x:Name="TaskGrid" MouseDoubleClick="TaskGrid_DoubleClick"
+                          FontSize="15" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            <Setter Property="Padding" Value="6"/>
+                        </Style>
+                    </ListView.ItemContainerStyle>
+                    <ListView.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate>
+                                    <Border Background="{DynamicResource PanelAlt}" BorderBrush="{DynamicResource BorderB}"
+                                            BorderThickness="0,0,0,1" Padding="8,5" Margin="0,4,0,0">
+                                        <DockPanel>
+                                            <TextBlock Text="{Binding Name}" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource Accent}"/>
+                                            <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" Foreground="{DynamicResource Muted}"/>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListView.GroupStyle>
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Done" Width="56">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <CheckBox IsChecked="{Binding IsComplete, Mode=TwoWay}"
+                                                  HorizontalAlignment="Center" VerticalAlignment="Top"
+                                                  Checked="TaskDone_Toggled" Unchecked="TaskDone_Toggled"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="Deadline" Width="160">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Deadline, StringFormat='yyyy-MM-dd HH:mm'}"
+                                                   TextWrapping="Wrap" VerticalAlignment="Top"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="Status" Width="120">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Status}" TextWrapping="Wrap" VerticalAlignment="Top" FontWeight="SemiBold"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="Task" Width="420">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Name}" TextWrapping="Wrap" FontWeight="SemiBold"
+                                                   TextDecorations="{Binding IsComplete, Converter={StaticResource BoolToStrike}}"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="Recurrence" Width="110">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <TextBlock Text="{Binding Recurrence}" TextWrapping="Wrap" VerticalAlignment="Top"/>
+                                    </DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>

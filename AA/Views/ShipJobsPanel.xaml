@@ -1,0 +1,95 @@
+<UserControl x:Class="AA.Views.ShipJobsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="4">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Toolbar -->
+        <WrapPanel Grid.Row="0" Margin="0,0,0,6">
+            <Button Content="Import Shippalm (.xlsx)..." Style="{StaticResource AccentButton}" Click="Import_Click" Margin="0,0,6,4"
+                    ToolTip="Import a Shippalm Work Order List export into THIS ship. Jobs are keyed by job number (No.)."/>
+            <Button Content="Export (.xlsx)..." Click="Export_Click" Margin="0,0,12,4"
+                    ToolTip="Export THIS ship's work orders (including notify choices) to an .xlsx that can be re-imported."/>
+            <TextBox x:Name="SearchBox" Width="190" Margin="0,0,6,4" TextChanged="Search_Changed" Tag="Search job no / title / function..."/>
+            <ComboBox x:Name="StatusFilter" Width="140" Margin="0,0,6,4" SelectionChanged="Filter_Changed"
+                      ToolTip="Filter by Work Order Status."/>
+            <ToggleButton x:Name="DueSoonBtn" Content="Due/overdue only" Margin="0,0,6,4" Click="Filter_Changed"
+                          ToolTip="Show only jobs that are overdue or due within 90 days."/>
+            <ToggleButton x:Name="NotifyOnlyBtn" Content="Notify on only" Margin="0,0,6,4" Click="Filter_Changed"
+                          ToolTip="Show only jobs set to raise notifications."/>
+            <Button Content="Notify: shown ON" Margin="0,0,6,4" Click="NotifyAllOn_Click"
+                    ToolTip="Turn ON notifications for every job currently shown (choose which recurring jobs notify)."/>
+            <Button Content="Notify: shown OFF" Margin="0,0,6,4" Click="NotifyAllOff_Click"
+                    ToolTip="Turn OFF notifications for every job currently shown."/>
+        </WrapPanel>
+
+        <!-- Per-ship notifications (stays inside this vessel's tab) -->
+        <Border Grid.Row="1" x:Name="NotifBar" Background="{DynamicResource PanelAlt}" BorderThickness="0,0,0,3"
+                BorderBrush="{DynamicResource BorderB}" CornerRadius="4" Padding="10,6" Margin="0,0,0,6">
+            <DockPanel>
+                <CheckBox x:Name="NotifEnabledChk" DockPanel.Dock="Left" Content="🔔 Notifications for this ship"
+                          VerticalAlignment="Center" Margin="0,0,12,0" Click="NotifEnabled_Click"
+                          ToolTip="Master on/off switch for THIS ship's work-order notifications."/>
+                <TextBlock x:Name="NotifText" VerticalAlignment="Center" TextWrapping="Wrap" Foreground="{DynamicResource Fg}"/>
+            </DockPanel>
+        </Border>
+
+        <!-- Analysis summary -->
+        <Border Grid.Row="2" Background="{DynamicResource PanelAlt}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1"
+                CornerRadius="4" Padding="10,6" Margin="0,0,0,6">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="{DynamicResource Fg}"
+                       Text="No work orders imported yet for this ship."/>
+        </Border>
+
+        <!-- Jobs -->
+        <ListView x:Name="JobsList" Grid.Row="3"
+                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                  ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Notify" Width="52">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding Job.Notify, Mode=TwoWay}" HorizontalAlignment="Center"
+                                          Click="NotifyToggle_Click"
+                                          ToolTip="Raise a due/overdue notification for this recurring job."/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="Job No." Width="110" DisplayMemberBinding="{Binding Job.JobNo}"/>
+                    <GridViewColumn Header="Title" Width="260">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Job.Title}" TextWrapping="Wrap"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="Due" Width="150">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding DueInfo}" Foreground="{Binding DueBrush}" FontWeight="Bold" TextWrapping="Wrap"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="Interval" Width="80" DisplayMemberBinding="{Binding Job.Interval}"/>
+                    <GridViewColumn Header="Status" Width="90" DisplayMemberBinding="{Binding Job.Status}"/>
+                    <GridViewColumn Header="Due Status" Width="90" DisplayMemberBinding="{Binding Job.DueStatus}"/>
+                    <GridViewColumn Header="Category" Width="80" DisplayMemberBinding="{Binding Job.Category}"/>
+                    <GridViewColumn Header="Responsible" Width="130" DisplayMemberBinding="{Binding Job.ResponsibleRank}"/>
+                    <GridViewColumn Header="Function" Width="220">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding Job.FunctionDescription}" TextWrapping="Wrap"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </Grid>
+</UserControl>

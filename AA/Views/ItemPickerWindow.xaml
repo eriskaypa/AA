@@ -1,0 +1,21 @@
+<Window x:Class="AA.Views.ItemPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Pick items" Height="500" Width="500" WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/AA.ico">
+    <Grid Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <TextBlock x:Name="LblPrompt" Text="Select items:" Margin="0,0,0,6" FontWeight="Bold"/>
+        <TextBox x:Name="SearchBox" Margin="0,0,0,6" TextChanged="SearchBox_TextChanged"/>
+        <ListBox x:Name="Lb" Grid.Row="2" SelectionMode="Multiple" DisplayMemberPath="Display"/>
+        <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="Cancel" Width="80" Margin="0,0,8,0" Click="Cancel_Click"/>
+            <Button Content="OK" Width="80" Style="{StaticResource AccentButton}" IsDefault="True" Click="Ok_Click"/>
+        </StackPanel>
+    </Grid>
+</Window>

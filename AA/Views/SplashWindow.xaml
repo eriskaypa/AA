@@ -1,0 +1,27 @@
+<Window x:Class="AA.Views.SplashWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False"
+        WindowStartupLocation="CenterScreen" Topmost="True"
+        Background="White" SizeToContent="WidthAndHeight"
+        Icon="pack://application:,,,/AA.ico">
+    <Border Background="White" BorderBrush="#FFDDDDDD" BorderThickness="1">
+        <Grid>
+            <!-- The exact splash photo (bundled as Assets/Splash.png). -->
+            <Image x:Name="SplashImage" Stretch="Uniform" MaxWidth="560" MaxHeight="640"/>
+
+            <!-- Text fallback shown only if the image resource isn't present yet. -->
+            <StackPanel x:Name="FallbackPanel" Visibility="Collapsed"
+                        Width="520" Margin="40,34,40,34" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock Text="AA" FontSize="128" FontWeight="Bold" Foreground="Black"
+                           FontFamily="Segoe UI" HorizontalAlignment="Left" Margin="0,0,0,18"/>
+                <TextBlock Text="A tool for Active minds" FontStyle="Italic" FontSize="28" Foreground="Black"
+                           FontFamily="Consolas" Margin="0,2,0,2"/>
+                <TextBlock Text="Created by B.E.P Avida" FontStyle="Italic" FontSize="28" Foreground="Black"
+                           FontFamily="Consolas" Margin="0,2,0,2"/>
+                <TextBlock Text="May 2026" FontStyle="Italic" FontSize="28" Foreground="Black"
+                           FontFamily="Consolas" Margin="0,2,0,2"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

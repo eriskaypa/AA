@@ -1,0 +1,54 @@
+<UserControl x:Class="AA.Views.PlannerPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel>
+        <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}"
+                BorderThickness="1" CornerRadius="4" Padding="10,8" Margin="0,0,0,6">
+            <DockPanel>
+                <TextBlock Text="Planner" FontWeight="Bold" FontSize="16" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                <TextBlock x:Name="RangeLabel" Margin="14,0,0,0" VerticalAlignment="Center" Foreground="{DynamicResource Muted}"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                    <Button Content="◀" Click="Prev_Click" MinWidth="34" Margin="0,0,4,0"/>
+                    <Button Content="Today" Click="Today_Click" Margin="0,0,4,0"/>
+                    <Button Content="▶" Click="Next_Click" MinWidth="34" Margin="0,0,12,0"/>
+                    <RadioButton x:Name="RbDay" Content="Day" GroupName="PV" IsChecked="True" Foreground="{DynamicResource Fg}" Margin="6,0" Checked="View_Changed"/>
+                    <RadioButton x:Name="RbWeek" Content="Week" GroupName="PV" Foreground="{DynamicResource Fg}" Margin="6,0" Checked="View_Changed"/>
+                    <RadioButton x:Name="RbMonth" Content="Month" GroupName="PV" Foreground="{DynamicResource Fg}" Margin="6,0" Checked="View_Changed"/>
+                </StackPanel>
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="230"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" Padding="8,6"
+                            BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
+                        <TextBlock Text="Unscheduled Jobs" FontWeight="Bold"/>
+                    </Border>
+                    <TextBox x:Name="JobSearchBox" DockPanel.Dock="Top" Margin="6,6,6,0"
+                             TextChanged="JobSearch_Changed" Tag="Search jobs..."
+                             ToolTip="Filter the schedulable jobs by name."/>
+                    <TextBlock DockPanel.Dock="Bottom" Margin="8,6" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                               Text="Drag a job onto the grid to schedule it. Drag a scheduled block back here to unschedule. Double-click to edit."/>
+                    <ListBox x:Name="UnscheduledList" BorderThickness="0" AllowDrop="True"
+                             Drop="Unscheduled_Drop" DragOver="Grid_DragOver"
+                             PreviewMouseLeftButtonDown="Job_PreviewDown" PreviewMouseMove="Job_PreviewMove"
+                             MouseDoubleClick="Unscheduled_DoubleClick"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{DynamicResource BorderB}"/>
+
+            <Border Grid.Column="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+                <Grid x:Name="GridHost"/>
+            </Border>
+        </Grid>
+    </DockPanel>
+</UserControl>

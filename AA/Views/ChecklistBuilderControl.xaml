@@ -1,0 +1,79 @@
+<UserControl x:Class="AA.Views.ChecklistBuilderControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel>
+        <!-- Template bar -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" BorderBrush="{DynamicResource BorderB}"
+                BorderThickness="0,0,0,1" Padding="6,5" Margin="0,0,0,8">
+            <DockPanel>
+                <TextBlock Text="Saved lists:" VerticalAlignment="Center" FontWeight="Bold"
+                           Foreground="{DynamicResource Accent}" Margin="0,0,8,0"/>
+                <Button Content="💾 Save as list..." Click="SaveTemplate_Click" Margin="0,0,6,0"
+                        ToolTip="Save the current checklist to the database as a reusable saved list."/>
+                <Button Content="📋 Load a saved list..." Click="LoadTemplate_Click" Margin="0,0,6,0"
+                        ToolTip="Insert a saved list (reuse it over and over). You choose whether to append or replace."/>
+                <Button Content="Manage saved lists..." Click="ManageTemplates_Click"
+                        ToolTip="Rename or delete saved lists in the database." HorizontalAlignment="Right"/>
+            </DockPanel>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Left: bulk entry -->
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" Text="Bulk entry (one item per line)" FontWeight="Bold" Margin="0,0,0,4"/>
+                <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                    <Button Content="Add all" Style="{StaticResource AccentButton}" Click="AddAll_Click"/>
+                    <Button Content="Clear" Margin="6,0,0,0" Click="ClearText_Click"/>
+                    <CheckBox x:Name="ReplaceBox" Margin="14,0,0,0" VerticalAlignment="Center"
+                              ToolTip="Replace all existing items instead of appending." Content="Replace existing"/>
+                </StackPanel>
+                <TextBox x:Name="BulkBox" AcceptsReturn="True" TextWrapping="NoWrap"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas"/>
+            </DockPanel>
+
+            <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" Background="{DynamicResource BorderB}"/>
+
+            <!-- Right: existing items -->
+            <DockPanel Grid.Column="2">
+                <TextBlock DockPanel.Dock="Top" Text="Current items" FontWeight="Bold" Margin="0,0,0,4"/>
+                <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,6">
+                    <Button Content="+ Item" Click="AddOne_Click" Margin="0,0,4,4"
+                            ToolTip="Append a new item to the end of the list."/>
+                    <Button Content="Insert before" Margin="0,0,4,4" Click="InsertBefore_Click"
+                            ToolTip="Insert a new item immediately above the (first) selected item."/>
+                    <Button Content="Insert after" Margin="0,0,4,4" Click="InsertAfter_Click"
+                            ToolTip="Insert a new item immediately below the (last) selected item."/>
+                    <Button Content="Edit..." Margin="0,0,4,4" Click="EditOne_Click"
+                            ToolTip="Open the full editor for the selected item — deadline, done, notes &amp; files."/>
+                    <Button Content="↑" MinWidth="32" Margin="0,0,4,4" Click="Up_Click" ToolTip="Move selected item(s) up."/>
+                    <Button Content="↓" MinWidth="32" Margin="0,0,4,4" Click="Down_Click" ToolTip="Move selected item(s) down."/>
+                    <Button Content="Move to..." Margin="0,0,4,4" Click="MoveTo_Click"
+                            ToolTip="Move selected item(s) to a specific position."/>
+                    <Button Content="Delete" Margin="0,0,4,4" Click="Delete_Click"/>
+                </WrapPanel>
+                <ListBox x:Name="StepsList" SelectionMode="Extended"
+                         HorizontalContentAlignment="Stretch"
+                         MouseDoubleClick="StepsList_DoubleClick">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Right" VerticalAlignment="Center" Margin="8,0,0,0"
+                                           FontSize="11" Foreground="{DynamicResource Muted}"
+                                           Text="{Binding Deadline, StringFormat='due {0:yyyy-MM-dd}'}"/>
+                                <TextBlock Text="{Binding Title}" TextWrapping="Wrap"
+                                           TextDecorations="{Binding Done, Converter={StaticResource BoolToStrike}}"/>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</UserControl>

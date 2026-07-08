@@ -1,0 +1,184 @@
+<UserControl x:Class="AA.Views.HierarchyPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="clr-namespace:AA.Views">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="280"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left: Item list -->
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" Padding="8,6" BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
+                    <DockPanel>
+                        <TextBlock x:Name="PageTitle" Text="Items" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource Accent}"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                            <Button Content="+ New" Style="{StaticResource AccentButton}" Click="New_Click" Margin="0,0,4,0"/>
+                            <Button Content="Delete" Click="Delete_Click"/>
+                        </StackPanel>
+                    </DockPanel>
+                </Border>
+                <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" Padding="6,4" BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
+                    <WrapPanel>
+                        <ToggleButton x:Name="SortAZBtn" Content="A→Z" Margin="0,0,4,0" Click="SortAZ_Click"
+                                      ToolTip="Sort items alphabetically (otherwise list order is preserved)."/>
+                        <Button Content="+ Group" Margin="0,0,4,0" Click="NewGroup_Click"
+                                ToolTip="Create a new group in this sidebar."/>
+                        <Button Content="Assign group..." Margin="0,0,4,0" Click="AssignGroup_Click"
+                                ToolTip="Move the selected item into a group (or out of all groups)."/>
+                        <Button Content="Rename group..." Margin="0,0,4,0" Click="RenameGroup_Click"
+                                ToolTip="Rename a sidebar group."/>
+                        <Button Content="Delete group" Click="DeleteGroup_Click"
+                                ToolTip="Delete a sidebar group. Items inside it become ungrouped."/>
+                    </WrapPanel>
+                </Border>
+                <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Margin="6" TextChanged="SearchBox_TextChanged" Tag="Search..."/>
+                <ListBox x:Name="ItemsList" SelectionChanged="ItemsList_SelectionChanged"
+                         BorderThickness="0" SelectionMode="Extended"
+                         HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}" TextWrapping="Wrap"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Move to group..." Click="AssignGroup_Click"/>
+                            <MenuItem Header="Remove from group" Click="UngroupItem_Click"/>
+                            <Separator/>
+                            <MenuItem Header="New group..." Click="NewGroup_Click"/>
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
+                    <ListBox.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.ContainerStyle>
+                                <Style TargetType="GroupItem">
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="GroupItem">
+                                                <Expander IsExpanded="True"
+                                                          Background="Transparent"
+                                                          Foreground="{DynamicResource Fg}"
+                                                          BorderThickness="0"
+                                                          Margin="0,2,0,0"
+                                                          Tag="{Binding Name}"
+                                                          Loaded="GroupExpander_Loaded"
+                                                          Expanded="GroupExpander_Expanded"
+                                                          Collapsed="GroupExpander_Collapsed">
+                                                    <Expander.Header>
+                                                        <Border Background="{DynamicResource PanelAlt}" Padding="6,3">
+                                                            <DockPanel LastChildFill="False">
+                                                                <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{DynamicResource Accent}"/>
+                                                                <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" Foreground="{DynamicResource Muted}"/>
+                                                            </DockPanel>
+                                                        </Border>
+                                                    </Expander.Header>
+                                                    <ItemsPresenter Margin="14,0,0,0"/>
+                                                </Expander>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </GroupStyle.ContainerStyle>
+                        </GroupStyle>
+                    </ListBox.GroupStyle>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{DynamicResource BorderB}"/>
+
+        <!-- Right: Details for selected item -->
+        <Grid Grid.Column="2" x:Name="DetailsRoot" IsEnabled="False">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+            <Border x:Name="HeaderBar" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4" Padding="10" Margin="0,0,0,6">
+                <StackPanel>
+                    <DockPanel>
+                        <TextBlock Text="Name:" Width="80" VerticalAlignment="Center"/>
+                        <Button DockPanel.Dock="Right" Content="Export PDF..." Click="ExportPdf_Click" Margin="6,0,0,0" ToolTip="Export this item, its hierarchy and relationships to an A4 PDF."/>
+                        <Button DockPanel.Dock="Right" x:Name="LockBtn" Content="🔒 Lock" Click="LockBtn_Click" Margin="6,0,0,0"
+                                ToolTip="Password-protect this entry (with an optional hint). The master password always unlocks."/>
+                        <TextBox x:Name="NameBox" TextChanged="NameBox_TextChanged"
+                                 LostFocus="NameBox_LostFocus" KeyDown="NameBox_KeyDown"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,6,0,0">
+                        <TextBlock Text="Description:" Width="80" VerticalAlignment="Center"/>
+                        <TextBox x:Name="DescBox" TextChanged="DescBox_TextChanged"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,6,0,0">
+                        <TextBlock Text="Tags:" Width="80" VerticalAlignment="Center"/>
+                        <TextBox x:Name="TagsBox" TextChanged="TagsBox_TextChanged" LostFocus="TagsBox_LostFocus"
+                                 ToolTip="Comma- or space-separated tags. Used for filtering, global search and the quick switcher (Ctrl+O)."/>
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+
+            <Grid Grid.Row="1">
+                <TabControl x:Name="DetailsTabs">
+                    <TabItem x:Name="QuickCardsTab" Header="Quick Cards" Visibility="Collapsed">
+                        <views:QuickCardsPanel x:Name="QuickCardsCtrl"/>
+                    </TabItem>
+                    <TabItem x:Name="WorkOrdersTab" Header="Work Orders" Visibility="Collapsed">
+                        <views:ShipJobsPanel x:Name="ShipJobsCtrl"/>
+                    </TabItem>
+                    <TabItem x:Name="ContainerTab" Header="Container">
+                        <views:ContainerEditor x:Name="ContainerCtrl"/>
+                    </TabItem>
+                    <TabItem Header="Relationships">
+                        <Grid Margin="6">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="160"/>
+                            </Grid.RowDefinitions>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Add relationship..." Style="{StaticResource AccentButton}" Click="AddRel_Click" Margin="0,0,6,6"/>
+                                <Button Content="Remove" Click="RemoveRel_Click" Margin="0,0,6,6"/>
+                                <TextBlock Text="Related items (double-click to open). Removing breaks the link both ways." Foreground="{DynamicResource Muted}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ListBox x:Name="RelList" Grid.Row="1" DisplayMemberPath="Display" MouseDoubleClick="RelList_DoubleClick"/>
+                            <TextBlock Grid.Row="2" Margin="0,8,0,4" FontWeight="Bold" Foreground="{DynamicResource Accent}"
+                                       Text="↩ Referenced by (backlinks) — items that point to this one:"/>
+                            <ListBox x:Name="BackRefList" Grid.Row="3" DisplayMemberPath="Display" MouseDoubleClick="BackRef_DoubleClick"/>
+                        </Grid>
+                    </TabItem>
+                    <TabItem x:Name="SpecificsTab" Header="Specifics">
+                        <ContentControl x:Name="SpecificsHost"/>
+                    </TabItem>
+                </TabControl>
+
+                <!-- Lock gate: covers the details tabs when the selected item is password-locked
+                     and hasn't been unlocked this session. -->
+                <Border x:Name="LockOverlay" Visibility="Collapsed"
+                        Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}"
+                        BorderThickness="1" CornerRadius="4">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="460" Margin="24">
+                        <TextBlock Text="🔒" FontSize="44" HorizontalAlignment="Center"/>
+                        <TextBlock x:Name="LockMsg" Text="This entry is locked." FontSize="17" FontWeight="Bold"
+                                   HorizontalAlignment="Center" Margin="0,8,0,4" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <TextBlock Text="Enter its password (or the master password) to view and edit it."
+                                   Foreground="{DynamicResource Muted}" HorizontalAlignment="Center"
+                                   Margin="0,0,0,14" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <PasswordBox x:Name="UnlockPb" Width="280" HorizontalAlignment="Center" KeyDown="UnlockPb_KeyDown"/>
+                        <TextBlock x:Name="UnlockError" Foreground="#FFD45050" HorizontalAlignment="Center"
+                                   Margin="0,6,0,0" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,14,0,0">
+                            <Button Content="Show hint" Click="ShowHint_Click" Margin="0,0,8,0"/>
+                            <Button Content="🔓 Unlock" Style="{StaticResource AccentButton}" Click="Unlock_Click"/>
+                        </StackPanel>
+                        <TextBlock x:Name="LockHintText" Visibility="Collapsed" Foreground="{DynamicResource Muted}"
+                                   HorizontalAlignment="Center" Margin="0,12,0,0" TextWrapping="Wrap" TextAlignment="Center"/>
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

@@ -1,0 +1,17 @@
+<Window x:Class="AA.Views.UnitConverterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Unit converter" Height="660" Width="500" WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/AA.ico">
+    <DockPanel Margin="14">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBlock Text="Category:" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="Bold"/>
+            <ComboBox x:Name="CategoryBox" SelectionChanged="Category_Changed"/>
+        </DockPanel>
+        <TextBlock DockPanel.Dock="Bottom" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,8,0,0"
+                   Text="Type a value in any unit — every other unit updates instantly. Maritime-focused units included."/>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="RowsHost"/>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

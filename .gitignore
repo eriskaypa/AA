@@ -1,0 +1,34 @@
+# ---- Build output ----
+[Bb]in/
+[Oo]bj/
+publish/
+publish-fd/
+*.dll
+*.exe
+*.pdb
+
+# ---- Visual Studio / Rider / VS Code ----
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*_wpftmp.csproj
+
+# ---- NuGet ----
+*.nupkg
+packages/
+project.lock.json
+project.assets.json
+
+# ---- OS junk ----
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---- App data / secrets (never in the repo; these live under %LOCALAPPDATA%\AA at runtime) ----
+google_client_secret.json
+google-token/
+data.json
+crash.log

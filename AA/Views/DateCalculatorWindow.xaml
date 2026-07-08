@@ -1,0 +1,59 @@
+<Window x:Class="AA.Views.DateCalculatorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Date calculator" Height="520" Width="540"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        Icon="pack://application:,,,/AA.ico">
+    <DockPanel Margin="14">
+        <TextBlock DockPanel.Dock="Top" Text="Date calculator" FontSize="15" FontWeight="Bold" Margin="0,0,0,10"/>
+
+        <Border DockPanel.Dock="Bottom" Padding="0,12,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Close" MinWidth="90" IsCancel="True" Click="Close_Click"/>
+            </StackPanel>
+        </Border>
+
+        <StackPanel>
+            <!-- 1. Difference between two dates -->
+            <Border Background="{DynamicResource PanelAlt}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1"
+                    CornerRadius="4" Padding="12" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="1. Difference between two dates" FontWeight="Bold" Margin="0,0,0,8"/>
+                    <DockPanel Margin="0,0,0,6">
+                        <TextBlock Text="From:" Width="60" VerticalAlignment="Center"/>
+                        <DatePicker x:Name="FromDate" Width="180" HorizontalAlignment="Left" SelectedDateChanged="Diff_Changed"/>
+                    </DockPanel>
+                    <DockPanel Margin="0,0,0,6">
+                        <TextBlock Text="To:" Width="60" VerticalAlignment="Center"/>
+                        <DatePicker x:Name="ToDate" Width="180" HorizontalAlignment="Left" SelectedDateChanged="Diff_Changed"/>
+                    </DockPanel>
+                    <CheckBox x:Name="IncludeEnd" Content="Count the end date too (inclusive)" Margin="0,2,0,8"
+                              Checked="Diff_Changed" Unchecked="Diff_Changed"/>
+                    <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4" Padding="10">
+                        <TextBlock x:Name="DiffResult" FontFamily="Consolas" TextWrapping="Wrap"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+
+            <!-- 2. Add / subtract from a date -->
+            <Border Background="{DynamicResource PanelAlt}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1"
+                    CornerRadius="4" Padding="12">
+                <StackPanel>
+                    <TextBlock Text="2. Add / subtract from a date" FontWeight="Bold" Margin="0,0,0,8"/>
+                    <DockPanel Margin="0,0,0,6">
+                        <TextBlock Text="Date:" Width="60" VerticalAlignment="Center"/>
+                        <DatePicker x:Name="BaseDate" Width="180" HorizontalAlignment="Left" SelectedDateChanged="Add_Changed"/>
+                    </DockPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                        <ComboBox x:Name="OpBox" Width="100" SelectionChanged="Add_Changed"/>
+                        <TextBox x:Name="AmountBox" Width="80" Margin="8,0,0,0" Text="0" TextChanged="Add_Changed"/>
+                        <ComboBox x:Name="UnitBox" Width="110" Margin="8,0,0,0" SelectionChanged="Add_Changed"/>
+                    </StackPanel>
+                    <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4" Padding="10">
+                        <TextBlock x:Name="AddResult" FontFamily="Consolas" TextWrapping="Wrap"/>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </DockPanel>
+</Window>

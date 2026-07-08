@@ -1,0 +1,670 @@
+# AA — Build Progress
+
+## Summary
+A WPF (.NET 10, C#) Windows desktop application named **AA** that lets you organize **Equipment/Area**, **Tasks**, **Procedures**, and **Vessels** into containers, each with a rich-text editor and an OneDrive-style file bank (files can be imported as copies or **linked in place** to live network-drive originals, with an **Open all** action for daily routines). Items can be related to each other across kinds, visualized as a 2D relationship map; tasks can be scheduled and viewed in a **Calendar** (Day / Week / Month / All / Agenda) and worked in a **Kanban Board** (To Do / In Progress / Blocked / Done, drag to change status).
+
+The app opens behind a **login screen**, persists locally under `%LOCALAPPDATA%\AA\`, and can back up / sync to **Google Drive** — a synced-folder copy, or direct **OAuth** upload/download with **real-time sync on save** and newer-save detection across PCs. Any import/overwrite is gated by a **deep, drill-down change preview**.
+
+The app uses Consolas as its primary font, a clean light UI palette, and an intuitive tabbed navigation model. The newest capabilities are documented in the dated update sections near the end of this file.
+
+## How to run
+```powershell
+cd "<repo>\AA"
+dotnet build
+.\bin\Debug\net10.0-windows\AA.exe
+```
+
+### Portable self-contained build (single file, no .NET runtime required)
+```powershell
+cd "<repo>\AA"
+dotnet publish AA/AA.csproj -c Release -r win-x64 `
+  --self-contained true `
+  -p:PublishSingleFile=true `
+  -p:IncludeNativeLibrariesForSelfExtract=true `
+  -p:EnableCompressionInSingleFile=true `
+  -o publish
+.\publish\AA.exe
+```
+Produces a single ~72 MB `publish\AA.exe` that runs on any 64-bit Windows machine without installing .NET. Copy it anywhere; it is fully portable.
+
+### Framework-dependent build (smaller, requires .NET 10 runtime)
+```powershell
+dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true -o publish-fd
+.\publish-fd\AA.exe
+```
+Application data is stored under: `%LOCALAPPDATA%\AA\` (file: `data.json`, imported files under `files\`).
+
+## Features implemented
+
+### Containers (per item)
+- **Rich text editor** ([Views/ContainerEditor.xaml](AA/Views/ContainerEditor.xaml)):
+  - Font family & size selectors
+  - Bold / Italic / Underline / Strikethrough
+  - Foreground text color and background highlight (color picker)
+  - Align left / center / right / justify
+  - Bullets, numbering, indent / outdent
+  - Undo / Redo
+  - Insert hyperlink (opens in default browser)
+  - Clear formatting
+  - Spell check enabled, no character limit
+  - Content stored as serialized FlowDocument XAML for round-tripping
+- **File bank** with OneDrive-like UX:
+  - Drag-and-drop files or folders directly onto any category tab
+  - Add File / Add Folder / Add Link buttons
+  - Cut / Copy / Paste / Remove / Open
+  - Tabs categorize by kind: **All**, **Documents** (PDF, DOCX, XLSX, PPTX, TXT, RTF...), **Images** (JPG/JPEG, PNG, TIFF, BMP, HEIC, GIF), **Videos** (MOV, MP4, WMV, AVI, MKV, M4V, WEBM), **Links**, **Other**
+  - Files are imported into the app's data folder so they stay accessible
+  - Double-click to open with the OS default application
+- Per-`FileItem` linkage to any hierarchy item id (model field `LinkedItemIds`) — laid out as a structural foundation for cross-linking files to hierarchy items.
+- Containers can be explicitly linked to other containers via `SharedWithContainerIds` (model field; access can be extended in UI).
+
+### Hierarchy
+Each of Equipment / Tasks / Procedures uses the same generic [Views/HierarchyPage.xaml](AA/Views/HierarchyPage.xaml) and adds kind-specific UI under a **Specifics** tab.
+
+#### I. Equipment ([Models/Models.cs](AA/Models/Models.cs))
+- User creates equipment freely.
+- Each equipment has:
+  - **Components** (name + notes), editable inline.
+  - **Related Procedures** — selecting procedures here automatically pulls in the procedure's sub-hierarchy (steps / linked tasks / equipment) when traversed via `AppRepository.RelatedItems`.
+  - **Related Tasks** — explicit links.
+  - Its own **Container** (rich text + files).
+  - Cross-cutting `RelatedIds` for arbitrary 2-way relationships.
+
+#### II. Tasks
+- User creates tasks freely; tasks can also be linked from equipment, procedure steps, etc.
+- Each task has:
+  - **Subtasks** (recursive `TaskItem` tree).
+  - **Deadline** (DatePicker).
+  - **Recurrence** — None / Daily / Weekly / Monthly / Yearly.
+  - **IsComplete** flag.
+  - Container.
+- Tasks do **not** automatically relate to sub-hierarchies — per requirement, only direct relationships are recorded.
+- All tasks (and subtasks) with deadlines appear in the **Calendar** view.
+
+#### III. Procedures
+- User creates procedures freely.
+- Each procedure contains:
+  - **Checklist steps** (`ChecklistStep`) with a Done checkbox.
+  - Each step can link to **tasks** (`TaskIds`) and **equipment** (`EquipmentIds`).
+  - Container.
+
+#### IV. Vessels
+- User creates an unlimited number of vessels.
+- Each vessel has its own **Container** (rich text + file bank) and a **Relationships** tab.
+- Any equipment, task, procedure, or checklist step can be related to any vessel (and vice versa) via the shared two-way `RelatedIds` mechanism — vessels appear in every "Add relationship..." picker and in the relationship map.
+
+### Relationships
+- Two-way `RelatedIds` between any items, managed via the **Relationships** tab on each item.
+- [Services/AppRepository.cs](AA/Services/AppRepository.cs) exposes `AddRelation`, `RemoveRelation`, `RelatedItems`.
+- Deletion of an item also cleans up dangling relationship references.
+
+### Relationship Map (2D)
+[Views/RelationshipMapPage.xaml](AA/Views/RelationshipMapPage.xaml) renders the selected item at the center of a Canvas with related items on a radial layout. Edges connect the focused node to its neighbors (solid accent line) and dashed muted lines indicate neighbor↔neighbor relationships. Click any node to recenter the map on it. Color-coded by kind:
+- Equipment: blue (`#FF4FC3F7`)
+- Task: amber (`#FFFFB74D`)
+- Procedure: green (`#FFA5D6A7`)
+
+### Calendar / Schedule Matrix
+[Views/CalendarPage.xaml](AA/Views/CalendarPage.xaml) shows a Calendar control with view modes:
+- **Day** — tasks due that day
+- **Week** — tasks due in the selected week
+- **Month** — tasks due in the selected month
+- **All Upcoming** — all future tasks
+- **Agenda** — all upcoming tasks grouped by day (Today / Tomorrow / date headers)
+
+The schedule list has bigger, **wrapped** text with an **A- / A+** size stepper (persisted) and a **Status** column; double-click a row to edit and the **Done** checkbox autosaves. Subtasks are flattened and included. A separate **Board** tab provides a Kanban view of tasks by workflow status. (Full details in the dated update sections below.)
+
+### Persistence
+- JSON via `System.Text.Json` in [Services/DataStore.cs](AA/Services/DataStore.cs).
+- Auto-saves on every change and on window close. Manual **Save** button in header.
+
+### Save / Load / Autosave
+- **Ctrl+S** (and the **Save** button / File ▸ Save menu) writes the full app state immediately.
+- **Autosave every 5 minutes** via `DispatcherTimer`; status shows the last autosave time.
+- **Save As...** exports the entire data file to any path (File ▸ Save As).
+- **Reload from disk** (Load button / File ▸ Reload) re-reads the data file, discarding in-memory changes (with confirmation).
+- **Import from file...** replaces current data with a chosen `.json` file and persists it.
+- **Open data folder** opens `%LOCALAPPDATA%\AA\` in Explorer.
+- All items (Equipment, Tasks, Procedures, components, subtasks, checklist steps, containers, files, relationships) plus full **UI state** (selected main tab, selected item per page, calendar view mode and date, map focus, and window size/position) are saved and restored — the app reopens in exactly the state it was left.
+
+### Styling
+- Theme palette (`Bg`, `Panel`, `PanelAlt`, `Accent`, `AccentHover`, `Fg`, `Muted`, `BorderB`, `HoverBg`) defined in [App.xaml](AA/App.xaml) and consumed app-wide via `DynamicResource`, so it can be swapped at runtime (see **Light / Dark theme** below).
+- Default (light) palette: white surfaces with black text/accents; the accent style only adds bold emphasis; the selected tab inverts (black bg / white text) for a clear active indicator.
+- `Consolas` set globally via `MainFont`.
+- Restyled buttons, tabs, text inputs, list views, tree views with consistent rounded corners and hover/selected states.
+
+### Menu bar
+- **File** menu: Save, Save As..., Reload from disk, Import from file..., Open data folder, Exit.
+- **About** menu (top-level): opens a dialog reading `Created by B.E.P. Avida - May 2026`.
+
+### Performance & stability
+- **Debounced save**: [Services/AppRepository.cs](AA/Services/AppRepository.cs) coalesces rapid edits through `MarkDirty()` (~750 ms quiet window) and exposes `IsDirty` / `FlushIfDirty()` / immediate `Save()`. The autosave timer and window-close path flush only when actually dirty, so idle sessions perform zero disk I/O.
+- **Debounced rich-text persistence**: the `RichTextBox` in [Views/ContainerEditor.xaml.cs](AA/Views/ContainerEditor.xaml.cs) serializes its FlowDocument ~400 ms after the last keystroke instead of on every character. Switching items, saving, and closing all flush any in-flight edits first via `FlushPending()` / `FlushPendingEditors()`.
+- Per-keystroke fields (name, description, deadline, recurrence, completion, file add/remove/paste) use `MarkDirty()` instead of full saves.
+- Build: `dotnet build` succeeds with 0 warnings / 0 errors.
+
+### File bank — extras
+- Right-click context menu on every file list: **Open**, **Open containing folder** (uses `explorer.exe /select,…`), **Rename...**, **Link to items...**, **Remove**.
+- **Link to items...** surfaces the previously-internal `FileItem.LinkedItemIds` model field, letting any file be cross-linked to any Equipment / Task / Procedure.
+
+### PDF export (A4)
+- Every item (Equipment / Task / Procedure / Vessel) has an **Export PDF...** button at the top of its details pane.
+- Built on **PDFsharp + MigraDoc** ([Services/PdfExporter.cs](AA/Services/PdfExporter.cs)) so MigraDoc handles word-wrap and pagination automatically — text never clips at the page edge and never spills past the printable area.
+- A4 portrait, 2 cm margins, running header (kind + name + export date) and footer with "Page X / Y".
+- Full hierarchy is rendered intact:
+  - Title block (name + kind + description)
+  - **Notes** — the container's rich text, including bold/italic/underline runs, bullet lists and line breaks (parsed from the stored FlowDocument).
+  - **Kind-specific details**:
+    - *Equipment*: components table, then each linked procedure with its full checklist, then each linked task.
+    - *Task*: deadline / recurrence / status, plus every subtask summarised inline.
+    - *Procedure*: numbered checklist; each step lists its linked equipment and linked tasks.
+  - **Relationships** — every related item from `RelatedIds`, **grouped by tab in tab order** (Equipment → Tasks → Procedures → Vessels) and alphabetised within each group.
+  - **Attached Files** — table of name / kind / path for every entry in the container's file bank.
+- After export, the PDF is opened with the OS default viewer.
+
+### Rich-text paste from the web
+- The container's rich text editor now intercepts clipboard paste ([Views/ContainerEditor.xaml.cs](AA/Views/ContainerEditor.xaml.cs)) via `DataObject.AddPastingHandler`.
+- When the clipboard contains HTML (e.g. content copied from a web page), the payload is run through [Services/HtmlToXamlConverter.cs](AA/Services/HtmlToXamlConverter.cs) — backed by **HtmlAgilityPack** — which strips the CF_HTML header, drops `<script>` / `<style>` / `<head>` blocks, and recursively converts the HTML tree into a FlowDocument XAML fragment (`Section` → `Paragraph` / `List` / `ListItem` / `Span` / `Run` / `Hyperlink` / `LineBreak`).
+- Inline CSS is mapped to FlowDocument attributes (`color`, `background-color`, `font-weight`, `font-style`, `text-decoration`, `font-family`, `font-size`, `text-align`); everything else is dropped, so raw CSS no longer leaks into the document.
+- Native Xaml / XamlPackage / Rtf clipboard formats are still handled by WPF itself; only HTML-only payloads are rewritten.
+
+### Per-subtask deadline and container
+- Each subtask of a Task is now a fully-fledged `TaskItem` (it already was in the model), and is now editable as such through a dedicated **Subtask editor window** ([Views/SubtaskEditorWindow.xaml](AA/Views/SubtaskEditorWindow.xaml) / [.cs](AA/Views/SubtaskEditorWindow.xaml.cs)).
+- The Subtasks list on every Task ([Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs)) now exposes an **Edit...** button (and a double-click shortcut) that opens the editor with its own Name / Description / Deadline / Recurrence / Completed checkbox, plus an embedded full `ContainerEditor` — so each subtask carries its own rich-text notes and file bank.
+- Because the calendar already flattens subtasks, the new per-subtask deadlines automatically appear on the schedule alongside their parent task.
+
+### Data folder export / import and persistent loaded path
+- New **File ▸ Export data folder (ZIP)...** and **File ▸ Import data folder (ZIP)...** menu entries ([MainWindow.xaml](AA/MainWindow.xaml) / [.cs](AA/MainWindow.xaml.cs)) round-trip the entire `%LOCALAPPDATA%\AA` folder — including `data.json`, the `files/` bank and `settings.json` — via `System.IO.Compression.ZipFile`. Import wipes the current data folder before extracting, so it's a true drop-in replacement when moving between workstations.
+- `DataStore` now tracks a mutable **`CurrentDataFile`** and persists it in `settings.json` ([Services/DataStore.cs](AA/Services/DataStore.cs)). `Load()` / `Save()` always go through the current path.
+- **File ▸ Import from file...** now sets the chosen JSON as the active data file and persists the choice via `SetCurrentDataFile`, so re-launching the app reloads the same file automatically. The status bar shows the actual `CurrentDataFile` path.
+
+### Per-component container (Equipment)
+- Each `Component` of an Equipment now owns its own full `Container` (rich text + file bank) in addition to the existing one-line `Notes` field ([Models/Models.cs](AA/Models/Models.cs)).
+- Components are edited through a dedicated **Component editor window** ([Views/ComponentEditorWindow.xaml](AA/Views/ComponentEditorWindow.xaml) / [.cs](AA/Views/ComponentEditorWindow.xaml.cs)) opened from an **Edit...** button or by double-clicking the row in the Components list — exactly mirroring the subtask UX. The container is therefore only loaded and rendered when the user explicitly opens a component.
+- Every container in the app (item, subtask, component) uses the same `ContainerEditor` user control, so they all share identical features: the toolbar, file bank, image previews, link bank, and the new HTML→XAML paste fidelity.
+- **Scale**: both the Components and Subtasks `ListView`s now have `VirtualizingPanel.IsVirtualizing=true` with `VirtualizationMode.Recycling` and `ScrollViewer.CanContentScroll=true`, so row cost stays flat even with thousands of entries. Each row only binds the cheap `Name` / `Notes` (or `Name` / `Deadline` / `IsComplete`) properties; the heavy `Container` payload (XAML + files) is never realized in the list and only deserialized into a `FlowDocument` when a single editor window is opened on click.
+
+## Project layout
+```
+AA/
+  AA.csproj
+  App.xaml / App.xaml.cs
+  MainWindow.xaml / MainWindow.xaml.cs
+  Models/
+    Models.cs          # Container, FileItem (+LinkInPlace), HierarchyItem, Equipment, TaskItem (+WorkStatus/Status), Procedure, Vessel, ChecklistStep, AppData
+  Services/
+    DataStore.cs       # Load/Save/ImportFile/ClassifyFile
+    AppRepository.cs   # Cross-item lookups & relations
+  Views/
+    ContainerEditor.xaml(.cs)     # Rich text + file bank
+    HierarchyPage.xaml(.cs)       # Generic page used for Equipment/Tasks/Procedures
+    CalendarPage.xaml(.cs)        # Calendar + schedule matrix (Day/Week/Month/All/Agenda)
+    BoardPage.xaml(.cs)           # Kanban board (status columns, drag-drop)
+    RelationshipMapPage.xaml(.cs) # 2D relationship visualization
+    PromptWindow.xaml(.cs)        # Simple input modal
+    ItemPickerWindow.xaml(.cs)    # Multi-select picker modal
+```
+
+## Verification
+- `dotnet build` succeeds with 0 warnings, 0 errors on .NET SDK 10 targeting `net10.0-windows`.
+- `dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true` produces a portable `publish\AA.exe` (~72 MB) that runs without an installed .NET runtime.
+- Smoke-tested: `AA.exe` launches and displays the main window.
+
+## Notes & extension points
+- `FileItem.LinkedItemIds` is now editable via the file context menu (**Link to items...**); the storage layer already supported it.
+- `Container.SharedWithContainerIds` is present so cross-container file sharing (per requirement: "accessible to that container and to other containers IF explicitly linked") can be surfaced as an aggregated file view; data layer is in place.
+- The relationship map is 1-hop with click-through navigation; multi-hop expansion or pan/zoom can be added on top of the existing Canvas.
+
+### Inline task creation auto-linked
+- Equipment editor: new `+ New task` button next to `Pick...` in Related Tasks. Prompts for a name, creates a `TaskItem` in the repo, and appends its Id to `eq.TaskIds` so the new task is auto-linked to the current equipment.
+- Procedure editor: new `+ New task` button on the checklist step toolbar. Requires a selected step; creates a `TaskItem` and appends its Id to `st.TaskIds` so the new task is auto-linked to the selected checklist step.
+
+### Global highlighted search
+- New `Search` button on the top bar (also Ctrl+F).
+- `Services/SearchService.cs` scans every text-bearing field across the database: item Name/Description, container plain text (extracted from FlowDocument XAML via XmlReader), container file names/paths, Equipment.Components (Name/Notes/Container/Files), TaskItem.Subtasks recursively, Procedure.Steps titles. Search runs off the UI thread, capped at 500 hits.
+- `Views/SearchWindow.xaml(.cs)` shows `[Kind] Name` plus the `Where` location and a 120-char snippet with the matched word highlighted in bold on yellow. Double-click or Enter navigates to the owning hierarchy item (switches tab + selects it).
+
+### Portable attachments / ZIP round-trip
+- `FileItem.Path` is now stored relative to the AA data folder (e.g. `files/<guid>_name.ext`). `DataStore.ResolveFilePath` converts to an absolute path at open time. URLs and external absolute paths pass through unchanged.
+- `DataStore.NormalizeFilePaths` is called on Load/LoadFrom/Save/SaveTo, rewriting any legacy absolute path that points inside the current AA folder back to relative � old databases auto-migrate on first load.
+- `ExportFolderToZip` now stages a temp folder containing `data.json` (the active data file, even if it lives outside AppFolder) plus the `files/` attachments folder, then zips that. The source workstation's `settings.json` (with its absolute CurrentDataFile) is no longer included.
+- `ImportFolderFromZip` deletes any imported `settings.json`, resets `CurrentDataFile` to the default in the new AppFolder, then re-saves the data with normalized paths plus a recovery pass that rewrites any remaining `...\\files\\<name>` absolute paths to the new relative ones. Attachments now reconnect after an export ? import on a different machine.
+
+### Inline procedure creation from Equipment
+- Equipment editor: new `+ New procedure` button next to `Pick...` in Related Procedures. Prompts for a name, creates a `Procedure` in `_repo.Data.Procedures`, and pushes its Id into `eq.ProcedureIds` so it is auto-linked to the current equipment (mirrors the existing `+ New task` button).
+
+### Task PDF export now includes subtasks + per-subtask notes
+- `WriteTaskSpecifics` now calls a recursive `WriteSubtaskDetailed` for each subtask. Output per subtask: `[ ]/[x]` status, name (bold), deadline/recurrence meta in muted italics, plain-text Description, and the full rich-text `Container` notes rendered via the same FlowDocument-to-MigraDoc pipeline used by top-level items. Nested subtasks recurse with a depth-based left indent so the hierarchy is visible in the PDF.
+- `WriteContainerBody` gained an optional `leftIndent` parameter (and now skips its heading paragraph when called with `heading: """"`). After it appends paragraphs, every newly added MigraDoc paragraph in the section is shifted to that indent so subtask notes sit visually under their parent subtask.
+
+### Attachment recovery on every Load (foreign ZIP fix)
+- `DataStore.NormalizeFilePaths` now handles two cases: (1) rooted path inside the current AppFolder -> rewritten to relative `files/<name>`; (2) foreign absolute path of the form `...\files\<name>` (left behind by a ZIP imported from another workstation) -> rewritten to relative `files/<name>` whenever `<name>` actually exists under the local `files/` folder.
+- Because the normalizer runs on every `Load`/`LoadFrom`/`Save`/`SaveTo`, databases that were imported with the previous build (and still carry absolute paths from another user profile) self-heal the next time the app opens them. No re-import is required; attachments resolve and open instead of showing `File not found`.
+- `MigrateLegacyAbsolutePaths` is kept inside `ImportFolderFromZip` as a belt-and-braces safety net.
+
+### Equipment renamed to "Equipment/Area" (broader scope)
+- The first tab and its corresponding kind label are now **Equipment/Area** everywhere the user sees them: the tab header in [MainWindow.xaml](AA/MainWindow.xaml), the page title and default "New Equipment/Area" name in [Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs), the `+ New task` / `+ New procedure` tooltips ("...auto-link it to this Equipment/Area"), the procedure step `Link equipment/area...` button + picker title ("Pick equipment/area for this step"), and the PDF output ("Equipment/Area Details", "Equipment/Area: " inline label, the running header, the subtitle, and the Relationships group heading).
+- The C# `Equipment` class and `ItemKind.Equipment` enum value are unchanged so existing `data.json` files keep loading without migration; only the user-facing label changed via a `KindLabel(ItemKind)` helper in [Services/PdfExporter.cs](AA/Services/PdfExporter.cs).
+
+### Per-step container on every checklist step
+- [`ChecklistStep`](AA/Models/Models.cs) now carries its own `Container Container { get; set; } = new();` — identical to the containers on items, components and subtasks (rich-text XAML + file bank + `SharedWithContainerIds`).
+- New [Views/ChecklistStepEditorWindow.xaml](AA/Views/ChecklistStepEditorWindow.xaml) / [.cs](AA/Views/ChecklistStepEditorWindow.xaml.cs) mirrors the Component / Subtask editor: title + Done checkbox up top, full `ContainerEditor` filling the rest, and on Close flushes pending rich-text edits + repo save.
+- The procedure checklist toolbar in [Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) gained an **Edit...** button and a double-click handler on the steps list, both opening the new editor (matches the Components / Subtasks UX). The steps `ListView` is now virtualized (`IsVirtualizing` + `Recycling` + `CanContentScroll`) so procedures with many steps stay cheap to render — the heavy `Container` payload is only deserialized when a single step editor is opened.
+- [Services/SearchService.cs](AA/Services/SearchService.cs) now indexes `step.Container` plain text and its file names alongside the existing `step.Title` so global Ctrl+F finds matches inside step notes too.
+- [Services/PdfExporter.cs](AA/Services/PdfExporter.cs) renders each step's container body indented under the step heading (using the existing `WriteContainerBody(..., leftIndent: "0.6cm")` path), so step notes appear inline in the printed checklist.
+
+### PDF export: rich text no longer leaks raw XAML tags
+- Bug: the editor persists rich text via `TextRange.Save(DataFormats.Xaml)`, which produces a `<Section xmlns="...">` root — not a `<FlowDocument>`. The previous PDF exporter called `XamlReader.Load`, which silently returned `null` for that root, so the catch path dumped the entire raw XAML string straight into the PDF (the "hundreds of formatting tags" the user observed).
+- Fix in [Services/PdfExporter.cs](AA/Services/PdfExporter.cs#L420) `WriteContainerBody`: parse via the inverse of the save call — `new FlowDocument()` + `TextRange.Load(stream, DataFormats.Xaml)`. This round-trips every variant the editor produces (Section, FlowDocument, Span, raw runs) and feeds the existing `RenderBlock`/`RenderInline` pipeline so bold / italic / underline / bullets / hyperlinks survive intact.
+- Last-ditch fallback: if even `TextRange.Load` throws, `StripXamlTags` strips everything between angle brackets and HTML-decodes entities, then emits the remaining plain text line-by-line. Raw `<Paragraph FontWeight=...>` style markup can no longer reach the PDF under any code path.
+
+### PDF export: full rich-text fidelity (color, font, size, alignment, hyperlinks)
+- [Services/PdfExporter.cs](AA/Services/PdfExporter.cs) now mirrors the on-screen container into the PDF much more faithfully:
+  - **Foreground colour** of any `Run` / `Inline` is read from its `Foreground` brush via `TryGetColor` and pushed to MigraDoc's `FormattedText.Color`; a fully-transparent brush (Alpha = 0) is treated as "inherit" so the page default still wins.
+  - **Font family** and **font size** of every run are propagated (`source.FontFamily.Source` → `Font.Name`, `source.FontSize` converted px → pt with the standard 0.75 factor).
+  - **Paragraph alignment** (`Left` / `Right` / `Center` / `Justify`) maps to MigraDoc `ParagraphAlignment`.
+  - **Paragraph background highlight** (`Block.Background` SolidColorBrush) maps to `ParagraphFormat.Shading.Color`, so highlights laid down with the toolbar appear in the PDF.
+  - **Bullets vs numbered** lists are now distinguished by reading `List.MarkerStyle` (`Decimal` / `LowerRoman` / `UpperRoman` / `LowerLatin` / `UpperLatin` → numbered, everything else → bulleted).
+  - **Hyperlinks** become real MigraDoc `Hyperlink` runs (`HyperlinkType.Web`) instead of plain underlined text, so clickable links survive into the exported PDF.
+  - **Strikethrough** runs are visibly decorated (MigraDoc 6.2's `TextFormat` enum has no `Strikethrough` flag, so the renderer falls back to an underline so the decoration is still visible to the reader).
+
+### App-wide container password lock
+- New static [Services/PasswordService.cs](AA/Services/PasswordService.cs) holds a per-app password (PBKDF2-SHA256, 100 000 iterations, 16-byte salt). The hash + salt live in `settings.json` via new [Services/DataStore.cs](AA/Services/DataStore.cs) `SavePasswordSettings(hash, salt)`. The unlocked state itself is kept only in memory for the running session and is forgotten on **Tools ▸ Lock now**.
+- The container toolbar in [Views/ContainerEditor.xaml](AA/Views/ContainerEditor.xaml) gained two buttons: 🔒 **Lock highlighted text** and 🔓 **Unlock highlighted text**. The lock protects the **currently-selected text** from edits — it does **not** encrypt the document and never alters how content is exported, searched, printed, or rendered. Locked text stays fully visible everywhere; it just can't be modified unless the session is unlocked with the app password.
+- Implementation in [Views/ContainerEditor.xaml.cs](AA/Views/ContainerEditor.xaml.cs):
+  - The lock marker is a sentinel `Run.Background` brush colour (`#FFFFE699`, pale gold). Because `Background` round-trips through `DataFormats.Xaml` save/load, locked ranges survive autosave, ZIP export/import, and copy/paste without any side-channel storage.
+  - `Lock_Click` requires a non-empty selection, ensures the session is unlocked (prompting to set or enter the app password), then calls `Selection.ApplyPropertyValue(TextElement.BackgroundProperty, …)`.
+  - `Unlock_Click` requires a non-empty selection, ensures the session is unlocked, then walks the selection and clears the sentinel background from any matching runs (other backgrounds are left untouched).
+  - Edit filtering: `Rtb.PreviewKeyDown`, `Rtb.PreviewTextInput`, and a `CommandManager.AddPreviewExecutedHandler` cancel any input or command (typing, Backspace, Delete, Paste, Cut, DeleteWord) that would modify a locked run while the session is locked. Selection, copy, navigation, and Ctrl+F are always allowed. Blocked attempts show a short hint in the status bar (or a system beep) throttled to once every 1.5 s.
+- [MainWindow.xaml](AA/MainWindow.xaml) gained a **Tools** menu with **Set / change password...** and **Lock now**. *Lock now* clears the in-memory unlocked flag and re-initializes the hierarchy pages so subsequent edits to any locked text are immediately blocked.
+- Back-compat: any legacy container whose `RichTextXaml` was previously whole-document encrypted (`enc:` prefix from earlier builds) is silently decrypted and migrated to plaintext on first load when the session is unlocked, then re-saved.
+
+### Checklist builder window
+- New [Views/ChecklistBuilderWindow.xaml](AA/Views/ChecklistBuilderWindow.xaml) (and .cs) offers a focused two-pane experience: on the left a multiline textbox + "Add all" (with **Replace existing** checkbox) for bulk-creating steps from a list of titles; on the right a reorderable ListBox of the procedure's current steps with **+ Step / Edit... / ↑ / ↓ / Delete** buttons. **Edit...** opens the per-step rich-text editor that already existed.
+- Opened from a new **Checklist builder...** accent button in the procedure's Specifics tab ([Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) `BuildProcedureSpecifics`). On close the window flushes any pending repo writes.
+
+### Checklist-only export (PDF + Excel)
+- New [Services/ChecklistExporter.cs](AA/Services/ChecklistExporter.cs) emits *just* the procedure's checklist — no notes, no relationships, no file bank.
+  - **PDF**: A4 portrait via MigraDoc; 4-column table (`# | Done | Step | Linked tasks / equipment`). The Done column shows `[x]` for completed steps and `[ ]` otherwise. Linked tasks are listed as `T: …` and linked equipment as `E/A: …` beneath the step title.
+  - **Excel (.xlsx)**: minimal Office Open XML SpreadsheetML zip written directly via `System.IO.Compression.ZipArchive` — no third-party dependency. Columns: `#`, `Done`, `Step`, `Linked Tasks`, `Linked Equipment/Area`. The header row is bold; the Done column says `Yes`/`No` so it round-trips back to a checkbox in Excel filters.
+- Surfaced via two new buttons next to **Checklist builder...** in the procedure's Specifics tab: **Export checklist (PDF)** and **Export checklist (Excel)**. Each shows a `SaveFileDialog` (filtering by `.pdf` / `.xlsx`), flushes any pending edits, and opens the resulting file with the OS default handler.
+
+### Sidebar: alphabetical sort + groups
+- [Models/Models.cs](AA/Models/Models.cs) gained `HierarchyItem.GroupId` (nullable Guid), an `ItemGroup` class, an `AppData.Groups` collection, and a per-kind `UiState.SortAZ` dictionary so the toggle persists across sessions.
+- [Services/AppRepository.cs](AA/Services/AppRepository.cs) added `GroupsFor(ItemKind)` / `CreateGroup` / `RenameGroup` / `DeleteGroup` (which ungroups affected items) / `AssignToGroup`.
+- [Views/HierarchyPage.xaml](AA/Views/HierarchyPage.xaml) gained a sidebar toolbar with a `A→Z` `ToggleButton`, **+ Group**, **Assign group...**, **Rename group...**, **Delete group**. The sidebar `ListBox` now uses `GroupStyle` so items render under collapsible group headers showing the group name and `ItemCount`.
+- [Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) `RefreshList` now wraps each `HierarchyItem` in a lightweight private `Row` projection that exposes a `GroupKey`, then builds a `ListCollectionView` with `PropertyGroupDescription(nameof(Row.GroupKey))` and a `CustomSort` comparer that orders real groups alphabetically (with the synthetic "Ungrouped" pushed to the end via a `\uFFFF` prefix) and optionally orders items A→Z within each group based on the persisted toggle. Selection-change and `SelectItemById` were updated to unwrap `Row → Row.Item` so the rest of the page keeps working unchanged.
+- [Views/ItemPickerWindow.xaml.cs](AA/Views/ItemPickerWindow.xaml.cs) constructor now takes an optional `bool singleSelect = false`; when `true` it switches the ListBox to `SelectionMode.Single` so the group pickers can require a single selection.
+
+## Latest portable build
+- `dotnet publish AA/AA.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:EnableCompressionInSingleFile=true -o publish` produces `publish\AA.exe` (~80 MB, **2026-07-08 build**; bundles the Google Drive API libraries, **ClosedXML** for COMPAS crew import, and **HtmlAgilityPack** for web/Office table paste).
+- Self-contained: no .NET runtime required on the target machine. Copy `publish\AA.exe` anywhere and run. (`publish\AA.pdb` is just debug symbols and is not needed to run.)
+- Smoke-tested: the single-file exe self-extracts and launches at the login screen; after sign-in (44233 / redemption) the main window opens.
+
+## UX fixes (2026-06-07)
+- **Sidebar groups visible even when empty.** Previously, creating a group via `+ Group` appeared to do nothing because `ListCollectionView` hides headers for groups with zero items. `RefreshList` in [Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) now injects a placeholder `Row` for each empty group so the header always renders (with a muted "(empty — right-click an item to assign)" hint). Placeholders are sorted to the bottom of their group, can't be selected as items, and a confirmation message is surfaced in the status bar when a new group is created.
+- **Sidebar right-click context menu.** [Views/HierarchyPage.xaml](AA/Views/HierarchyPage.xaml) now attaches a `ContextMenu` to the items list with **Move to group...**, **Remove from group**, and **New group...** so the grouping feature is discoverable without hunting the toolbar.
+- **Checklist Builder is now a prominent banner.** [Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) `BuildProcedureSpecifics` renders **🛠  Open Comprehensive Checklist Builder** as a full-width accent button at the top of every Procedure's Specifics tab. The PDF / Excel export buttons sit on the right of the same row.
+- **Calendar: wrapped task text, no clipping, double-click to edit + inline done.** [Views/CalendarPage.xaml](AA/Views/CalendarPage.xaml) replaces the old display-only `GridView` columns with `CellTemplate`s that use `TextWrapping="Wrap"` for Task / Deadline / Recurrence and `ListViewItem.HorizontalContentAlignment="Stretch"` so long names occupy multiple lines instead of clipping. The **Done** column is now a real two-way-bound `CheckBox` (autosaves on toggle via `MarkDirty + FlushIfDirty`). Double-clicking any task row opens it in [Views/SubtaskEditorWindow.xaml](AA/Views/SubtaskEditorWindow.xaml) for full editing (the editor works on any `TaskItem`, top-level or nested), then refreshes the grid on close.
+
+## Major update (2026-06-16): in-place file links, Kanban board, calendar views
+
+### Link files in place (network-drive routines) + Open all
+The file bank ([Views/ContainerEditor.xaml](AA/Views/ContainerEditor.xaml) / [.cs](AA/Views/ContainerEditor.xaml.cs)) — which every container uses, so **every Task automatically gets it** — can now **reference files where they already live** instead of only importing copies. This is aimed at the daily routine of opening many files spread across a network drive.
+- New **🔗 Link in place** button: pick one or more files via `OpenFileDialog`; each is stored with its **original absolute/UNC path** and `FileItem.LinkInPlace = true` — **never copied** into `%LOCALAPPDATA%\AA\files\`. Opening it launches the live file, so edits save straight back to the source on the drive.
+- **Drag & drop now supports both modes**: a plain drop imports copies (unchanged); **holding Shift while dropping links the items in place**. A dropped *folder* under Shift becomes a single entry that opens in Explorer (great for "jump to this area of the drive").
+- New **Open all** button: opens every file shown in the current file-bank tab at once (confirms past 15) — one click launches a whole routine. Mirrored on the Board (see below) via a per-card **Open all files (routine)** context-menu item.
+- The **All** tab gained a **Source** column showing `Live` / `Copy` / `Web link` (`FileItem.SourceLabel`, a `[JsonIgnore]` computed property) so referenced files are obvious at a glance.
+- Persistence/portability: [Services/DataStore.cs](AA/Services/DataStore.cs) `NormalizeFilePaths` and `MigrateLegacyAbsolutePaths` now **skip `LinkInPlace` entries** (alongside `IsLink`), so a network path is never rewritten, copied, or broken by a ZIP round-trip. `ResolveFilePath` returns rooted paths verbatim, and `OpenFileItem` accepts files **and folders** (`Directory.Exists`).
+
+### Task workflow status (model)
+- [Models/Models.cs](AA/Models/Models.cs) adds `enum WorkStatus { Todo, InProgress, Blocked, Done }` (named `WorkStatus`, not `TaskStatus`, to avoid clashing with `System.Threading.Tasks.TaskStatus`) and a `TaskItem.Status` property.
+- `Status` and the existing `IsComplete` **stay in sync both ways**: setting `Done` marks the task complete; any other status clears completion; ticking *Completed* sets `Done`. The setters guard via `Set(...)` returning `false` on no-change, so there is no infinite recursion, and legacy databases (no `Status` field) derive `Done` from `IsComplete` on load.
+- `FileItem.LinkInPlace` (bool) marks live references as described above.
+
+### Kanban Board (new top-level tab)
+- New [Views/BoardPage.xaml](AA/Views/BoardPage.xaml) / [.cs](AA/Views/BoardPage.xaml.cs), surfaced as a **Board** tab between Calendar and Relationship Map ([MainWindow.xaml](AA/MainWindow.xaml)).
+- Four colour-headed columns — **To Do / In Progress / Blocked / Done** — each a `ListBox` of task cards. Cards show the task name (big, **wrapped**), a deadline line (turns red + `OVERDUE` when past due and not done), recurrence, and badges (`📎 N files`, `☑ done/total subtasks`) with a status-coloured left stripe.
+- **Drag a card to another column to change its `Status`** (persisted immediately via `MarkDirty + FlushIfDirty`); the threshold/`DoDragDrop` plumbing carries a lightweight private `Card` projection so the underlying `TaskItem` is reached without serialization. Right-click selects the card under the cursor first.
+- **Double-click** opens the task in the shared [Views/SubtaskEditorWindow.xaml](AA/Views/SubtaskEditorWindow.xaml). Per-card context menu: **Open / edit task**, **Open all files (routine)**, **Delete task**. Header has a live **Find** filter, a **Hide done** toggle, and **+ New task**. Shows top-level tasks; refreshed on tab switch and after any edit.
+
+### Calendar: more views, bigger + wrapped text
+- [Views/CalendarPage.xaml](AA/Views/CalendarPage.xaml) / [.cs](AA/Views/CalendarPage.xaml.cs): the schedule list font is larger (`FontSize=15`) with roomier rows, plus an **A- / A+** stepper that scales the list text and **persists** via new `UiState.CalendarFontScale`.
+- New **Agenda** view (5th radio next to Day / Week / Month / All Upcoming): all upcoming tasks **grouped by day** with bold date headers (`Today` / `Tomorrow` / `ddd, yyyy-MM-dd`) and per-group counts, built with a `ListCollectionView` + `PropertyGroupDescription(nameof(TaskItem.Deadline), DateGroupConverter)`. Items remain `TaskItem`, so double-click-to-edit and the inline Done checkbox keep working.
+- New **Status** column shows each task's workflow status. The view mode (`"Agenda"` added) and font scale restore on relaunch alongside the existing calendar UI state.
+
+### Status editable everywhere it makes sense
+- [Views/SubtaskEditorWindow.xaml](AA/Views/SubtaskEditorWindow.xaml) gained a **Status** dropdown (and the Completed checkbox is relabelled), kept visually in sync with the checkbox.
+- The Task **Schedule & Subtasks** specifics tab ([Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) `BuildTaskSpecifics`) gained the same **Status** dropdown next to *Completed*, each updating the other.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**; the app launches and shows the main window.
+
+## Update (2026-06-17): login gate, Google Drive backup, stale-import guard, wrapped lists
+
+### Login screen
+- New [Views/LoginWindow.xaml](AA/Views/LoginWindow.xaml) / [.cs](AA/Views/LoginWindow.xaml.cs) is shown **before** the main window. Credentials are **hardcoded** (username `44233`, password `redemption`) per request — *note: this is a basic gate, not real security; the values live in the binary and the local data file is not encrypted by this check.*
+- [App.xaml](AA/App.xaml) no longer sets `StartupUri`; [App.xaml.cs](AA/App.xaml.cs) overrides `OnStartup` to run the login modal under `ShutdownMode.OnExplicitShutdown` (so closing the dialog doesn't quit the app prematurely), then creates `MainWindow` and switches to `ShutdownMode.OnMainWindowClose`. A failed/cancelled login calls `Shutdown()`.
+
+### Warn when importing data older than what's saved locally
+- [Models/Models.cs](AA/Models/Models.cs): `AppData.LastModified` (nullable `DateTime`) is stamped on every user save by [Services/AppRepository.cs](AA/Services/AppRepository.cs) `Save()` (and on Save As / Export-to-ZIP). `DataStore.Save`/`SaveTo` themselves never stamp, so a timestamp survives import unchanged.
+- [Services/DataStore.cs](AA/Services/DataStore.cs) adds `PeekFileLastModified(jsonPath)` and `PeekZipLastModified(zipPath)` — they read just the `LastModified` field via `JsonDocument` (the ZIP variant reads the `data.json` entry **without extracting**).
+- [MainWindow.xaml.cs](AA/MainWindow.xaml.cs) `ConfirmNotOlder(...)` is called by **Import from file...** and **Import data folder (ZIP)...** before anything is replaced. If the incoming data is older than (or has no date while the current data does) the loaded data, the user gets an explicit warning with both save dates and must confirm to proceed.
+
+### Save a copy to Google Drive
+- Approach: write a timestamped backup ZIP into the **Google Drive for desktop** synced folder (which uploads it to the cloud). This keeps the app a dependency-free, portable single-file exe — no OAuth client/credentials baked in.
+- [Services/DataStore.cs](AA/Services/DataStore.cs): `GoogleDriveFolder` (persisted in `settings.json`), `SetGoogleDriveFolder`, and `DetectGoogleDriveFolder()` (checks `%USERPROFILE%\My Drive` / `Google Drive` and each drive root's `My Drive`).
+- [MainWindow.xaml](AA/MainWindow.xaml): File ▸ **Save a copy to Google Drive** and **Set Google Drive folder...**. The first resolves the folder (remembered → auto-detected → browse-and-remember), saves the current data, then writes `…\AA Backups\aa-data-<timestamp>.zip` via the existing `ExportFolderToZip`.
+
+### Wrapped text for task / checklist rows
+- The Tasks/Equipment/Procedures/Vessels **sidebar** ([Views/HierarchyPage.xaml](AA/Views/HierarchyPage.xaml)) now uses a wrapping `ItemTemplate` + `HorizontalContentAlignment="Stretch"` (replacing `DisplayMemberPath`), so long names wrap to the panel width instead of clipping.
+- The **Subtasks** list and the procedure **Checklist Steps** list ([Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) `WrapColumn` helper) wrap their Name/Title columns. The Subtasks list also gained a **Status** column.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**; the app starts at the login screen and opens the main window after a correct sign-in.
+
+### Direct Google Drive upload (OAuth via the Drive API)
+- New [Services/GoogleDriveUploader.cs](AA/Services/GoogleDriveUploader.cs) uploads a backup ZIP **straight to Google Drive** through the Drive API — no Google Drive desktop client required. Uses NuGet **Google.Apis.Drive.v3** + **Google.Apis.Auth** ([AA.csproj](AA/AA.csproj)).
+  - OAuth via `GoogleWebAuthorizationBroker.AuthorizeAsync` with the least-privilege `drive.file` scope (the app only ever sees files it creates). The refresh token is cached in `%LOCALAPPDATA%\AA\google-token` (`FileDataStore`) so subsequent uploads don't re-prompt.
+  - The user supplies their own OAuth **Desktop app** `client_secret.json` (from Google Cloud Console); it is copied to `%LOCALAPPDATA%\AA\google_client_secret.json` ([Services/DataStore.cs](AA/Services/DataStore.cs) `GoogleClientSecretFile`). Neither the secret nor the token folder is included in `ExportFolderToZip` backups (it only stages `data.json` + `files/`), so they never leak into a backup.
+  - Uploads into an **"AA Backups"** Drive folder (found or created), returning the file name + `webViewLink`.
+- [MainWindow.xaml](AA/MainWindow.xaml) File menu: **Upload backup to Google Drive (OAuth)...**, **Set Google OAuth client (client_secret.json)...**, **Sign out of Google**. The upload handler ([MainWindow.xaml.cs](AA/MainWindow.xaml.cs), `async`) flushes editors, saves (stamping `LastModified`), exports a temp ZIP, uploads it, then deletes the temp file.
+- One-time Google Cloud setup the user must do: create a project, **enable the Google Drive API**, create an **OAuth client ID → Desktop app**, download its `client_secret.json`, and (while the consent screen is in "Testing") add their account as a **test user**.
+- This complements the existing **Save a copy to Google Drive (synced folder)** option; both are in the File menu.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+### Load a backup from Google Drive (OAuth) + newer/older check
+- [Services/GoogleDriveUploader.cs](AA/Services/GoogleDriveUploader.cs) refactored to share auth via `GetServiceAsync`, and adds:
+  - `ListBackupsAsync()` — lists the ZIPs in the Drive **"AA Backups"** folder (newest first); each `DriveBackup` shows its name + Drive upload time. Works under the `drive.file` scope because the app created those files for this account.
+  - `DownloadAsync(fileId, destPath)` — downloads a chosen backup to a local temp file.
+- [MainWindow.xaml](AA/MainWindow.xaml): File ▸ **Load backup from Google Drive (OAuth)...** ([MainWindow.xaml.cs](AA/MainWindow.xaml.cs), `async`): signs in, lists backups, lets the user pick one (reusing `ItemPickerWindow`), downloads it, then compares ages **before** replacing anything.
+  - `ConfirmLoadFromDrive(...)` reads the downloaded ZIP's own `AppData.LastModified` (via `DataStore.PeekZipLastModified`) and the current PC data's `LastModified`, then states plainly whether the Drive backup is **NEWER / OLDER / SAME age** (or unknown when a date is missing) and asks to confirm. On confirm it routes through `ImportFolderFromZip` + `LoadDataAndInitUi`.
+- [Services/DataStore.cs](AA/Services/DataStore.cs) `ImportFolderFromZip` now **preserves the Google OAuth client (`google_client_secret.json`) and cached token (`google-token/`)** across the folder wipe, so loading a backup from Drive doesn't sign you out or forget the client.
+- Build: clean rebuild succeeds with **0 warnings / 0 errors** (a stale-`obj` WPF markup glitch was cleared with an `obj`/`bin` clean).
+
+### Real-time Google Drive sync (push on save + detect newer across sessions)
+- New persisted toggle `DataStore.SyncOnSave` (settings.json) and File ▸ **Sync to Google Drive on save** (checkable) + **Check Google Drive for newer save**.
+- **Push on save**: when the toggle is on, every explicit Save (Ctrl+S / Save button / File ▸ Save) schedules a background push to a **single rolling sync file** `AA Sync/AA-sync.zip` on Drive ([MainWindow.xaml.cs](AA/MainWindow.xaml.cs) `MaybeQueueSync` → `RunSyncPush`). Pushes are debounced (~1.5 s) and coalesced (one in flight; the latest re-runs after) and the ZIP is built on a background thread so the UI never blocks. Per-keystroke debounced autosaves do **not** push — only deliberate saves do.
+- **Cheap freshness**: [Services/GoogleDriveUploader.cs](AA/Services/GoogleDriveUploader.cs) `PushSyncAsync` overwrites the rolling file (create-or-update) and stamps the data's `LastModified` into Drive **`appProperties`**. `GetSyncStateAsync` reads just that metadata (no download) to tell if the remote is newer.
+- **Detect newer from another PC**: `CheckRemoteNewer` runs on **startup** (only when already signed in, so it never pops a browser unprompted), every **autosave tick (~5 min)**, and on demand via the menu. If the remote `LastModified` is newer than local, it asks to load it, then downloads `AA-sync.zip` and routes through `ImportFolderFromZip` + reload. A `_lastSeenRemote` guard prevents re-prompting for a version already declined, and our own pushes set it so we never prompt for our own save.
+- Uses the same `drive.file` OAuth scope and the rolling file keeps Drive tidy (no version pile-up; manual timestamped backups still go to the separate **AA Backups** folder).
+- Note: the sync ZIP includes attachments (the `files/` folder); link-in-place network files aren't copied so it stays small, but many imported copies make each push larger.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**; app launches at the login screen.
+
+### Change preview before any import/overwrite
+- New [Services/DataDiff.cs](AA/Services/DataDiff.cs) `DataDiff.Compare(current, incoming)` diffs two `AppData`s by item Id across Equipment/Tasks/Procedures/Vessels and reports **Added / Removed / Changed**. For changed items it summarizes *what* changed (renamed, description, notes, +N/−N files, deadline/recurrence/status, ±subtasks/components/steps/linked items); added/removed items show a short content summary (files/subtasks/components/steps).
+- New [Services/DataStore.cs](AA/Services/DataStore.cs) `PeekZipData(zipPath)` deserializes the incoming `data.json` **without extracting** the ZIP, so the preview works for ZIP/Drive sources too.
+- New review dialog [Views/DiffWindow.xaml](AA/Views/DiffWindow.xaml) shows the source, the **newer/older age comparison**, a one-line summary (`＋ add / ～ change / － remove`), and a colour-coded, wrapped list of every change. The user clicks **Import (overwrite)** or **Cancel**.
+- **Every overwrite path now routes through it** via `MainWindow.ReviewAndConfirmImport(...)`: File ▸ Import from file, File ▸ Import data folder (ZIP), Load backup from Google Drive (OAuth), and the automatic **sync pull** of a newer Drive save. The old age-only confirmations (`ConfirmNotOlder` / `ConfirmLoadFromDrive`) were replaced by this single richer review.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**; app launches at the login screen.
+
+#### Deeper drill-down preview (tree)
+- [Services/DataDiff.cs](AA/Services/DataDiff.cs) was upgraded from a flat list to a **recursive change tree** (`DataDiff.Node`). Each added/removed/changed item expands to show field-level changes with old → new values (name, description, notes snippet, deadline, recurrence, status, component name/notes, step title/done), the specific **files** added/removed, and changed **subtasks / components / steps / linked items** — recursing into nested subtasks.
+- [Views/DiffWindow.xaml](AA/Views/DiffWindow.xaml) is now a **TreeView**: top-level item rows start expanded (first level of detail visible); deeper levels expand on demand. Colour-coded ＋ added / ～ changed / － removed.
+
+### Light / Dark theme (sleek dark mode)
+- New [Services/ThemeManager.cs](AA/Services/ThemeManager.cs) `Apply(bool dark)` swaps the theme **brush** resources (`Bg`/`Panel`/`PanelAlt`/`Accent`/`AccentHover`/`Fg`/`Muted`/`BorderB`/`HoverBg`) in `Application.Current.Resources` at runtime. Dark inverts white surfaces to a sleek near-black (`#1E1E1E`/`#252526`/`#2D2D30`) with light text (`#F0F0F0`) and white accents; light restores the original white/black palette.
+- [App.xaml](AA/App.xaml) control styles were converted from `StaticResource`/hardcoded hex to **`DynamicResource`** theme keys (and a new `HoverBg` key added) so the whole app — windows, buttons, text inputs, lists, trees, tabs — re-themes **live** without a restart.
+- Persisted via `DataStore.DarkMode` (settings.json); applied in `App.OnStartup` **before** the login window renders. Toggle at **View ▸ 🌙 Dark mode** ([MainWindow.xaml](AA/MainWindow.xaml)); the choice is remembered across launches.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**; login gate verified intact under the new startup path.
+
+#### Full control theming (dark mode reaches the native controls)
+- Follow-up pass so dark mode darkens the previously-light controls and keeps text readable:
+  - [App.xaml](AA/App.xaml) gained themed templates/styles for **ComboBox + ComboBoxItem** (custom dropdown, themed popup), **ListBoxItem** and **ListViewItem** (the latter keeps GridView columns via `GridViewRowPresenter`; selection uses readable `SelBg`/`SelFg`), **GridViewColumnHeader**, **ScrollBar** (themed thumb), **PasswordBox**, **ToolTip**, **Menu/Separator**, and best-effort **Calendar / CalendarDayButton / CalendarButton / DatePicker(TextBox)**.
+  - New `SelBg` / `SelFg` theme brushes for selection (dark: deep blue / white; light: pale blue / black).
+  - [Services/ThemeManager.cs](AA/Services/ThemeManager.cs) now also overrides the **system-colour brushes** (`Window`, `Control`, `Menu`, `Highlight`, `Info`, `GrayText`, …) in dark mode (and removes the overrides in light) so default-templated popups (context menus, calendar/date-picker popups, tooltips, selection) follow the theme too.
+  - [Views/CalendarPage.xaml](AA/Views/CalendarPage.xaml) inline `ListViewItem` style now `BasedOn` the themed one, and the local light header style was removed so calendar rows/headers darken.
+- Verified by scripted login + runtime toggle: the main window renders under the new templates and switching to dark live does not crash; the setting persists.
+- Residual: a few deeply OS-drawn chrome bits (e.g. native scrollbar arrows, the exact calendar-grid cell background) may not be pixel-perfect dark, but backgrounds are dark and text is light/readable throughout.
+
+## Update (2026-06-18): export indentation, Jobs + Planner, dark-mode readability
+
+### PDF export — indentation preserved as-is
+- [Services/PdfExporter.cs](AA/Services/PdfExporter.cs) `ApplyParagraphFormat` now treats a **positive `TextIndent`** (how WPF's Indent button may record a shift) as a **whole-paragraph** left indent — summed with `Margin.Left` — and a negative `TextIndent` as a hanging first-line indent. Previously a button-indent stored on `TextIndent` only moved the first line in the PDF.
+- `RenderBlock` carries a per-level indent so **nested bullets/numbers compound their indentation** (each level +0.6 cm with a hanging marker), matching the editor's visual nesting.
+
+### Jobs (approximate duration) + Planner (drag-drop scheduler)
+- [Models/Models.cs](AA/Models/Models.cs): new `IJob` interface (`IsJob`, `DurationMinutes`, `ScheduledStart`, `JobName`) implemented by **`TaskItem`** (top-level tasks and subtasks) and **`ChecklistStep`**. Any of them can be tagged a **Job** with an approximate duration (minutes).
+- Tagging UI (checkbox + duration) added to the task editor ([Views/SubtaskEditorWindow.xaml](AA/Views/SubtaskEditorWindow.xaml)), the checklist-step editor ([Views/ChecklistStepEditorWindow.xaml](AA/Views/ChecklistStepEditorWindow.xaml)), and the Task **Specifics** panel ([Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs)).
+- The **Procedures tab** checklist list also gained a **Job** checkbox column (next to Done) so steps can be marked as jobs inline without opening each step editor; toggling persists immediately (duration is still set in the step editor). The inline Done checkbox now persists on toggle too.
+- The **whole procedure** can also be tagged as a Job: `Procedure` now implements `IJob` ([Models/Models.cs](AA/Models/Models.cs)), the Procedure **Specifics** panel has a "Mark this procedure as a schedulable job" checkbox + duration at the top ([Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs)), and `AppRepository.AllJobs()` includes procedure-level jobs so they appear in the Planner alongside task/subtask/step jobs.
+
+### Folder Builder (bulk-create a folder structure on disk)
+- New **Tools ▸ Folder builder...** ([Views/FolderBuilderWindow.xaml](AA/Views/FolderBuilderWindow.xaml) / [.cs](AA/Views/FolderBuilderWindow.xaml.cs)), modelled on the Checklist Builder: a two-pane window with a **base-location picker** (Browse..., remembered in settings via `DataStore.FolderBuilderBase`), a left **bulk text box** (one folder name per line) and a right **live preview tree**.
+- **Nesting**: indent a line with a Tab or 2 spaces to make it a subfolder of the line above; a line may also contain `/` or `\` to create a nested path directly. Names are sanitized (invalid filename characters → `_`).
+- **Create folders** parses the text into a parent-before-child list of relative paths and `Directory.CreateDirectory`s each under the base location (confirming first; reporting created / already-existed / failed counts; offering to open the base folder). Intermediate folders are created automatically.
+- Verified end-to-end via UI Automation: typing an indented/`/`-pathed list and invoking Create produced the exact nested folder tree on disk.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+### Per-vessel Quick Cards dashboard (first screen for each ship)
+- Each **Vessel** now opens on a **Quick Cards** tab (the first tab, auto-selected when a vessel is picked) — [Views/HierarchyPage.xaml](AA/Views/HierarchyPage.xaml) gained a `QuickCardsTab` shown only for vessels; [HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) loads it and fronts it on selection. Each ship has its own independent layout.
+- [Models/Models.cs](AA/Models/Models.cs): `QuickCard` (Title, Target, IsLink/LinkInPlace/IsFolder, Icon, Color, X/Y/Width/Height) and `Vessel.QuickCards`.
+- [Views/QuickCardsPanel.xaml](AA/Views/QuickCardsPanel.xaml) / [.cs](AA/Views/QuickCardsPanel.xaml.cs): a free-form **Canvas** of cards. Each card can be **dragged to move** and **resized via a bottom-right grip**; double-click (or right-click ▸ Open) launches its target; right-click also offers Edit / Duplicate / Delete. Every move/resize/edit persists immediately (`MarkDirty + FlushIfDirty`), so the layout is saved per vessel.
+- [Views/QuickCardEditorWindow.xaml](AA/Views/QuickCardEditorWindow.xaml) / [.cs](AA/Views/QuickCardEditorWindow.xaml.cs): set the card's **target** — *Link file (in place)* on a network/other drive, *Import a copy*, *Link folder*, or *Web link* — plus a **maritime icon** picker, a **colour** palette (+ custom colour), size, and a live preview.
+- [Services/MaritimeIcons.cs](AA/Services/MaritimeIcons.cs): a curated set of ~50 common ship-operations icons (anchor, helm, lifebuoy, compass, engine, fuel, fire, radar, cargo, reefer, medical, …), a preset colour palette, and a readable-foreground (black/white) calculation so titles/icons stay legible on any card colour.
+- Targets reuse the existing file plumbing: imported copies go through `DataStore.ImportFile` (relative `files/…`, resolved at open time and included in ZIP backups); in-place links store the original absolute/UNC path; web links open in the browser.
+- Verified end-to-end via UI Automation: created a vessel, confirmed Quick Cards is the front tab, added a card through the editor, and confirmed it persisted (title + icon + colour) to the data file.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+### Date calculator (Tools)
+- New **Tools ▸ Date calculator...** ([Views/DateCalculatorWindow.xaml](AA/Views/DateCalculatorWindow.xaml) / [.cs](AA/Views/DateCalculatorWindow.xaml.cs)) — a small live-updating utility with two sections:
+  1. **Difference between two dates** — From / To pickers compute the total days (with an optional *inclusive* checkbox that counts the end date), an approximate weeks + days breakdown, and an exact years / months / days breakdown (handles To-before-From).
+  2. **Add / subtract from a date** — a base date, an Add/Subtract selector, an amount, and a unit (Days / Weeks / Months / Years) produce the resulting date with its weekday and the net day offset.
+- Wired into the Tools menu ([MainWindow.xaml](AA/MainWindow.xaml) / [.cs](AA/MainWindow.xaml.cs)). Build is clean; the date math is deterministic (`DateTime` arithmetic). Live GUI run was skipped this session to avoid keyboard automation interfering with the user's open applications.
+
+### Strikethrough on completed checklist items / tasks
+- New [Views/Converters.cs](AA/Views/Converters.cs) `BoolToStrikethroughConverter` (registered in [App.xaml](AA/App.xaml) as `BoolToStrike`): true → `TextDecorations.Strikethrough`, false → none.
+- Marking an item **done now strikes its whole text through, live** (the `Done` / `IsComplete` model properties raise `PropertyChanged`, so the bound decoration updates the instant the checkbox is toggled):
+  - Procedure **checklist steps** (Title column) and the **Checklist Builder** list — keyed on `ChecklistStep.Done`.
+  - **Subtasks** list (Name column), the **Calendar** schedule list (Task column), and the **Board** cards — keyed on `TaskItem.IsComplete`.
+- A `StrikeWrapColumn` helper in [Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) adds the decoration to the code-built GridView columns; the XAML lists use `{Binding Done|IsComplete, Converter={StaticResource BoolToStrike}}`.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+- [Services/AppRepository.cs](AA/Services/AppRepository.cs) `AllJobs()` enumerates every tagged Job across tasks/subtasks/steps.
+- New **Planner** tab ([Views/PlannerPage.xaml](AA/Views/PlannerPage.xaml) / [.cs](AA/Views/PlannerPage.xaml.cs)), between Board and Relationship Map:
+  - **Unscheduled Jobs** side list of tagged jobs with no start time.
+  - **Day / Week / Month** views with prev/today/next navigation.
+  - Day/Week render an hourly time grid; each scheduled job is a **block sized by its duration**, and overlapping jobs in a day are split into side-by-side columns (interval-cluster layout) so they don't cover each other.
+  - **Drag-and-drop**: drag a job from the side list onto the grid to schedule it (drop position snaps to 15-minute steps → sets `ScheduledStart`); drag a block to another time/day to reschedule; drag a block back to the side list to unschedule. Month view drags set the date (keeping time-of-day). Double-click any job opens its editor. Every change persists via `MarkDirty + FlushIfDirty`.
+- Wired in [MainWindow.xaml](AA/MainWindow.xaml) (tab + init + refresh-on-select). Verified by scripted login: the Planner builds at startup and tab navigation doesn't crash.
+
+### Dark-mode readability fixes
+- **Container rich text**: the document editing surface now uses fixed **light "paper" brushes** (`EditorBg` / `EditorFg` in [App.xaml](AA/App.xaml)) in *both* themes, so every text colour and highlight the user applied stays readable; the toolbar/file-bank/chrome still follow the theme. `ClearFormat` resets to `EditorFg` (not the themed `Fg`, which is light in dark mode). ([Views/ContainerEditor.xaml](AA/Views/ContainerEditor.xaml) / [.cs](AA/Views/ContainerEditor.xaml.cs))
+- **Menus**: a full **`MenuItem`** template (top-level + submenu, with checkmark, highlight, gesture text, submenu arrow) and a **`ContextMenu`** template were added so menu popups are dark with white text in dark mode (replacing reliance on the system-colour overrides alone). Verified by scripted open-menu in both themes.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+### Deep, drill-down change preview
+- [Services/DataDiff.cs](AA/Services/DataDiff.cs) now produces a **recursive `Node` tree** instead of flat one-liners. Each added/removed/changed top-level item expands to show, recursively:
+  - **Field changes with old → new values**: name, description (snippet), notes (plain-text snippet extracted from the FlowDocument XAML), and per-kind fields — Task `deadline`/`recurrence`/`status`, Component `name`/`notes`, Step `title`/`done`.
+  - **Files** added/removed by name (per container, including component/step containers).
+  - **Children** added/removed/changed by name and recursed into: Task **subtasks** (fully recursive), Equipment **components** + **linked procedures/tasks**, Procedure **steps** + per-step **linked tasks/equipment**. Added/removed items list their full contents so you see exactly what's coming in or being lost.
+- [Views/DiffWindow.xaml](AA/Views/DiffWindow.xaml) is now a **`TreeView`**: colour-coded (green ＋ / amber ～ / red －) expandable nodes; top-level items start expanded (first level of detail visible), deeper levels expand on click. Linked-item changes resolve to names via a combined current+incoming lookup.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**; app launches at the login screen.
+
+## Update (2026-07-03): per-entry password locks + COMPAS crew import & contract-expiry tracking
+
+### Per-entry password lock (custom password + hint; master password always "redemption")
+Any **Equipment/Area, Task, Procedure or Vessel** can now be individually password-locked — separate from the existing app-wide *container* text lock.
+- [Models/Models.cs](AA/Models/Models.cs): `HierarchyItem` gained `LockHash` / `LockSalt` / `LockHint` and a computed `IsLockProtected`. The password is stored **only as a PBKDF2-SHA256 hash** (never plaintext); the optional **hint** is shown on request on the lock screen.
+- New [Services/ItemLockService.cs](AA/Services/ItemLockService.cs): `Protect` / `RemoveProtection` / `Verify` / `TryUnlock` / `IsGated` / `RelockAll`. The app **master password `redemption` always unlocks** any entry. Which entries have been unlocked is kept **only in memory for the session** (forgotten on relaunch and on **Tools ▸ Lock now**), so locked entries are gated again next launch. **Setting a lock takes effect immediately** — `Protect` gates the entry at once, so the padlock replaces the body the moment you lock it (no relaunch needed).
+- New [Views/ItemLockWindow.xaml](AA/Views/ItemLockWindow.xaml)(.cs): set/change dialog (password + confirm + optional hint).
+- [Views/HierarchyPage.xaml](AA/Views/HierarchyPage.xaml)(.cs): a **🔒 Lock / 🔓 Locked** button in each entry's header (set, change password/hint, or remove the lock), and a full **lock overlay** that gates the entry when it's locked and not unlocked this session. The gate hides **both** the details tabs (Container / Relationships / Specifics / Quick Cards) **and** the Name/Description header, so nothing is viewable or editable until unlocked; the overlay offers **Show hint** and an **Unlock** box. Deleting and **Export PDF** are both blocked while gated so the lock can't be bypassed.
+- **Global search respects the lock**: [Services/SearchService.cs](AA/Services/SearchService.cs) takes the set of locked/gated item ids (snapshotted on the UI thread by [Views/SearchWindow.xaml.cs](AA/Views/SearchWindow.xaml.cs) before the background scan) and, for a locked entry, indexes **only its Name** — its description, notes, files and child content (components / subtasks / steps) are omitted, so Ctrl+F can't leak locked content via result snippets. Navigating to a locked hit just opens it on the lock screen. Verified by a 10-assertion harness.
+- [MainWindow.xaml.cs](AA/MainWindow.xaml.cs) **Tools ▸ Lock now** also calls `ItemLockService.RelockAll()` and then `HierarchyPage.RelockCurrent()` on each page, which re-applies the gate to the current selection **in place** (selection preserved) so an open locked entry immediately shows its padlock.
+- Verified by a 17-assertion harness: master password, own password, wrong/empty rejection, session re-lock, and that the stored hash round-trips through JSON without ever containing the plaintext.
+
+### Import COMPAS crew reports → crew cards, with contract-expiry tracking & notification
+A new **Crew** tab (and **Tools ▸ Import COMPAS crew (.xlsx)...**) imports a COMPAS report and keeps every crew member as an info card. Schema/mapping logic is ported from the CrewBridge project.
+- New [Services/CompasReader.cs](AA/Services/CompasReader.cs) (via **ClosedXML**, added to [AA.csproj](AA/AA.csproj)) reads the `report` sheet **by column header** (resilient to column reordering); [Services/CrewConverter.cs](AA/Services/CrewConverter.cs) + [Services/CrewMapping.cs](AA/Services/CrewMapping.cs) translate rank codes, nationality (ISO-3/demonym), ports → UN/LOCODE, gender and dates, lift the middle name out of the `Name` field, split next-of-kin, and raise colour-coded **review notes** for anything guessed or missing (nothing is silently invented).
+- [Models/CrewMember.cs](AA/Models/CrewMember.cs): the full DNV-shaped record **plus the COMPAS `Sign Off Date` and `SignOff Port`** and the `Last Vessel`. Crew are stored in `AppData.Crew` (System.Text.Json), so they ride along with every Save, ZIP backup and Google-Drive sync. Re-importing **upserts by employee id** (updates existing members).
+- **Contract-expiry tracking** keys off each member's **sign-off date**: `DaysUntilSignOff` / `ContractStatusOn` bucket into **Expired / Critical (≤30d) / Due-soon (≤60d) / OK**.
+- [Views/CrewPage.xaml](AA/Views/CrewPage.xaml)(.cs): a roster (search + "expiring only" filter, soonest-expiring first, colour-coded expiry line per member) beside a full **info card** (Identity, Employment & Sign-On/Sign-Off, Travel Documents, Certificates & Medical, Physical, Next of Kin) with a prominent **CONTRACT** banner and the member's review notes.
+- **Notification**: on startup (and after each import) the app pops a summary of any crew whose contract is **overdue or due within 60 days**; the **Crew tab shows a ⚠ badge** with that count; **Tools ▸ Check crew contract expiries** (and a roster button) list them on demand.
+- Verified end-to-end against a real COMPAS export (`E:\Crew\COMPAS.xlsx`): all 29 crew parsed with sign-off dates/ports, vessel, and correct Expired/Critical/Due-soon buckets.
+
+### Review
+- Both features' pure logic was validated by standalone harnesses; the WPF wiring was then put through an adversarial multi-agent review, which caught (and the fix closed) a partial lock bypass where the header Name/Description stayed editable behind the overlay.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+## Update (2026-07-04): Shippalm PMS import (per ship), editable crew cards, procedure deadlines, floating due-dates window
+
+### Per-ship Shippalm work-order import + per-job notification choice
+Each **Vessel** now owns its own **Shippalm PMS** data — the import and the notify settings live inside the ship.
+- [Models/Models.cs](AA/Models/Models.cs): `Vessel.Jobs` (`ObservableCollection<ShipJob>`) and the new **`ShipJob`** (keyed by `JobNo` — the Shippalm "No.", e.g. `ARA.22.3120`) with Title, Work Plan No., Status, Class/Category, Responsible Rank, Function, **Interval** (`64,000 H` / `60M`), Due Status, **Due Date**, Last Done, Overdue Days, and a **`Notify`** flag (the per-job choice of whether it raises notifications).
+- New [Services/ShippalmReader.cs](AA/Services/ShippalmReader.cs) (via **ClosedXML**) reads a "Work Order List" export **by column header** (resilient to reordering) and converts **Excel date serials** (e.g. `48108` → `2031-09-17`) to `yyyy-MM-dd`. Verified against a real export: **2524 jobs**, all due-dates parsed, no duplicate job numbers.
+- New [Views/ShipJobsPanel.xaml](AA/Views/ShipJobsPanel.xaml)(.cs) is a vessel-only **Work Orders** tab: **Import Shippalm (.xlsx)...** (runs off the UI thread with a wait cursor; **upserts by job number**, preserving each job's Notify choice on re-import), a search box, a **status filter**, **Due/overdue-only** and **Notify-on-only** toggles, per-row **Notify** checkboxes plus **Notify: shown ON/OFF** bulk buttons (so you choose which recurring jobs notify), and a live **analysis** line (total · overdue · due ≤30d · due ≤90d · notify-on · by-category), with colour-coded due status per row.
+- The Work Orders tab shows only for vessels ([Views/HierarchyPage.xaml](AA/Views/HierarchyPage.xaml)); it's loaded alongside Quick Cards when a vessel is selected.
+
+### Editable crew cards (accidental-edit-proof)
+- The crew info card stays **read-only**; a new **✎ Edit...** button opens a modal [Views/CrewEditorWindow.xaml](AA/Views/CrewEditorWindow.xaml)(.cs) that edits **every** field — dates (including the emphasised **Sign-off / contract date**) via a calendar picker kept in sync with a text box, everything else via text boxes. Nothing can be changed by accident (edits only happen through the explicit dialog + Save); Cancel discards. On Save the contract expiry, roster colours and Crew-tab badge all recompute ([Views/CrewPage.xaml.cs](AA/Views/CrewPage.xaml.cs) `EditCrew`).
+
+### Procedure deadlines
+- [Models/Models.cs](AA/Models/Models.cs): `Procedure.Deadline` (`DateTime?`), parallel to a Task's. A **Deadline** DatePicker was added to the top of the Procedure **Specifics** tab ([Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) `BuildProcedureSpecifics`). Procedure deadlines surface in the floating due-dates window (below).
+
+### Floating due-dates window (today & tomorrow)
+- New [Views/FloatingTasksWindow.xaml](AA/Views/FloatingTasksWindow.xaml)(.cs): a small **always-on-top**, draggable, rounded window with a gradient header that lists everything due **today** and **tomorrow** — top-level **tasks** and **subtasks** (by deadline, incomplete only), **procedures** (by their new deadline), and **notify-enabled Shippalm work orders** (overdue ones surface under Today) — each as a colour-coded row (click a task/procedure/vessel row to navigate to it). It stays live by refreshing on every save.
+- Opened from a **📌 Due** header button or **Tools ▸ Floating due-dates window** ([MainWindow.xaml](AA/MainWindow.xaml)(.cs)); a single instance is kept and re-pointed at the current data after a reload/import.
+
+### Review
+- The four features were put through an adversarial multi-agent review; the one confirmed finding (the Work Orders list not re-running its filter when a job's **Notify** was toggled under the "Notify on only" filter, leaving stale rows / count) was fixed by rebuilding the view on notify changes. A tab-index shift from adding the Work Orders tab (which had mis-selected the Container tab for non-vessels) was also caught and fixed (Container tab now selected by name).
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+### Follow-up (2026-07-04): per-vessel export + notifications kept inside the vessel tab
+- **Export per vessel**: the Work Orders tab gained an **Export (.xlsx)...** button ([Views/ShipJobsPanel.xaml](AA/Views/ShipJobsPanel.xaml)) that writes THIS ship's work orders — including each job's **Notify** choice — to an .xlsx via [Services/ShippalmReader.cs](AA/Services/ShippalmReader.cs) `Write`, using the same headers `Read` expects so it **round-trips** back into any ship. `Read` now also picks up a `Notify` column when present (raw Shippalm exports don't have one; AA's exports do). Verified by a 9-check round-trip harness against the real 2524-row file.
+- **Notifications stay inside the vessel tab**: Shippalm work-order notifications were removed from the global floating due-dates window ([Views/FloatingTasksWindow.xaml.cs](AA/Views/FloatingTasksWindow.xaml.cs) — it now shows only tasks/subtasks/procedures). Each vessel's Work Orders tab now has its own **🔔 Notifications** bar summarising that ship's flagged jobs that are overdue / due ≤30d (colour-coded), so notifications never leak across ships.
+- **On/off switch per ship**: `Vessel.NotificationsEnabled` ([Models/Models.cs](AA/Models/Models.cs), defaults on) is toggled by the notifications bar's checkbox; when off, that ship shows no work-order notifications regardless of individual Notify flags.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+### Performance pass for large imports (2026-07-04)
+Tuned for ships carrying thousands of Shippalm work orders (measured with the real 2524-row export):
+- **Compact data file**: [Services/DataStore.cs](AA/Services/DataStore.cs) now serializes `data.json` **without indentation**. Measured on one ship of 2524 jobs: each save **108 ms → 21 ms (~5× faster)** and the file **1.66 MB → 1.07 MB (~35% smaller)** — every autosave, manual save, Drive sync and reload benefits. Parsing is unaffected.
+- **O(n) re-import**: the Work Orders upsert ([Views/ShipJobsPanel.xaml.cs](AA/Views/ShipJobsPanel.xaml.cs)) replaced an O(n²) `ObservableCollection.IndexOf`-per-row with a dictionary + `ShipJob.CopyFrom` in-place update ([Models/Models.cs](AA/Models/Models.cs)). Re-importing all 2524 jobs now takes **~3 ms** (was hundreds of ms) with no duplicates and notify choices preserved.
+- **Debounced search**: the Work Orders search box debounces (200 ms) so typing doesn't re-filter/rebuild thousands of rows on every keystroke.
+- **No full-save on every checkbox**: per-row **Notify** toggles now use the debounced save (save-on-pause) instead of writing the whole data file on each click, so bulk-flagging jobs stays smooth.
+- Still in place: the work-order list is **UI-virtualized** (recycling), and the (ClosedXML) import runs **off the UI thread** with a wait cursor — first import ~2–3 s cold, ~1 s warm, with the window responsive throughout.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+## Update (2026-07-04): checklist steps act like subtasks (per-step deadlines)
+Each procedure **checklist step** can now carry its own **deadline**, so it behaves like a task subtask.
+- [Models/Models.cs](AA/Models/Models.cs): `ChecklistStep.Deadline` (`DateTime?`).
+- **Set it** in the step editor's new **Deadline** picker ([Views/ChecklistStepEditorWindow.xaml](AA/Views/ChecklistStepEditorWindow.xaml)); the procedure's checklist list gained a read-only **Deadline** column ([Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) `BuildProcedureSpecifics`), edited via the step editor (double-click) exactly like a subtask's deadline.
+- **Calendar**: [Views/CalendarPage.xaml.cs](AA/Views/CalendarPage.xaml.cs) was refactored onto a uniform `ScheduleRow` wrapper (same XAML binding names, no XAML change) so dated **checklist steps appear alongside tasks and subtasks** in every view (Day/Week/Month/All/Agenda); double-click opens the step editor, and ticking Done writes back and live-updates the strike-through **and** the Status cell.
+- **Floating due-dates window** ([Views/FloatingTasksWindow.xaml.cs](AA/Views/FloatingTasksWindow.xaml.cs)) now lists dated, not-done checklist steps due today/tomorrow (labelled "Checklist step · <procedure>").
+- **Exports**: the checklist PDF/Excel ([Services/ChecklistExporter.cs](AA/Services/ChecklistExporter.cs)) gained a **Due** column, and the full procedure PDF ([Services/PdfExporter.cs](AA/Services/PdfExporter.cs)) appends "(due …)" to each step.
+- Reviewed by a multi-agent pass; the one confirmed finding (Calendar Status cell going stale after a Done toggle) was fixed by making `ScheduleRow.Status` read the live underlying state and notify on toggle.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+## Update (2026-07-04): comprehensive subtask builder + procedure recurrence/status
+- **Comprehensive Subtask Builder (Tasks)**: new [Views/SubtaskBuilderWindow.xaml](AA/Views/SubtaskBuilderWindow.xaml)(.cs) mirrors the procedure Checklist builder but for a task's **subtasks** — bulk entry (one per line, optional "replace existing"), **+ Subtask**, **Insert before/after**, **Edit...** (opens the full subtask editor: deadline / recurrence / status / notes / files), **↑/↓** reorder, **Move to...** (top / bottom / before another), **Delete**, and double-click to edit. Opened from a prominent **🛠 Open Comprehensive Subtask Builder** accent button at the top of the Task's **Specifics** tab ([Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) `BuildTaskSpecifics`). The builder mutates the same `ObservableCollection` the Specifics subtasks list is bound to, so both stay in sync automatically.
+- **Procedure recurrence + status**: [Models/Models.cs](AA/Models/Models.cs) `Procedure` gained `Recurrence` (RecurrenceKind) and `Status` (WorkStatus) — the same vocabularies Tasks use. Both surface as dropdowns at the top of the Procedure **Specifics** tab ([Views/HierarchyPage.xaml.cs](AA/Views/HierarchyPage.xaml.cs) `BuildProcedureSpecifics`), next to the procedure's deadline / job tagging.
+- Reviewed by a multi-agent adversarial pass with **0 confirmed findings**.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+## Update (2026-07-06): procedures on the calendar, scheduled jobs in the floating window, resizeable floating window, planner search
+- **Procedures on the Calendar**: [Views/CalendarPage.xaml.cs](AA/Views/CalendarPage.xaml.cs) now also lists any **Procedure with a deadline** (via `ScheduleRow.ForProcedure`) across Day/Week/Month/All/Agenda. Its Done checkbox maps to the procedure's new `Status` (Done⇄Todo, live-updating the Status cell); double-clicking a procedure row **navigates** to it in the Procedures tab (a navigator callback is now passed via `CalendarPg.Init(_repo, NavigateToItem)`).
+- **Scheduled jobs show in the floating window**: [Views/FloatingTasksWindow.xaml.cs](AA/Views/FloatingTasksWindow.xaml.cs) `Collect` now also adds any Planner **scheduled job** (`IJob.ScheduledStart`) starting today/tomorrow (🕒 with its time), so a job you drop onto today's grid appears here too. Deduped by Id against deadline entries (an item due *and* scheduled the same day shows once), and completed jobs are skipped. Checklist-step jobs resolve their owning procedure for navigation.
+- **Floating window is resizeable**: [Views/FloatingTasksWindow.xaml](AA/Views/FloatingTasksWindow.xaml) `ResizeMode=CanResize` with `MinWidth`/`MinHeight`, plus an explicit **resize grip** in the bottom-right corner (borderless+transparent windows have thin edges) that resizes via `Thumb.DragDelta`.
+- **Planner job search**: [Views/PlannerPage.xaml](AA/Views/PlannerPage.xaml) gained a **Search jobs...** box over the Unscheduled Jobs list; [Views/PlannerPage.xaml.cs](AA/Views/PlannerPage.xaml.cs) filters the schedulable-jobs list by name (case-insensitive) as you type.
+- Reviewed by a multi-agent adversarial pass with **0 confirmed findings**.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+## Update (2026-07-06): startup loading screen (splash)
+- New [Views/SplashWindow.xaml](AA/Views/SplashWindow.xaml)(.cs): a borderless, centered, always-on-top loading screen shown at startup. It displays the bundled splash photo (`Assets/Splash.png`, added as a WPF `<Resource>` in [AA.csproj](AA/AA.csproj)); if that resource is ever missing it falls back to a simple "AA + tagline" text screen so the app still runs.
+- [App.xaml.cs](AA/App.xaml.cs) `OnStartup` now shows the splash first, then after ~2.4 s (a `DispatcherTimer`) closes it and continues to the login → main window (`ContinueToMain`). Shown on **every launch**.
+- Verified: Debug build launches and holds at the login screen after the splash; the published single-file exe's app process runs past the splash. Portable exe republished (~76.5 MB).
+
+## Update (2026-07-06): single shared save file (multi-instance auto-sync, data + attachments)
+A "one save file at a location of your choice" that every copy of AA keeps in sync — **including attachments**.
+- **File ▸ Set shared save file...** / **Stop shared save file** ([MainWindow.xaml](AA/MainWindow.xaml)): choose one **.zip bundle** on a network drive or synced folder. `DataStore.SharedSaveFile` is persisted ([Services/DataStore.cs](AA/Services/DataStore.cs)); it's a sync target, so the app still works from its fast local data file.
+- **Bundles data AND attachments**: the shared file is a ZIP of `data.json` + the `files/` folder (via the existing `ExportFolderToZip`). New [Services/DataStore.cs](AA/Services/DataStore.cs) `ImportSharedBundle` pulls a bundle back in — bringing in its attachments first, switching the data index, then removing orphans — WITHOUT wiping settings/password (unlike the full ZIP import).
+- **Saves every 10 minutes** (reconcile-first, then only if changed) and on close (only if we're not older than the bundle). Writes are **atomic** — `DataStore.Save`/`SaveTo` and the shared push write a temp file then rename over the target, so another copy never reads a half-written file.
+- **Each copy detects updates and reloads itself**: a `FileSystemWatcher` + a 60 s poll compare the bundle's `LastModified` to the local data; when the bundle is newer, the app reloads it (data + attachments) — **silently** when there are no un-synced local changes, or **after a prompt** when there are (tracked via a "last synced" stamp so a saved-but-not-yet-pushed change is never silently lost). Pulls extract to a temp folder and validate before touching local data, so a torn/locked bundle can't corrupt you.
+- Reviewed across three adversarial multi-agent passes; each confirmed data-loss risk was fixed (torn-read→empty→overwrite; outbound writes clobbering newer data; and saved-but-unpushed local changes being silently discarded). Remaining behaviour is intentional last-writer-wins for genuinely concurrent edits.
+- Detection primitives verified by a 7-check harness (exact stamp round-trip, self-writes never look "newer", real updates detected, older ignored). Build: **0 warnings / 0 errors**.
+
+## Update (2026-07-06): shared-save verified, activity log, unit converter, Ctrl+N quick-work
+- **Shared save verified end-to-end**: added an `AA_DATA_DIR` override to [Services/DataStore.cs](AA/Services/DataStore.cs) `AppFolder` (portable data dir / isolated testing) and ran a 12-check isolated test — the bundle includes the attachment file, stamps detect correctly (no reload loop), and a pull restores data **and** the attachment with matching content.
+- **Activity log (UTC)**: [Models/Models.cs](AA/Models/Models.cs) `LogEntry` + `AppData.Log`; [Services/AppRepository.cs](AA/Services/AppRepository.cs) `LogAdded`/`LogRemoved` (UTC-stamped, bounded to 10k). Hooked at every add/remove point (hierarchy New/Delete, inline creates, subtask/step add/remove + bulk builders, crew import/delete/clear). New **Tools ▸ Activity log...** ([Views/ActivityLogWindow.xaml](AA/Views/ActivityLogWindow.xaml)): newest-first list (UTC + local time), filter, Clear, CSV export.
+- **Maritime unit converter**: **Tools ▸ Unit converter...** ([Views/UnitConverterWindow.xaml](AA/Views/UnitConverterWindow.xaml)) — 14 categories (Speed, Distance, Pressure, Temperature, Volume, Mass, Angle/Bearing, Time, Power, Force, Density, Flow rate, Area, Energy) with maritime units (knots, NM, fathoms, cables, compass points, oil barrels, long/short tons, PS/hp, GPM…). Type in any unit; all others convert instantly.
+- **Ctrl+N Quick-work window** ([Views/QuickWorkWindow.xaml](AA/Views/QuickWorkWindow.xaml)): a big window — left lists **pending** tasks (incomplete) & procedures (not Done), filter/search/create; pick one (assignable) and the right side is a **comprehensive builder** (Name/Deadline/Status/Recurrence + bulk-add + reorderable subtasks/steps + Edit + "Open full builder"). Opened via Ctrl+N (`ApplicationCommands.New`) or Tools; single-instance; re-points its repo on shared reload.
+- Reviewed by an adversarial pass; two confirmed HIGH bugs in the quick-work window were fixed: the Name field rebuilding the panel per keystroke (focus loss), and the non-modal window not being re-pointed after a shared reload (stale-write data loss).
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**.
+
+## Update (2026-07-08): Obsidian-style navigation (tags, backlinks, quick switcher) + table paste + editor perf
+Adopted the top three "Obsidian" suggestions, reworked the rich-text editor to detect & round-trip tables, and hardened it for speed.
+
+### Tags (Obsidian-style)
+- Every item carries free-form **Tags** ([Models/Models.cs](AA/Models/Models.cs) `HierarchyItem.Tags`), edited via a **Tags** box in the item header ([Views/HierarchyPage.xaml](AA/Views/HierarchyPage.xaml)). Comma/space/semicolon separated; a leading `#` is accepted and stripped.
+- Tags are searchable in **Ctrl+F** ([Services/SearchService.cs](AA/Services/SearchService.cs) — tags stay searchable even for password-locked items since they carry no protected content) and in the quick switcher.
+
+### Backlinks ("Referenced by")
+- [Services/AppRepository.cs](AA/Services/AppRepository.cs) `ReferencedBy` surfaces every **incoming** reference: two-way `RelatedIds`, an Equipment/Area's one-way `ProcedureIds`/`TaskIds`, and a procedure step's `TaskIds`/`EquipmentIds`. So a Task/Procedure can now see who points at it even for the one-way links that never appeared in its own relationship list.
+- New **↩ Referenced by** panel under the Relationships tab; double-click any related item **or** backlink to jump to it (`Navigate` callback wired on all four hierarchy pages via `MainWindow.NavigateToItem`).
+
+### Quick switcher (Ctrl+O)
+- New [Views/QuickSwitcherWindow.xaml](AA/Views/QuickSwitcherWindow.xaml) — fuzzy-jump to any item by **name, kind or #tag**. Type, **↑/↓** to move, **Enter**/double-click to open, **Esc** to close. Weighted scoring (name-prefix > name-contains > subsequence > tag > kind > description). Bound to `ApplicationCommands.Open` (Ctrl+O), a Tools menu item, and a **Go to (Ctrl+O)** header button.
+
+### Rich-text editor: table paste & insert
+- **Paste tables** from Excel / Word (native WPF RTF path) and the **web** (HTML-only path via the rewritten [Services/HtmlToXamlConverter.cs](AA/Services/HtmlToXamlConverter.cs) `EmitTable`) as real FlowDocument `Table`s — visible cell borders, bolded header cells, `colspan`/`rowspan` preserved, and they copy back out intact.
+- **Insert Table (▦)** toolbar button ([Views/ContainerEditor.xaml](AA/Views/ContainerEditor.xaml)) — prompts for `rows x cols` and inserts an empty bordered table at the caret.
+
+### Lightning-fast editing
+- Per-keystroke lock filtering is skipped entirely unless the document actually contains a locked run (`_hasAnyLock`, computed by an accurate one-pass `DocumentContainsLock()` walk after load).
+- System fonts are enumerated **once** into a static cache shared by every editor instance (was re-enumerated per editor).
+
+### Two adversarial review passes (16 + 5 agents)
+A multi-agent review found and I fixed six issues, then a second pass re-verified each fix:
+1. **[High]** Nested tables duplicated rows/content on paste → `EmitTable` now only takes rows owned by *this* table (`OwnedByThisTable`).
+2. **[Med]** Unknown CSS colors (`rebeccapurple`, `lightgrey`, `currentColor`, malformed hex) made WPF reject the whole styled paste → `NormaliseColor` validates hex, clamps `rgb()`, and whitelists real WPF color names (built once from `System.Windows.Media.Colors`), dropping the rest.
+3. **[Med]** Quick switcher didn't match the `#tag` form it advertised → query strips a leading `#`.
+4. **[Med]** Adding a procedure/task on the Specifics tab left the Relationships tab + backlinks stale → `RefreshRelList()` after those mutations.
+5. **[Med]** `_hasAnyLock` false-positived on gold foreground/highlight colors (perf regression) → replaced the `"FFE699"` substring test with the exact `DocumentContainsLock()` walk.
+6. **[Low]** Deleting an item left dangling one-way references (→ "(missing)" rows, phantom backlinks) → new `AppRepository.PurgeReferences` scrubs `RelatedIds` + `ProcedureIds`/`TaskIds` + step `TaskIds`/`EquipmentIds` **and** every file's `LinkedItemIds` (across all containers); used by both delete paths (`HierarchyPage.Delete_Click`, `BoardPage.DeleteTask`).
+- Converter fixes verified empirically in a WPF STA harness (**31/31**: nested-table dedup, bad-color drop, rgb clamp, valid-color pass-through, plain-table round-trip). Second review pass returned **4/5 FIX_CORRECT**; the one FIX_INCOMPLETE (`LinkedItemIds` not scrubbed) was then completed.
+- Build: `dotnet build` succeeds with **0 warnings / 0 errors**. Portable exe republished to `publish\AA.exe` (~80 MB, 2026-07-08 build).
+
+### Follow-up (2026-07-08): Ctrl+N shows ALL tasks & procedures (not just pending)
+- The Ctrl+N Quick-work window no longer hides completed tasks / done procedures. [Views/QuickWorkWindow.xaml.cs](AA/Views/QuickWorkWindow.xaml.cs) `RefreshPending` now lists **every** task and procedure; completed/done items sort to the bottom (active work still leads) and are tagged **✓ completed** in the subtitle. The count line reads e.g. "12 item(s) — 9 active, 3 completed/done." Labels/title updated from "pending" to "all tasks & procedures". The All / Tasks / Procedures filter and search still apply.
+
+## Update (2026-07-08): per-crew-member checklists, reusable saved lists, crew due-dates, Ctrl+R & shortcut bar
+
+### Per-crew-member checklist
+- `CrewMember` ([Models/CrewMember.cs](AA/Models/CrewMember.cs)) gained a stable `Guid Id` and an `ObservableCollection<ChecklistStep> Checklist` — so a crew member's checklist reuses the same item type as procedures (each item can carry a **deadline, done-state, notes and files**).
+- The crew editor ([Views/CrewEditorWindow.xaml](AA/Views/CrewEditorWindow.xaml)) is now tabbed: **Details** + a **Checklist** tab hosting the comprehensive builder. The read-only crew card shows a checklist summary (count / done / next due) with a **🗒 Open checklist...** button that jumps straight to that tab.
+- COMPAS re-import **preserves** each existing member's `Id` and `Checklist` ([Views/CrewPage.xaml.cs](AA/Views/CrewPage.xaml.cs) `ImportCompas`) — the report has neither, so a blind replace would have wiped them.
+
+### Reusable saved lists (templates) in every builder
+- New `ChecklistTemplate` / `ChecklistTemplateItem` models + `AppData.ChecklistTemplates` ([Models/Models.cs](AA/Models/Models.cs)), and [Services/ChecklistTemplateService.cs](AA/Services/ChecklistTemplateService.cs) — a **full copy** (titles, durations, schedulable flag, and a deep-cloned rich-text + file-bank container) that can be applied over and over (append or replace).
+- A new shared **[Views/ChecklistBuilderControl](AA/Views/ChecklistBuilderControl.xaml)** UserControl holds the whole builder (bulk add, reorder, full per-item editor, and **💾 Save as list / 📋 Load a saved list / Manage**). It's hosted by the procedure `ChecklistBuilderWindow` **and** the crew editor's Checklist tab, so both share one implementation.
+- Save/Load buttons were also wired into **[SubtaskBuilderWindow](AA/Views/SubtaskBuilderWindow.xaml)** (tasks) and the **Ctrl+N QuickWork** inline builder ([Views/QuickWorkWindow.xaml.cs](AA/Views/QuickWorkWindow.xaml.cs)) — templates convert cleanly between `ChecklistStep` and `TaskItem`.
+- Crew-checklist and template containers were added to `DataStore.EnumerateContainers` and `AppRepository.AllContainers` so their **files are bundled with the save** (and path-normalised) and not lost on a cross-machine import.
+
+### Crew items in due-dates & everywhere necessary
+- A crew checklist item with a due date now appears in the **📌 due-dates window** ([Views/FloatingTasksWindow.xaml.cs](AA/Views/FloatingTasksWindow.xaml.cs) — purple accent, click → jumps to that crew member) and on the **Calendar** ([Views/CalendarPage.xaml.cs](AA/Views/CalendarPage.xaml.cs) `ScheduleRow.ForCrewStep`, double-click → full editor). Crew items tagged **Schedulable job** now also reach the **Planner** (`AppRepository.AllJobs` enumerates crew checklists).
+
+### Due-dates window resize + Ctrl+R + shortcut bar
+- The floating due-dates window was already user-resizable (corner grip); its **size now persists** across sessions ([UiState.DueWindowWidth/Height]).
+- **Ctrl+R** opens the due-dates window (`ApplicationCommands.Refresh` bound in [MainWindow.xaml](AA/MainWindow.xaml)).
+- A **hideable keyboard-shortcuts strip** sits at the bottom of the main window (Ctrl+S/F/N/O/R). Toggle via the ✕ button or **View ▸ Shortcut bar**; state is remembered (`UiState.ShowShortcutBar`).
+
+### Adversarial review (9 agents) → 3 fixes
+1. **[Med]** crew steps tagged "Schedulable job" were a no-op → `AllJobs()` now yields crew checklist steps and `FloatingTasksWindow.JobNav` resolves a crew-owned step to its member for navigation.
+2. **[Low]** `CloneContainer` dropped the `Container.IsLocked` flag → now copied.
+3. **[Low]** the due-window's resized size could be lost if the whole app closed while it was open → size is now persisted during the resize (`ResizeGrip_DragDelta`) so the normal/close-time save captures it.
+- Build: **0 warnings / 0 errors**. Portable exe republished to `publish\AA.exe` (~80 MB, 2026-07-08 build).
+
+## Update (2026-07-08): Saved Lists tab, List Groups, PDF export, customizable tab colors
+
+### Saved Lists tab + List Groups
+- New top-level **Saved Lists** tab ([Views/SavedListsPage.xaml](AA/Views/SavedListsPage.xaml)) — a home for the reusable saved checklists that previously lived only inside the builder dialogs. Left: the lists **grouped by List Group** (ungrouped sink to the bottom); right: the selected list's items preview + actions.
+- New `ListGroup` model + `ChecklistTemplate.GroupId` + `AppData.ListGroups` ([Models/Models.cs](AA/Models/Models.cs)). A saved list can be **freely moved into any group** ("Move to group…"), and groups are created/renamed/deleted in the same tab ("+ Group" / "Manage groups…"; deleting a group keeps its lists, just ungroups them). Both saved lists and groups **persist in the save** and ride along in shared/exported bundles (their item containers were already added to `EnumerateContainers`).
+- Full list management in the tab: **+ List** (empty), **Rename**, **Delete**, **Duplicate**, and **✎ Edit items…** — which round-trips the list through the shared checklist builder ([Views/TemplateEditorWindow.xaml](AA/Views/TemplateEditorWindow.xaml), via `ChecklistTemplateService.ToSteps`/`WriteBackFromSteps`) so you get bulk-add, reorder and full per-item notes/files editing.
+
+### PDF export (lists & groups)
+- **📄 Export** a single saved list, a whole group, or **all** saved lists to a nice A4 PDF ([Services/PdfExporter.cs](AA/Services/PdfExporter.cs) `ExportSavedLists`) — group headings, numbered items with duration/schedulable tags, rich-text notes and attached file names. Verified with a real-method smoke test (**3/3** PDFs generated: single-with-notes+file, grouped-with-empty-list, ungrouped-multi).
+
+### Customizable tab colors
+- **View ▸ 🎨 Customize tab colors…** ([Views/TabColorsWindow.xaml](AA/Views/TabColorsWindow.xaml)) — pick a background colour per main tab (or reset to the theme default). The [TabItem template](AA/App.xaml) was refreshed so a tab **keeps its custom colour when selected**, marked active by a bold **accent underline** (text colour auto-contrasts black/white). Choices persist in `UiState.TabColors` and re-apply on launch.
+- Build: **0 warnings / 0 errors**. Portable exe republished to `publish\AA.exe` (~80 MB, 2026-07-08 build).
+
+### Hotfix (2026-07-08): app failed to start after login (invalid Ctrl+R command)
+- **Symptom:** the app showed the splash + login, then died the moment you logged in (never reached the main window) — a silent "not starting".
+- **Cause:** the Ctrl+R binding used `Command="ApplicationCommands.Refresh"` in [MainWindow.xaml](AA/MainWindow.xaml). `ApplicationCommands` has **no** `Refresh` member (it lives on `NavigationCommands`). Command strings are resolved by `CommandConverter` at **runtime**, so this compiled cleanly (0/0) but threw `XamlParseException → CommandConverter cannot convert from System.String` while `MainWindow`'s XAML loaded, right after login.
+- **Fix:** both the `KeyBinding` and `CommandBinding` now use `NavigationCommands.Refresh` (Ctrl+R still opens the due-dates window). Reproduced the exact crash by loading `MainWindow` against a copy of the real `data.json` in a headless WPF harness, then confirmed it constructs + loads cleanly after the fix.
+- **Hardening:** added global crash logging to [App.xaml.cs](AA/App.xaml.cs) — any unhandled exception is now written to `%LOCALAPPDATA%\AA\crash.log` and shown in a dialog, so a startup failure can never again be a silent black box.
+- Rebuilt & republished the self-contained single-file `publish\AA.exe`; verified it launches.

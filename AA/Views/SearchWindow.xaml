@@ -1,0 +1,43 @@
+<Window x:Class="AA.Views.SearchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Search" Height="640" Width="900"
+        WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/AA.ico">
+    <DockPanel Margin="10">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <TextBlock Text="Search:" Width="60" VerticalAlignment="Center"/>
+            <Button x:Name="GoBtn" DockPanel.Dock="Right" Content="Search" MinWidth="80" Margin="6,0,0,0" Click="Go_Click" IsDefault="True"/>
+            <TextBox x:Name="QueryBox" KeyDown="QueryBox_KeyDown"/>
+        </DockPanel>
+        <TextBlock x:Name="StatusText" DockPanel.Dock="Top" Margin="0,0,0,6" Opacity="0.7"/>
+        <ListView x:Name="ResultsList"
+                  MouseDoubleClick="Results_Activate"
+                  KeyDown="Results_Key"
+                  VirtualizingPanel.IsVirtualizing="True"
+                  VirtualizingPanel.VirtualizationMode="Recycling"
+                  ScrollViewer.CanContentScroll="True">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Where" Width="230">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding OwnerHeader}" FontWeight="Bold"/>
+                                    <TextBlock Text="{Binding Where}" Opacity="0.7" FontSize="11"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="Match" Width="600">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <ContentControl Content="{Binding HighlightedSnippet}"/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </DockPanel>
+</Window>
