@@ -957,6 +957,9 @@ public partial class MainWindow : Window
         VesselsPage.Navigate = NavigateToItem;
         CrewPg.Init(_repo);
         ListsPg.Init(_repo);
+        BucketsPg.Init(_repo);
+        BucketsPg.Navigate = NavigateToItem;
+        PortsPg.Init(_repo);
         UpdateCrewTabHeader();
         _floating?.SetRepo(_repo);    // keep the floating due-dates window pointed at the current data
         _quickWork?.SetRepo(_repo);   // and the Ctrl+N quick-work window (avoids writing to an orphaned repo)
@@ -981,10 +984,88 @@ public partial class MainWindow : Window
         ShortcutBarMenu.IsChecked = ui.ShowShortcutBar;
         ShortcutBar.Visibility = ui.ShowShortcutBar ? Visibility.Visible : Visibility.Collapsed;
 
-        // Apply any customised tab colours.
+        // Apply the saved tab order, then any customised tab colours.
+        ApplyTabOrder();
         ApplyTabColors();
 
         _restoringUi = false;
+    }
+
+    // ---- Drag-to-reorder main tabs ----
+    private TabItem? _dragTab;
+    private System.Windows.Point _tabDragStart;
+
+    private void Tab_PreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _tabDragStart = e.GetPosition(null);
+        _dragTab = FindAncestor<TabItem>(e.OriginalSource as System.Windows.DependencyObject);
+    }
+
+    private void Tab_PreviewMouseMove(object sender, System.Windows.Input.MouseEventArgs e)
+    {
+        if (e.LeftButton != MouseButtonState.Pressed || _dragTab == null) return;
+        var pos = e.GetPosition(null);
+        if (Math.Abs(pos.X - _tabDragStart.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(pos.Y - _tabDragStart.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        try { System.Windows.DragDrop.DoDragDrop(_dragTab, _dragTab, System.Windows.DragDropEffects.Move); }
+        catch { /* drag cancelled */ }
+    }
+
+    private void Tab_Drop(object sender, System.Windows.DragEventArgs e)
+    {
+        var dragged = _dragTab;
+        _dragTab = null;
+        if (dragged == null) return;
+        var target = FindAncestor<TabItem>(e.OriginalSource as System.Windows.DependencyObject);
+        if (target == null || ReferenceEquals(target, dragged)) return;
+        int to = MainTabs.Items.IndexOf(target);
+        if (to < 0 || !MainTabs.Items.Contains(dragged)) return;
+        MainTabs.Items.Remove(dragged);
+        MainTabs.Items.Insert(to, dragged);
+        MainTabs.SelectedItem = dragged;
+        PersistTabOrder();
+    }
+
+    private void PersistTabOrder()
+    {
+        if (_repo == null) return;
+        _repo.Data.Ui.TabOrder = MainTabs.Items.OfType<TabItem>()
+            .Select(t => t.Name).Where(n => !string.IsNullOrEmpty(n)).ToList();
+        _repo.MarkDirty();
+    }
+
+    /// <summary>Reorder the main tabs to the saved order (names not in the list keep their relative order
+    /// after the listed ones, so newly-added tabs still appear).</summary>
+    private void ApplyTabOrder()
+    {
+        var order = _repo?.Data.Ui.TabOrder;
+        if (order == null || order.Count == 0) return;
+        var byName = MainTabs.Items.OfType<TabItem>()
+            .Where(t => !string.IsNullOrEmpty(t.Name)).ToDictionary(t => t.Name);
+        var desired = new List<TabItem>();
+        foreach (var name in order)
+            if (byName.TryGetValue(name, out var t) && !desired.Contains(t)) desired.Add(t);
+        foreach (var t in MainTabs.Items.OfType<TabItem>())
+            if (!desired.Contains(t)) desired.Add(t);
+        if (desired.Count != MainTabs.Items.Count) return;   // safety
+        // Only reorder if it actually differs.
+        bool same = !desired.Where((t, i) => !ReferenceEquals(MainTabs.Items[i], t)).Any();
+        if (same) return;
+        var sel = MainTabs.SelectedItem;
+        MainTabs.Items.Clear();
+        foreach (var t in desired) MainTabs.Items.Add(t);
+        MainTabs.SelectedItem = sel ?? (desired.Count > 0 ? desired[0] : null);
+    }
+
+    private static T? FindAncestor<T>(System.Windows.DependencyObject? d) where T : System.Windows.DependencyObject
+    {
+        while (d != null)
+        {
+            if (d is T t) return t;
+            d = System.Windows.Media.VisualTreeHelper.GetParent(d)
+                ?? (d as System.Windows.FrameworkElement)?.Parent as System.Windows.DependencyObject;
+        }
+        return null;
     }
 
     // ---- Custom tab colours ----
@@ -1083,6 +1164,8 @@ public partial class MainWindow : Window
             if (ti.Content == MapPage) MapPage.RefreshSidebar();
             if (ti.Content == CrewPg) CrewPg.Refresh();
             if (ti.Content == ListsPg) ListsPg.Refresh();
+            if (ti.Content == BucketsPg) BucketsPg.Refresh();
+            if (ti.Content == PortsPg) PortsPg.Refresh();
         }
         if (!_restoringUi && _repo != null)
             _repo.Data.Ui.SelectedMainTabIndex = MainTabs.SelectedIndex;

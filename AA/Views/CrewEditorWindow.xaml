@@ -29,6 +29,13 @@
                     <views:ChecklistBuilderControl x:Name="Builder"/>
                 </DockPanel>
             </TabItem>
+            <TabItem Header="Schedule">
+                <DockPanel Margin="0,6,0,0">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Foreground="{DynamicResource Muted}" Margin="0,0,0,8"
+                               Text="A timeline for this crew member — add tasks, procedures, equipment or free notes on a date. Save/export the schedule to reuse it on any crew, and link it to a vessel. Changes save immediately."/>
+                    <views:ScheduleBuilderControl x:Name="ScheduleCtrl"/>
+                </DockPanel>
+            </TabItem>
         </TabControl>
 
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">

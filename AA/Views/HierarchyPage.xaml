@@ -128,6 +128,9 @@
                     <TabItem x:Name="WorkOrdersTab" Header="Work Orders" Visibility="Collapsed">
                         <views:ShipJobsPanel x:Name="ShipJobsCtrl"/>
                     </TabItem>
+                    <TabItem x:Name="PortsTab" Header="Ports" Visibility="Collapsed">
+                        <views:PortsPanel x:Name="PortsCtrl"/>
+                    </TabItem>
                     <TabItem x:Name="ContainerTab" Header="Container">
                         <views:ContainerEditor x:Name="ContainerCtrl"/>
                     </TabItem>

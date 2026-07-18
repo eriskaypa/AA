@@ -186,8 +186,10 @@
                 <Setter Property="Template">
                     <Setter.Value>
                         <ControlTemplate TargetType="ListBoxItem">
+                            <!-- Thin separator line between rows (tasks/procedures and every other list). -->
                             <Border x:Name="bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
-                                    CornerRadius="3" SnapsToDevicePixels="True">
+                                    BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1"
+                                    SnapsToDevicePixels="True">
                                 <ContentPresenter HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
                             </Border>
                             <ControlTemplate.Triggers>
@@ -211,6 +213,7 @@
                     <Setter.Value>
                         <ControlTemplate TargetType="ListViewItem">
                             <Border x:Name="bd" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"
+                                    BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1"
                                     SnapsToDevicePixels="True">
                                 <GridViewRowPresenter Content="{TemplateBinding Content}"
                                                       Columns="{Binding Path=View.Columns, RelativeSource={RelativeSource AncestorType={x:Type ListView}}}"

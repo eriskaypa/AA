@@ -79,7 +79,14 @@ public interface IJob
     Guid Id { get; }
 }
 
-public abstract class HierarchyItem : NotifyBase
+/// <summary>Anything that can be sorted into buckets (a task, a subtask, a procedure, or a checklist
+/// step). Carries up to two bucket ids.</summary>
+public interface IBucketable
+{
+    ObservableCollection<Guid> BucketIds { get; }
+}
+
+public abstract class HierarchyItem : NotifyBase, IBucketable
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     private string _name = "";
@@ -95,6 +102,17 @@ public abstract class HierarchyItem : NotifyBase
     /// <summary>Optional sidebar group this item belongs to. Null = ungrouped.</summary>
     private Guid? _groupId;
     public Guid? GroupId { get => _groupId; set => Set(ref _groupId, value); }
+    /// <summary>The buckets (predefined in the Buckets tab) this task/procedure is sorted into — at
+    /// most two. A cross-kind container (a location, a rank, etc.). Empty = no bucket.</summary>
+    public ObservableCollection<Guid> BucketIds { get; set; } = new();
+    /// <summary>Legacy single-bucket field (before <see cref="BucketIds"/>). Loading an older save
+    /// migrates its value into <see cref="BucketIds"/>; the getter returns null so it is never written
+    /// back (the store ignores null on write).</summary>
+    public Guid? BucketId
+    {
+        get => null;
+        set { if (value is Guid g && !BucketIds.Contains(g)) BucketIds.Add(g); }
+    }
 
     // ---- Per-item password lock (custom password + optional hint) ----
     // Any Equipment/Task/Procedure/Vessel can be locked with its own password; the app master
@@ -229,6 +247,65 @@ public class Vessel : HierarchyItem
     /// individual <see cref="ShipJob.Notify"/> flag. Defaults on for legacy data.</summary>
     private bool _notificationsEnabled = true;
     public bool NotificationsEnabled { get => _notificationsEnabled; set => Set(ref _notificationsEnabled, value); }
+    /// <summary>This vessel's ports of call (imported from a "Port of Call List" / "Last Ports" export),
+    /// with arrival/departure dates &amp; times and security info. Also fed into the global ports database.</summary>
+    public ObservableCollection<PortCall> PortCalls { get; set; } = new();
+}
+
+/// <summary>A single port of call for a vessel — arrival/departure date &amp; time plus security details.
+/// Imported from a ports-of-call list (two supported formats). Keyed by port + arrival date for upsert.</summary>
+public class PortCall : NotifyBase
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    private string _portName = ""; public string PortName { get => _portName; set => Set(ref _portName, value); }
+    public string Country { get; set; } = "";
+    public string UnLocode { get; set; } = "";
+    public string PortFacility { get; set; } = "";
+    public string PfNo { get; set; } = "";
+    public string ArrivalDate { get; set; } = "";       // yyyy-MM-dd
+    public string ArrivalTime { get; set; } = "";       // HH:mm
+    public string DepartureDate { get; set; } = "";
+    public string DepartureTime { get; set; } = "";
+    public string SecurityLevelPort { get; set; } = "";
+    public string SecurityLevelVessel { get; set; } = "";
+    public string SspFollowed { get; set; } = "";       // YES / NO / blank
+    public string SpecialMeasures { get; set; } = "";
+    public string ImportedAt { get; set; } = "";
+    /// <summary>De-dup key for a vessel's port calls: port name + arrival date (a vessel is at one port
+    /// per date, so this merges the two import formats / re-imports cleanly, regardless of UN/LOCODE).</summary>
+    [JsonIgnore] public string Key => $"{PortName.ToLowerInvariant()}@{ArrivalDate}";
+    [JsonIgnore] public DateTime? ArrivalValue => CrewMember.ParseDate(ArrivalDate);
+    [JsonIgnore] public string DisplayName => Country.Length > 0 ? $"{PortName}, {Country}" : PortName;
+    [JsonIgnore] public string ArrivalDisplay => $"{ArrivalDate} {ArrivalTime}".Trim();
+    [JsonIgnore] public string DepartureDisplay => $"{DepartureDate} {DepartureTime}".Trim();
+}
+
+/// <summary>A port in the global ports database — every vessel that called there and when.</summary>
+public class Port : NotifyBase
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    private string _name = ""; public string Name { get => _name; set => Set(ref _name, value); }
+    public string Country { get; set; } = "";
+    public string UnLocode { get; set; } = "";
+    public ObservableCollection<PortVisit> Visits { get; set; } = new();
+    [JsonIgnore] public string Key => UnLocode.Length > 0 ? UnLocode.ToLowerInvariant() : $"{_name}|{Country}".ToLowerInvariant();
+    [JsonIgnore] public string Display => (UnLocode.Length > 0 ? $"{Name} ({UnLocode})" : Name) + (Country.Length > 0 ? $", {Country}" : "");
+}
+
+/// <summary>One vessel's visit to a port, recorded in the global ports database.</summary>
+public class PortVisit : NotifyBase
+{
+    public string VesselName { get; set; } = "";
+    public Guid? VesselId { get; set; }
+    public string ArrivalDate { get; set; } = "";
+    public string ArrivalTime { get; set; } = "";
+    public string DepartureDate { get; set; } = "";
+    public string DepartureTime { get; set; } = "";
+    public string ImportedAt { get; set; } = "";
+    [JsonIgnore] public string VisitKey => $"{VesselName}|{ArrivalDate}|{ArrivalTime}".ToLowerInvariant();
+    [JsonIgnore] public DateTime? ArrivalValue => CrewMember.ParseDate(ArrivalDate);
+    [JsonIgnore] public string ArrivalDisplay => $"{ArrivalDate} {ArrivalTime}".Trim();
+    [JsonIgnore] public string DepartureDisplay => $"{DepartureDate} {DepartureTime}".Trim();
 }
 
 /// <summary>One Shippalm work order (a recurring maintenance job) imported for a vessel from the
@@ -256,6 +333,12 @@ public class ShipJob : NotifyBase
     private bool _notify;
     /// <summary>Whether this recurring job raises due/overdue notifications (chosen per job, per ship).</summary>
     public bool Notify { get => _notify; set => Set(ref _notify, value); }
+    /// <summary>User-marked completion (separate from Shippalm's own Status/FinishedDate). A completed
+    /// job is excluded from overdue/due counts and notifications, and shown struck-through.</summary>
+    private bool _isCompleted;
+    public bool IsCompleted { get => _isCompleted; set => Set(ref _isCompleted, value); }
+    /// <summary>Date the user marked this completed (yyyy-MM-dd), for the record.</summary>
+    public string CompletedDate { get; set; } = "";
     public string ImportedAt { get; set; } = "";
 
     [JsonIgnore] public DateTime? DueDateValue => CrewMember.ParseDate(DueDate);
@@ -277,6 +360,7 @@ public class ShipJob : NotifyBase
         FunctionNo = o.FunctionNo; FunctionDescription = o.FunctionDescription; Interval = o.Interval;
         DueStatus = o.DueStatus; DueDate = o.DueDate; FinishedDate = o.FinishedDate;
         LastDoneDate = o.LastDoneDate; OverdueDays = o.OverdueDays; Notify = o.Notify;
+        IsCompleted = o.IsCompleted; CompletedDate = o.CompletedDate;
         ImportedAt = o.ImportedAt;
     }
 }
@@ -321,11 +405,13 @@ public class QuickCard : NotifyBase
     }
 }
 
-public class ChecklistStep : NotifyBase, IJob
+public class ChecklistStep : NotifyBase, IJob, IBucketable
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     private string _title = "";
     public string Title { get => _title; set => Set(ref _title, value); }
+    /// <summary>Buckets (predefined in the Buckets tab) this checklist step is sorted into — up to two.</summary>
+    public ObservableCollection<Guid> BucketIds { get; set; } = new();
     private bool _done;
     public bool Done { get => _done; set => Set(ref _done, value); }
     /// <summary>Optional per-step deadline — lets a checklist step behave like a task subtask,
@@ -389,6 +475,60 @@ public class ListGroup : NotifyBase
     public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
 }
 
+/// <summary>What a schedule entry points at.</summary>
+public enum ScheduleKind { Note, Task, Procedure, Equipment }
+
+/// <summary>One entry on a crew member's schedule/timeline — a dated item that can be free text or a
+/// link to an existing Task / Procedure / Equipment (by <see cref="RefId"/>).</summary>
+public class ScheduleEntry : NotifyBase
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    private string _title = ""; public string Title { get => _title; set => Set(ref _title, value); }
+    public ScheduleKind Kind { get; set; } = ScheduleKind.Note;
+    /// <summary>Id of the linked Task/Procedure/Equipment (null for a free-text note).</summary>
+    public Guid? RefId { get; set; }
+    private string _date = ""; public string Date { get => _date; set => Set(ref _date, value); }   // yyyy-MM-dd
+    private string _time = ""; public string Time { get => _time; set => Set(ref _time, value); }    // HH:mm
+    public string EndDate { get; set; } = "";
+    public string EndTime { get; set; } = "";
+    private bool _done; public bool Done { get => _done; set => Set(ref _done, value); }
+    public string Notes { get; set; } = "";
+    [JsonIgnore] public DateTime? When => CrewMember.ParseDate(Date);
+    [JsonIgnore] public string KindIcon => Kind switch
+    { ScheduleKind.Task => "✓", ScheduleKind.Procedure => "📋", ScheduleKind.Equipment => "⚙", _ => "•" };
+    [JsonIgnore] public string WhenDisplay => $"{Date} {Time}".Trim();
+}
+
+/// <summary>A reusable, saveable/exportable schedule that can be applied to any crew member. Optionally
+/// linked to a vessel.</summary>
+public class ScheduleTemplate : NotifyBase
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    private string _name = ""; public string Name { get => _name; set => Set(ref _name, value); }
+    public Guid? VesselId { get; set; }
+    public string VesselName { get; set; } = "";
+    public ObservableCollection<ScheduleEntry> Entries { get; set; } = new();
+    public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+    [JsonIgnore] public string Display => $"{(_name.Length > 0 ? _name : "(unnamed)")}  ·  {Entries.Count} entr{(Entries.Count == 1 ? "y" : "ies")}"
+        + (VesselName.Length > 0 ? $"  ·  {VesselName}" : "");
+}
+
+/// <summary>A predefined "bucket" — a cross-kind container (a location, a rank, etc.) that tasks and
+/// procedures are sorted into. Defined/managed in the Buckets tab. An item references its buckets by
+/// <see cref="HierarchyItem.BucketIds"/> (at most two).</summary>
+public class QuickBucket : NotifyBase
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    private string _name = "";
+    public string Name { get => _name; set => Set(ref _name, value); }
+    /// <summary>What this bucket represents — e.g. "Location", "Rank", "Department". Free-form; used to
+    /// group buckets in the Buckets tab. Empty = uncategorised.</summary>
+    private string _category = "";
+    public string Category { get => _category; set => Set(ref _category, value); }
+    public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+    [JsonIgnore] public string Display => _category.Length > 0 ? $"{Name}  ·  {_category}" : (_name.Length > 0 ? _name : "(unnamed)");
+}
+
 public class AppData
 {
     public ObservableCollection<Equipment> Equipment { get; set; } = new();
@@ -407,6 +547,12 @@ public class AppData
     public ObservableCollection<ChecklistTemplate> ChecklistTemplates { get; set; } = new();
     /// <summary>Groups that bundle saved checklists together in the Saved Lists tab.</summary>
     public ObservableCollection<ListGroup> ListGroups { get; set; } = new();
+    /// <summary>Buckets tasks/procedures can be sorted into in the Ctrl+N quick-work window.</summary>
+    public ObservableCollection<QuickBucket> QuickBuckets { get; set; } = new();
+    /// <summary>Global ports database — every port called, with the vessels that visited and when.</summary>
+    public ObservableCollection<Port> Ports { get; set; } = new();
+    /// <summary>Reusable crew schedules that can be applied to any crew member.</summary>
+    public ObservableCollection<ScheduleTemplate> ScheduleTemplates { get; set; } = new();
     public UiState Ui { get; set; } = new();
     /// <summary>Wall-clock time this database was last saved by the user. Stamped by
     /// <see cref="AA.Services.AppRepository.Save"/>; used to warn when an imported file is
@@ -445,9 +591,15 @@ public class UiState
     public double? CalendarFontScale { get; set; }
     /// <summary>Whether the keyboard-shortcuts reminder strip at the bottom of the main window is shown.</summary>
     public bool ShowShortcutBar { get; set; } = true;
+    /// <summary>Task/procedure ids pinned as squares in the Ctrl+N quick-work window. Persisted and
+    /// shared like the rest of the data, so pins survive restarts and follow the shared save.</summary>
+    public List<Guid> QuickViewPinIds { get; set; } = new();
     /// <summary>Custom main-tab header colours, keyed by tab name (e.g. "TabTasks"); value is a hex
     /// colour (#RRGGBB / #AARRGGBB). Absent = the default theme colour.</summary>
     public Dictionary<string, string> TabColors { get; set; } = new();
+    /// <summary>User-chosen order of the main tabs (by tab name). Empty = default XAML order. Tabs not
+    /// listed keep their relative order after the listed ones.</summary>
+    public List<string> TabOrder { get; set; } = new();
     /// <summary>Persisted size of the floating due-dates window (so a resize sticks across sessions).</summary>
     public double? DueWindowWidth { get; set; }
     public double? DueWindowHeight { get; set; }

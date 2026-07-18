@@ -23,6 +23,7 @@ public partial class CrewEditorWindow : Window
         LblTitle.Text = $"Edit crew member — {(_m.FullName.Length > 0 ? _m.FullName : "(unnamed)")}";
         BuildForm();
         Builder.Bind(_m.Checklist, repo, _m.FullName, "Crew checklist item");
+        ScheduleCtrl.Bind(_m, repo);
         if (showChecklist) Tabs.SelectedIndex = 1;
     }
 

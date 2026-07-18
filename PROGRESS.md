@@ -668,3 +668,59 @@ A multi-agent review found and I fixed six issues, then a second pass re-verifie
 - **Fix:** both the `KeyBinding` and `CommandBinding` now use `NavigationCommands.Refresh` (Ctrl+R still opens the due-dates window). Reproduced the exact crash by loading `MainWindow` against a copy of the real `data.json` in a headless WPF harness, then confirmed it constructs + loads cleanly after the fix.
 - **Hardening:** added global crash logging to [App.xaml.cs](AA/App.xaml.cs) — any unhandled exception is now written to `%LOCALAPPDATA%\AA\crash.log` and shown in a dialog, so a startup failure can never again be a silent black box.
 - Rebuilt & republished the self-contained single-file `publish\AA.exe`; verified it launches.
+
+## Update (2026-07-08): pinned squares in the Ctrl+N quick-work window
+- The Ctrl+N quick window ([Views/QuickWorkWindow.xaml](AA/Views/QuickWorkWindow.xaml)) gained a **📌 Pinned** board at the top: pin any task or procedure as a **square tile**. Each tile shows the name, kind, a **progress bar** (subtasks/steps done ÷ total), a deadline chip (overdue in red), an unpin button, and a **Done** checkbox. Clicking a tile selects it for editing in the builder below.
+- **Everything applies everywhere.** Pins are stored in `UiState.QuickViewPinIds` (persisted + shared). Ticking a tile's Done, editing/adding/removing its subtasks or steps, or **🗑 Delete**-ing the whole item (new button in the detail pane, with `PurgeReferences`) all write straight to the real `TaskItem`/`Procedure` — so the change shows up on the Calendar, Board, Planner, due-dates window, etc. The tiles auto-refresh with every change (`RefreshPinned` is coupled to `RefreshPending`), and a deleted item's stale pin is pruned automatically.
+- Verified against a copy of the real data in a headless WPF harness: the window constructs and renders pinned tiles (task + done procedure, with progress bars) without error; the main window still loads cleanly after the `UiState` addition.
+- Build: **0 warnings / 0 errors**. Portable exe republished to `publish\AA.exe` (~80 MB).
+
+## Update (2026-07-08): work-orders area — filtering, sorting, completion & deletion
+The per-vessel Shippalm work-orders panel ([Views/ShipJobsPanel.xaml](AA/Views/ShipJobsPanel.xaml)) gained full list management:
+- **More filtering:** existing search + status, now plus **Category** and **Responsible-rank** dropdowns and a **Show: All / Active only / Completed only** filter (alongside the existing due/overdue and notify-only toggles).
+- **Column sorting:** click any **column header** to sort by it (click again to reverse) — Job No., Title, Due, Interval, Status, Due Status, Category, Responsible, Function, Done, Notify. Default remains soonest-due first with completed jobs sunk to the bottom.
+- **Mark as completed:** a new **Done** checkbox column, plus **✓ Mark completed / ↺ Mark active** buttons and a right-click menu (act on the selected rows, or all shown if none selected). A new `ShipJob.IsCompleted` + `CompletedDate` ([Models/Models.cs](AA/Models/Models.cs)) is preserved across re-import (like the Notify flag). Completed jobs are struck-through, shown as "✓ completed", and **excluded from overdue/due counts and notifications**.
+- **Deletion:** multi-select rows and **🗑 Delete** (toolbar or right-click), with confirmation; the summary/filters refresh afterward.
+- **Verified** in a headless WPF harness with synthetic jobs: the panel builds, and the completion filter renders All=4 / Completed=1 / Active=3 correctly with no error; the main window still loads cleanly after the `ShipJob` model change.
+- Build: **0 warnings / 0 errors**. Portable exe republished to `publish\AA.exe` (~80 MB).
+
+## Update (2026-07-08): quick-work window — strike-through on done, and "buckets"
+- **Done items are crossed out in the quick window** ([Views/QuickWorkWindow.xaml](AA/Views/QuickWorkWindow.xaml)): the left task/procedure list, the pinned squares, and the builder's subtask/step list now render a **strike-through** when an item is complete. Because completion lives on the real `TaskItem`/`Procedure`/`ChecklistStep`, the crossed-out state matches everywhere else in the app (Calendar, Board, due-dates window, etc.) — marking done anywhere shows everywhere.
+- **Buckets** — a cross-kind container to sort tasks & procedures into within the quick window. New `QuickBucket` model + `HierarchyItem.BucketId` + `AppData.QuickBuckets` ([Models/Models.cs](AA/Models/Models.cs)). Toolbar/right-click: **🪣 + Bucket**, **Move to bucket…**, **Remove from bucket**, **Manage buckets…** (rename/delete — deleting a bucket just unbuckets its items). When any bucket exists, the left list is **grouped by bucket** (unbucketed items sink to a "(No bucket)" group at the bottom); within each bucket, active work leads and completed items sink. Buckets persist and travel with the shared save.
+- **Verified** in a headless WPF harness against a copy of the real data: with a bucket created and an item assigned, the window builds and the list shows 2 groups ("Engine room" + "(No bucket)") across all 29 items; the main window still loads cleanly after the model change.
+- Build: **0 warnings / 0 errors**. Portable exe republished to `publish\AA.exe` (~80 MB).
+
+## Update (2026-07-08): buckets rework — predefined, own tab, up-to-two, every level
+- **Buckets are now predefined in their own [Buckets tab](AA/Views/BucketsPage.xaml)** (name + optional **Category** like Location/Rank; grouped by category). The right pane lists everything sorted into the selected bucket; double-click opens it. Creation moved out of the quick window.
+- **Up to two buckets per item.** `HierarchyItem.BucketId` (single) was replaced by `BucketIds` (collection), and **`ChecklistStep` gained `BucketIds`** too, via a shared **`IBucketable`** interface. So **each task, subtask, procedure and checklist step** can be sorted into buckets — from the Ctrl+N window (a 🪣 Buckets button on the selected item and on any subtask/step in the builder), capped at two via a multi-select picker.
+- An item in two buckets appears under **both** bucket groups in the quick window; unbucketed items fall under "(No bucket)".
+- **Text no longer clips:** pinned tiles grow (MinHeight + wrapped name, no ellipsis); rows wrap.
+- **Thin separator line** between rows added to the global `ListBoxItem`/`ListViewItem` templates ([App.xaml](AA/App.xaml)) — shows in the quick window and every other list.
+
+### Adversarial review (14 agents) → fixes
+Confirmed issues, all fixed:
+1. **[Med]** the quick list grouped by bucket **name**, so two buckets sharing a name collided → now grouped by bucket **id** (header shows the name via the first row); verified two same-named buckets stay distinct (3 groups).
+2. **[Med]** right-click context menus (quick list + Buckets-tab members) acted on the *previously selected* row, not the right-clicked one → added `PreviewMouseRightButtonDown` to select the clicked row first (both lists).
+3. **[Low]** replacing `BucketId` with `BucketIds` dropped older single-bucket assignments on load → added a write-null-skipped **migration shim** (verified: legacy `BucketId` JSON migrates in, and is never written back).
+4. **[Low]** a two-bucket item's selection jumped groups on refresh → track the selected bucket group (`_selectedBucketKey`).
+5. **[Low/perf]** grouping disabled list virtualization → set `IsVirtualizingWhenGrouping`.
+- **Verified** in a headless harness (migration in/out + same-name grouping = 3/3) and the main window loads cleanly. Build **0/0**; portable exe republished to `publish\AA.exe` (~80 MB).
+
+## Update (2026-07-17): ports of call, crew scheduler, draggable tabs
+Project drive moved to **F:**. All four asks below built **0/0** and verified in headless WPF harnesses.
+
+### Ports of call import (two formats) → per-vessel + global database
+- New [Services/PortCallReader.cs](AA/Services/PortCallReader.cs) auto-detects and parses **both** exports in `AA\POC`:
+  **A** "Last Ports of Call — 2 Years" (No | Port Name, Country | Date Arrived/Departured | Security levels | SSP | Special) and **B** "Port of Call List — Last 10 Ports" (Vessel/IMO/Call-sign header + two-row header with UN/LOCODE, Port Facility, Security Level PF/Vessel, Arrival & Departure Date+Time).
+- Every import is **linked to a vessel**. A new **Ports** tab in each vessel's view ([Views/PortsPanel.xaml](AA/Views/PortsPanel.xaml)) imports (auto-detect), sorts/filters, exports (.xlsx) and deletes port calls (`Vessel.PortCalls`). Re-importing / importing both formats **merges** by port+date (a vessel is at one port per date), enriching fields ([Services/PortsService.cs](AA/Services/PortsService.cs)).
+- Each import also feeds the global **Ports Database** tab ([Views/PortsPage.xaml](AA/Views/PortsPage.xaml), `AppData.Ports`): every port with the **vessels that called and when** (deduped per vessel/date).
+- Verified end-to-end on the real files: A=47 calls, B=10 calls, Bonny merged to one call (country from A, time+UN/LOCODE from B), DB deduped, idempotent re-import, panels render — **10/10**.
+
+### Per-crew scheduler
+- Each crew member gains a **Schedule** ([CrewMember.Schedule], a `ScheduleEntry` timeline) built in a new **Schedule tab** in the crew editor ([Views/ScheduleBuilderControl.xaml](AA/Views/ScheduleBuilderControl.xaml)): interactive add row (date + time + kind + **pick a Task/Procedure/Equipment or type a note**), a **date-grouped timeline** (Today/Tomorrow/…) with done/edit/delete, and a **linked-vessel** combo.
+- **Save / apply / export / import** reusable schedules ([Services/ScheduleService.cs](AA/Services/ScheduleService.cs), `AppData.ScheduleTemplates`): save a crew's schedule as a named template, **apply it to any crew** (append/replace), export to a portable `.aasched.json`, import (adds to your saved schedules and applies). A schedule can be linked to a vessel. Verified — **11/11**.
+
+### Draggable tab order
+- The main tabs can now be **dragged to reorder** ([MainWindow.xaml](AA/MainWindow.xaml) — `Tab_PreviewMouseDown/Move/Drop`). The order persists (`UiState.TabOrder`) and is re-applied on launch (unknown/new tabs keep their place after the saved ones), preserving the selected tab.
+
+- All prior features confirmed intact (build 0/0, main window loads with the real data). Portable exe republished to `publish\AA.exe` (~80 MB, 2026-07-17).

@@ -4,6 +4,32 @@
         Title="Quick work — all tasks &amp; procedures" Height="800" Width="1200"
         WindowStartupLocation="CenterOwner" Icon="pack://application:,,,/AA.ico">
     <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Pinned board: pinned tasks/procedures shown as squares. Anything done/added/removed here
+             is written straight to the real items, so it applies everywhere. -->
+        <Border Grid.Row="0" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}"
+                BorderThickness="1" CornerRadius="4" Margin="0,0,0,8">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" Padding="8,5"
+                        BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
+                    <DockPanel>
+                        <TextBlock Text="📌 Pinned" FontWeight="Bold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="PinnedEmptyHint" VerticalAlignment="Center" FontSize="11" Foreground="{DynamicResource Muted}"
+                                   TextTrimming="CharacterEllipsis" Margin="10,0,0,0"
+                                   Text="Select a task or procedure below and click “📌 Pin” to keep it here as a square. Marking a square done (or editing it) applies everywhere."/>
+                    </DockPanel>
+                </Border>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="240">
+                    <WrapPanel x:Name="PinnedHost" Margin="8"/>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="360"/>
             <ColumnDefinition Width="8"/>
@@ -17,28 +43,59 @@
                         BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
                     <TextBlock Text="All tasks &amp; procedures" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource Accent}"/>
                 </Border>
-                <WrapPanel DockPanel.Dock="Top" Margin="6">
-                    <RadioButton x:Name="RbAll" Content="All" GroupName="F" IsChecked="True" Margin="0,0,8,0" Checked="Filter_Changed"/>
-                    <RadioButton x:Name="RbTasks" Content="Tasks" GroupName="F" Margin="0,0,8,0" Checked="Filter_Changed"/>
-                    <RadioButton x:Name="RbProcs" Content="Procedures" GroupName="F" Margin="0,0,12,0" Checked="Filter_Changed"/>
-                    <Button Content="+ Task" Click="NewTask_Click" Margin="0,0,4,0"/>
-                    <Button Content="+ Procedure" Click="NewProc_Click"/>
+                <WrapPanel DockPanel.Dock="Top" Margin="6,6,6,0">
+                    <RadioButton x:Name="RbAll" Content="All" GroupName="F" IsChecked="True" Margin="0,0,8,4" Checked="Filter_Changed"/>
+                    <RadioButton x:Name="RbTasks" Content="Tasks" GroupName="F" Margin="0,0,8,4" Checked="Filter_Changed"/>
+                    <RadioButton x:Name="RbProcs" Content="Procedures" GroupName="F" Margin="0,0,12,4" Checked="Filter_Changed"/>
+                    <Button Content="+ Task" Click="NewTask_Click" Margin="0,0,4,4"/>
+                    <Button Content="+ Procedure" Click="NewProc_Click" Margin="0,0,4,4"/>
+                </WrapPanel>
+                <WrapPanel DockPanel.Dock="Top" Margin="6,0,6,2">
+                    <Button Content="🪣 Sort into buckets..." Click="MoveToBucket_Click" Margin="0,0,4,4"
+                            ToolTip="Put the selected task/procedure into up to two predefined buckets. Define buckets in the Buckets tab."/>
+                    <Button Content="Remove from buckets" Click="RemoveFromBucket_Click" Margin="0,0,4,4"
+                            ToolTip="Take the selected task/procedure out of all buckets."/>
                 </WrapPanel>
                 <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Margin="6,0,6,6" TextChanged="Search_Changed" Tag="Search tasks &amp; procedures..."/>
                 <TextBlock x:Name="CountText" DockPanel.Dock="Bottom" Margin="8,6" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"/>
                 <ListBox x:Name="PendingList" BorderThickness="0" HorizontalContentAlignment="Stretch"
                          SelectionChanged="Pending_SelectionChanged"
+                         PreviewMouseRightButtonDown="List_RightButtonSelect"
+                         VirtualizingPanel.IsVirtualizingWhenGrouping="True"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Border Padding="2,3">
                                 <StackPanel>
-                                    <TextBlock Text="{Binding Title}" FontWeight="Bold" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding Title}" FontWeight="Bold" TextWrapping="Wrap"
+                                               TextDecorations="{Binding IsDone, Converter={StaticResource BoolToStrike}}"/>
                                     <TextBlock Text="{Binding Sub}" Foreground="{DynamicResource Muted}" FontSize="11" TextWrapping="Wrap"/>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
+                    <ListBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="🪣 Sort into buckets..." Click="MoveToBucket_Click"/>
+                            <MenuItem Header="Remove from buckets" Click="RemoveFromBucket_Click"/>
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
+                    <ListBox.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate>
+                                    <!-- Group key is the bucket id; show the bucket's display name from the first row. -->
+                                    <Border Background="{DynamicResource PanelAlt}" Padding="6,3" Margin="0,4,0,2">
+                                        <DockPanel>
+                                            <TextBlock Text="🪣 " Foreground="{DynamicResource Accent}"/>
+                                            <TextBlock Text="{Binding Items[0].Bucket}" FontWeight="Bold" Foreground="{DynamicResource Accent}"/>
+                                            <TextBlock Text="{Binding ItemCount, StringFormat=' ({0})'}" Foreground="{DynamicResource Muted}"/>
+                                        </DockPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListBox.GroupStyle>
                 </ListBox>
             </DockPanel>
         </Border>
@@ -54,5 +111,6 @@
                 </StackPanel>
             </ScrollViewer>
         </Border>
+        </Grid>
     </Grid>
 </Window>

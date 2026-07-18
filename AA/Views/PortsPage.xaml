@@ -1,0 +1,63 @@
+<UserControl x:Class="AA.Views.PortsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="320"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left: ports -->
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" Padding="8,6"
+                        BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
+                    <TextBlock Text="⚓ Ports Database" FontWeight="Bold" FontSize="15" Foreground="{DynamicResource Accent}"/>
+                </Border>
+                <TextBlock DockPanel.Dock="Top" Margin="8,6,8,0" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                           Text="Every port any vessel has called, built from the ports imported on each vessel's Ports tab. Select a port to see which vessels called and when."/>
+                <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Margin="8,6" TextChanged="Search_Changed" Tag="Search port / country / UN-LOCODE..."/>
+                <TextBlock x:Name="StatusText" DockPanel.Dock="Bottom" Margin="8,4" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"/>
+                <ListBox x:Name="PortList" BorderThickness="0" SelectionChanged="PortList_SelectionChanged"
+                         HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Margin="0,1">
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding Visits.Count, StringFormat='{}{0} visits'}"
+                                           Foreground="{DynamicResource Muted}" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                <TextBlock Text="{Binding Display}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{DynamicResource BorderB}"/>
+
+        <!-- Right: visits at the selected port -->
+        <Border Grid.Column="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+            <DockPanel Margin="10">
+                <TextBlock x:Name="Header" DockPanel.Dock="Top" FontSize="17" FontWeight="Bold" TextWrapping="Wrap"
+                           Text="Select a port to see the vessels that called."/>
+                <ListView x:Name="VisitList" Margin="0,8,0,0"
+                          VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                          ScrollViewer.CanContentScroll="True">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Vessel" Width="220">
+                                <GridViewColumn.CellTemplate>
+                                    <DataTemplate><TextBlock Text="{Binding VesselName}" TextWrapping="Wrap"/></DataTemplate>
+                                </GridViewColumn.CellTemplate>
+                            </GridViewColumn>
+                            <GridViewColumn Header="Arrival" Width="140" DisplayMemberBinding="{Binding ArrivalDisplay}"/>
+                            <GridViewColumn Header="Departure" Width="140" DisplayMemberBinding="{Binding DepartureDisplay}"/>
+                            <GridViewColumn Header="Imported" Width="140" DisplayMemberBinding="{Binding ImportedAt}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </DockPanel>
+        </Border>
+    </Grid>
+</UserControl>

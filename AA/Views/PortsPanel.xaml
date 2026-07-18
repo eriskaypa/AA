@@ -1,0 +1,55 @@
+<UserControl x:Class="AA.Views.PortsPanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Margin="4">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <WrapPanel Grid.Row="0" Margin="0,0,0,6">
+            <Button Content="Import ports (.xlsx)..." Style="{StaticResource AccentButton}" Click="Import_Click" Margin="0,0,6,4"
+                    ToolTip="Import a ports-of-call list for THIS vessel. Both the 'Last Ports of Call' and the 'Port of Call List' layouts are auto-detected."/>
+            <Button Content="Export (.xlsx)..." Click="Export_Click" Margin="0,0,12,4"
+                    ToolTip="Export this vessel's ports of call to Excel."/>
+            <TextBox x:Name="SearchBox" Width="200" Margin="0,0,6,4" TextChanged="Search_Changed" Tag="Search port / country / UN-LOCODE..."/>
+            <Button Content="🗑 Delete" Click="Delete_Click" Margin="0,0,6,4"
+                    ToolTip="Delete the selected port calls (also removes their visit from the ports database)."/>
+        </WrapPanel>
+
+        <Border Grid.Row="1" Background="{DynamicResource PanelAlt}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1"
+                CornerRadius="4" Padding="10,6" Margin="0,0,0,6">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" Foreground="{DynamicResource Fg}"
+                       Text="No ports imported yet for this vessel."/>
+        </Border>
+
+        <ListView x:Name="PortsList" Grid.Row="2" SelectionMode="Extended"
+                  GridViewColumnHeader.Click="Header_Click"
+                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                  ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Port" Width="150" DisplayMemberBinding="{Binding PortName}"/>
+                    <GridViewColumn Header="Country" Width="120" DisplayMemberBinding="{Binding Country}"/>
+                    <GridViewColumn Header="UN/LOCODE" Width="90" DisplayMemberBinding="{Binding UnLocode}"/>
+                    <GridViewColumn Header="Arrival" Width="130" DisplayMemberBinding="{Binding ArrivalDisplay}"/>
+                    <GridViewColumn Header="Departure" Width="130" DisplayMemberBinding="{Binding DepartureDisplay}"/>
+                    <GridViewColumn Header="Sec P" Width="55" DisplayMemberBinding="{Binding SecurityLevelPort}"/>
+                    <GridViewColumn Header="Sec V" Width="55" DisplayMemberBinding="{Binding SecurityLevelVessel}"/>
+                    <GridViewColumn Header="SSP" Width="50" DisplayMemberBinding="{Binding SspFollowed}"/>
+                    <GridViewColumn Header="Port Facility" Width="180">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate><TextBlock Text="{Binding PortFacility}" TextWrapping="Wrap"/></DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                    <GridViewColumn Header="Special measures" Width="200">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate><TextBlock Text="{Binding SpecialMeasures}" TextWrapping="Wrap"/></DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </Grid>
+</UserControl>

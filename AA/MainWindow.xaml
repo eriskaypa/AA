@@ -124,7 +124,11 @@
                 </TextBlock>
             </DockPanel>
         </Border>
-        <TabControl Margin="8" x:Name="MainTabs" SelectionChanged="MainTabs_SelectionChanged">
+        <TabControl Margin="8" x:Name="MainTabs" SelectionChanged="MainTabs_SelectionChanged"
+                    AllowDrop="True" ToolTip="Tip: drag a tab to reorder it."
+                    PreviewMouseLeftButtonDown="Tab_PreviewMouseDown"
+                    PreviewMouseMove="Tab_PreviewMouseMove"
+                    Drop="Tab_Drop">
             <TabItem x:Name="TabEquipment" Header="Equipment/Area">
                 <views:HierarchyPage x:Name="EquipmentPage"/>
             </TabItem>
@@ -154,6 +158,12 @@
             </TabItem>
             <TabItem x:Name="TabLists" Header="Saved Lists">
                 <views:SavedListsPage x:Name="ListsPg"/>
+            </TabItem>
+            <TabItem x:Name="TabBuckets" Header="Buckets">
+                <views:BucketsPage x:Name="BucketsPg"/>
+            </TabItem>
+            <TabItem x:Name="TabPorts" Header="Ports">
+                <views:PortsPage x:Name="PortsPg"/>
             </TabItem>
         </TabControl>
     </DockPanel>

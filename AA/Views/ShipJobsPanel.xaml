@@ -14,17 +14,29 @@
             <Button Content="Import Shippalm (.xlsx)..." Style="{StaticResource AccentButton}" Click="Import_Click" Margin="0,0,6,4"
                     ToolTip="Import a Shippalm Work Order List export into THIS ship. Jobs are keyed by job number (No.)."/>
             <Button Content="Export (.xlsx)..." Click="Export_Click" Margin="0,0,12,4"
-                    ToolTip="Export THIS ship's work orders (including notify choices) to an .xlsx that can be re-imported."/>
-            <TextBox x:Name="SearchBox" Width="190" Margin="0,0,6,4" TextChanged="Search_Changed" Tag="Search job no / title / function..."/>
-            <ComboBox x:Name="StatusFilter" Width="140" Margin="0,0,6,4" SelectionChanged="Filter_Changed"
+                    ToolTip="Export THIS ship's work orders (including notify &amp; completion choices) to an .xlsx that can be re-imported."/>
+            <TextBox x:Name="SearchBox" Width="180" Margin="0,0,6,4" TextChanged="Search_Changed" Tag="Search job no / title / function..."/>
+            <ComboBox x:Name="StatusFilter" Width="130" Margin="0,0,6,4" SelectionChanged="Filter_Changed"
                       ToolTip="Filter by Work Order Status."/>
+            <ComboBox x:Name="CategoryFilter" Width="120" Margin="0,0,6,4" SelectionChanged="Filter_Changed"
+                      ToolTip="Filter by Work Order Category."/>
+            <ComboBox x:Name="RankFilter" Width="130" Margin="0,0,6,4" SelectionChanged="Filter_Changed"
+                      ToolTip="Filter by Responsible rank."/>
+            <ComboBox x:Name="CompletionFilter" Width="130" Margin="0,0,10,4" SelectionChanged="Filter_Changed"
+                      ToolTip="Show all, only active (not completed), or only completed work orders."/>
             <ToggleButton x:Name="DueSoonBtn" Content="Due/overdue only" Margin="0,0,6,4" Click="Filter_Changed"
                           ToolTip="Show only jobs that are overdue or due within 90 days."/>
-            <ToggleButton x:Name="NotifyOnlyBtn" Content="Notify on only" Margin="0,0,6,4" Click="Filter_Changed"
+            <ToggleButton x:Name="NotifyOnlyBtn" Content="Notify on only" Margin="0,0,10,4" Click="Filter_Changed"
                           ToolTip="Show only jobs set to raise notifications."/>
-            <Button Content="Notify: shown ON" Margin="0,0,6,4" Click="NotifyAllOn_Click"
-                    ToolTip="Turn ON notifications for every job currently shown (choose which recurring jobs notify)."/>
-            <Button Content="Notify: shown OFF" Margin="0,0,6,4" Click="NotifyAllOff_Click"
+            <Button Content="✓ Mark completed" Margin="0,0,6,4" Click="MarkCompleted_Click"
+                    ToolTip="Mark the selected work orders (or all shown, if none selected) as completed."/>
+            <Button Content="↺ Mark active" Margin="0,0,6,4" Click="MarkActive_Click"
+                    ToolTip="Clear the completed flag on the selected work orders (or all shown, if none selected)."/>
+            <Button Content="🗑 Delete" Margin="0,0,10,4" Click="Delete_Click"
+                    ToolTip="Delete the selected work orders from this ship (permanent)."/>
+            <Button Content="🔔 shown ON" Margin="0,0,4,4" Click="NotifyAllOn_Click"
+                    ToolTip="Turn ON notifications for every job currently shown."/>
+            <Button Content="🔕 shown OFF" Margin="0,0,6,4" Click="NotifyAllOff_Click"
                     ToolTip="Turn OFF notifications for every job currently shown."/>
         </WrapPanel>
 
@@ -47,11 +59,32 @@
         </Border>
 
         <!-- Jobs -->
-        <ListView x:Name="JobsList" Grid.Row="3"
+        <ListView x:Name="JobsList" Grid.Row="3" SelectionMode="Extended"
+                  GridViewColumnHeader.Click="Header_Click"
                   VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
                   ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Auto">
+            <ListView.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="✓ Mark completed" Click="MarkCompleted_Click"/>
+                    <MenuItem Header="↺ Mark active" Click="MarkActive_Click"/>
+                    <Separator/>
+                    <MenuItem Header="🔔 Notify ON" Click="NotifySelectedOn_Click"/>
+                    <MenuItem Header="🔕 Notify OFF" Click="NotifySelectedOff_Click"/>
+                    <Separator/>
+                    <MenuItem Header="🗑 Delete" Click="Delete_Click"/>
+                </ContextMenu>
+            </ListView.ContextMenu>
             <ListView.View>
                 <GridView>
+                    <GridViewColumn Header="Done" Width="48">
+                        <GridViewColumn.CellTemplate>
+                            <DataTemplate>
+                                <CheckBox IsChecked="{Binding Job.IsCompleted, Mode=TwoWay}" HorizontalAlignment="Center"
+                                          Click="CompletedToggle_Click"
+                                          ToolTip="Mark this work order completed. Completed jobs are excluded from due/overdue counts and notifications."/>
+                            </DataTemplate>
+                        </GridViewColumn.CellTemplate>
+                    </GridViewColumn>
                     <GridViewColumn Header="Notify" Width="52">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
@@ -65,7 +98,8 @@
                     <GridViewColumn Header="Title" Width="260">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding Job.Title}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding Job.Title}" TextWrapping="Wrap"
+                                           TextDecorations="{Binding Job.IsCompleted, Converter={StaticResource BoolToStrike}}"/>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>

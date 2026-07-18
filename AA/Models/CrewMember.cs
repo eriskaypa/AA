@@ -43,6 +43,12 @@ public sealed class CrewMember
     /// can carry a deadline, done state, notes and files, and appears in the due-dates window and Calendar.</summary>
     public ObservableCollection<ChecklistStep> Checklist { get; set; } = new();
 
+    /// <summary>This crew member's schedule/timeline — dated entries (tasks, procedures, equipment or
+    /// free notes). Built in the crew editor's Schedule tab; saveable/exportable as a reusable template.</summary>
+    public ObservableCollection<ScheduleEntry> Schedule { get; set; } = new();
+    /// <summary>Optional vessel this schedule is linked to.</summary>
+    public Guid? ScheduleVesselId { get; set; }
+
     // --- Identity ---
     public string EmployeeId { get; set; } = "";
     public string FirstName { get; set; } = "";

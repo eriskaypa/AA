@@ -63,6 +63,7 @@ public partial class HierarchyPage : UserControl
         SpecificsTab.Visibility = kind == ItemKind.Vessel ? Visibility.Collapsed : Visibility.Visible;
         QuickCardsTab.Visibility = kind == ItemKind.Vessel ? Visibility.Visible : Visibility.Collapsed;
         WorkOrdersTab.Visibility = kind == ItemKind.Vessel ? Visibility.Visible : Visibility.Collapsed;
+        PortsTab.Visibility = kind == ItemKind.Vessel ? Visibility.Visible : Visibility.Collapsed;
         // Non-vessel pages: the Quick Cards / Work Orders tabs are collapsed, so front the Container.
         if (kind != ItemKind.Vessel) DetailsTabs.SelectedItem = ContainerTab;
         SortAZBtn.IsChecked = _repo.Data.Ui.SortAZ.TryGetValue(kind.ToString(), out var s) && s;
@@ -400,6 +401,7 @@ public partial class HierarchyPage : UserControl
         {
             QuickCardsCtrl.Load(v, _repo!);
             ShipJobsCtrl.Load(v, _repo!);
+            PortsCtrl.Load(v, _repo!);
             DetailsTabs.SelectedItem = QuickCardsTab;
         }
 
