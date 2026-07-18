@@ -24,6 +24,11 @@ public partial class QuickWorkWindow : Window
     private HierarchyItem? _selected;
     private string _selectedBucketKey = "";   // which bucket group the selected row is under
     private bool _suppress;
+    // The detail pane's deadline + optional working-range-start pickers (tasks only), kept so each can
+    // clamp the other (start <= deadline). Reset on every BuildDetail.
+    private DatePicker? _qwDeadline;
+    private DatePicker? _qwStart;
+    private bool _qwDateSync;
 
     public QuickWorkWindow(AppRepository repo, Action<HierarchyItem>? navigate = null)
     {
@@ -163,12 +168,21 @@ public partial class QuickWorkWindow : Window
     }
 
     /// <summary>WPF doesn't select a row on right-click, so a context menu would act on the previously
-    /// left-selected item. Select the right-clicked row first so the menu targets what was clicked.</summary>
+    /// left-selected item. Select the right-clicked row first (keeping an existing multi-selection when the
+    /// click lands on an already-selected row) so the menu targets what was clicked.</summary>
     private void List_RightButtonSelect(object sender, MouseButtonEventArgs e)
     {
-        if (sender is ListBox lb &&
-            ItemsControl.ContainerFromElement(lb, e.OriginalSource as DependencyObject) is ListBoxItem item)
-            item.IsSelected = true;
+        if (sender is ListBox lb) BatchDoneMenu.RightClickSelect(lb, e.OriginalSource as DependencyObject);
+    }
+
+    private void MarkSelectedDone_Click(object sender, RoutedEventArgs e) => MarkSelected(true);
+    private void MarkSelectedNotDone_Click(object sender, RoutedEventArgs e) => MarkSelected(false);
+    private void MarkSelected(bool done)
+    {
+        var items = PendingList.SelectedItems.OfType<PendingRow>().Select(r => (object)r.Item).ToList();
+        int n = AA.Services.BatchDone.SetDoneAll(items, done);
+        if (n > 0) { _repo.MarkDirty(); _repo.FlushIfDirty(); }
+        RefreshPending();
     }
 
     private void NewTask_Click(object sender, RoutedEventArgs e)
@@ -385,15 +399,7 @@ public partial class QuickWorkWindow : Window
         if (ReferenceEquals(item, _selected)) BuildDetail();
     }
 
-    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject
-    {
-        while (d != null)
-        {
-            if (d is T t) return t;
-            d = System.Windows.Media.VisualTreeHelper.GetParent(d) ?? (d as FrameworkElement)?.Parent as DependencyObject;
-        }
-        return null;
-    }
+    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject => UiTree.FindAncestor<T>(d);
 
     /// <summary>Delete a whole task/procedure from the quick window — removed from the data (and any
     /// dangling references + its pin) so it disappears everywhere.</summary>
@@ -508,8 +514,10 @@ public partial class QuickWorkWindow : Window
         DetailHost.Children.Add(titleRow);
 
         // Header fields (shared by tasks and procedures).
+        _qwDeadline = null; _qwStart = null;   // rebuilt fresh per selection
         AddField("Name:", MakeNameBox());
         AddField("Deadline:", MakeDeadlinePicker());
+        if (_selected is TaskItem tRange) AddField("Range start:", MakeRangeStartPicker(tRange));
         AddField("Status:", MakeStatusCombo());
         AddField("Recurrence:", MakeRecurrenceCombo());
 
@@ -559,8 +567,37 @@ public partial class QuickWorkWindow : Window
 
     private DatePicker MakeDeadlinePicker()
     {
-        var dp = new DatePicker { SelectedDate = Deadline(_selected!), Width = 200, HorizontalAlignment = HorizontalAlignment.Left };
-        dp.SelectedDateChanged += (_, _) => { if (!_suppress && _selected != null) { SetDeadline(_selected, dp.SelectedDate); _repo.MarkDirty(); } };
+        var dp = new DatePicker { SelectedDate = Deadline(_selected!), Width = 200, HorizontalAlignment = HorizontalAlignment.Left,
+            ToolTip = "Due date — for a task this is also the LAST day of the working range." };
+        _qwDeadline = dp;
+        dp.SelectedDateChanged += (_, _) =>
+        {
+            if (_suppress || _selected == null || _qwDateSync) return;
+            if (_selected is TaskItem tt && _qwStart != null)
+            {
+                var (s, d) = AA.Services.WorkRange.Coerce(_qwStart.SelectedDate, dp.SelectedDate, editedStart: false);
+                _qwDateSync = true; _qwStart.SelectedDate = s; dp.SelectedDate = d; _qwDateSync = false;
+                tt.RangeStart = s; tt.Deadline = d;
+            }
+            else SetDeadline(_selected, dp.SelectedDate);
+            _repo.MarkDirty();
+        };
+        return dp;
+    }
+
+    private DatePicker MakeRangeStartPicker(TaskItem t)
+    {
+        var dp = new DatePicker { SelectedDate = t.RangeStart, Width = 200, HorizontalAlignment = HorizontalAlignment.Left,
+            ToolTip = "Optional first day of the working range. Leave empty for a single-day task; the deadline stays the last day." };
+        _qwStart = dp;
+        dp.SelectedDateChanged += (_, _) =>
+        {
+            if (_suppress || _qwDateSync) return;
+            var (s, d) = AA.Services.WorkRange.Coerce(dp.SelectedDate, _qwDeadline?.SelectedDate, editedStart: true);
+            _qwDateSync = true; dp.SelectedDate = s; if (_qwDeadline != null) _qwDeadline.SelectedDate = d; _qwDateSync = false;
+            t.RangeStart = s; t.Deadline = d;
+            _repo.MarkDirty();
+        };
         return dp;
     }
 
@@ -736,6 +773,11 @@ public partial class QuickWorkWindow : Window
         DetailHost.Children.Add(btns);
 
         list.MouseDoubleClick += (_, _) => { if (list.SelectedItem is T c) { edit(c); _repo.FlushIfDirty(); RefreshPending(); } };
+        // Right-click: batch mark selected children done / not done.
+        var childMenu = new ContextMenu();
+        BatchDoneMenu.Add(childMenu, _repo, () => list.SelectedItems.Cast<object>(), RefreshPending, separatorFirst: false);
+        list.ContextMenu = childMenu;
+        list.PreviewMouseRightButtonDown += (_, e) => BatchDoneMenu.RightClickSelect(list, e.OriginalSource as DependencyObject);
 
         addAll.Click += (_, _) =>
         {

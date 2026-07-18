@@ -29,7 +29,11 @@
                 <DockPanel>
                     <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" Padding="8,6"
                             BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
-                        <TextBlock Text="Unscheduled Jobs" FontWeight="Bold"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="+ Saved list" Padding="6,1" Click="FromSavedList_Click"
+                                    ToolTip="Search your saved lists and add items as real, schedulable tasks"/>
+                            <TextBlock Text="Unscheduled Jobs" FontWeight="Bold" VerticalAlignment="Center"/>
+                        </DockPanel>
                     </Border>
                     <TextBox x:Name="JobSearchBox" DockPanel.Dock="Top" Margin="6,6,6,0"
                              TextChanged="JobSearch_Changed" Tag="Search jobs..."

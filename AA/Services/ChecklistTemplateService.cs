@@ -85,6 +85,18 @@ public static class ChecklistTemplateService
         }))
     };
 
+    /// <summary>Create a standalone real task from one saved-list item — title, duration, schedulable
+    /// flag and a cloned notes/files container. Deadline, working-range and done state are per-instance,
+    /// so left unset; the new task starts in the To&nbsp;Do column.</summary>
+    public static TaskItem ItemToTask(ChecklistTemplateItem it) => new()
+    {
+        Name = it.Title,
+        DurationMinutes = it.DurationMinutes,
+        IsJob = it.IsJob,
+        Container = CloneContainer(it.Container),
+        Status = WorkStatus.Todo
+    };
+
     // ---- Editing a saved list itself (round-trip through the shared step builder) ----
 
     /// <summary>Materialise a template's items as editable <see cref="ChecklistStep"/>s (Title, Duration,

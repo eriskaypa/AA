@@ -361,6 +361,16 @@ public static class PdfExporter
         }
     }
 
+    /// <summary>Inline "when" meta for a task bullet: "10th–15th" style range when set, else "due &lt;date&gt;",
+    /// or null when the task has no deadline.</summary>
+    private static string? TaskWhen(TaskItem t)
+    {
+        if (!t.Deadline.HasValue) return null;
+        return t.RangeStart.HasValue && t.RangeStart.Value.Date < t.Deadline.Value.Date
+            ? $"{t.RangeStart.Value:yyyy-MM-dd} – {t.Deadline.Value:yyyy-MM-dd}"
+            : $"due {t.Deadline.Value:yyyy-MM-dd}";
+    }
+
     private static void WriteTaskSpecifics(Section sec, TaskItem t, AppRepository repo)
     {
         H1(sec, "Task Details");
@@ -369,6 +379,8 @@ public static class PdfExporter
         tbl.Borders.Width = 0;
         tbl.AddColumn("4cm");
         tbl.AddColumn("12cm");
+        if (t.RangeStart.HasValue && t.Deadline.HasValue && t.RangeStart.Value.Date < t.Deadline.Value.Date)
+            AddKV(tbl, "Working range", $"{t.RangeStart.Value:yyyy-MM-dd} → {t.Deadline.Value:yyyy-MM-dd}");
         AddKV(tbl, "Deadline", t.Deadline?.ToString("yyyy-MM-dd") ?? "(none)");
         AddKV(tbl, "Recurrence", t.Recurrence.ToString());
         AddKV(tbl, "Status", t.IsComplete ? "Completed" : "Open");
@@ -395,7 +407,7 @@ public static class PdfExporter
         head.AddFormattedText(t.IsComplete ? "[x] " : "[ ] ", TextFormat.Bold);
         head.AddFormattedText(t.Name ?? "", TextFormat.Bold);
         var meta = new List<string>();
-        if (t.Deadline.HasValue) meta.Add($"due {t.Deadline.Value:yyyy-MM-dd}");
+        if (TaskWhen(t) is string tw) meta.Add(tw);
         if (t.Recurrence != RecurrenceKind.None) meta.Add(t.Recurrence.ToString().ToLowerInvariant());
         if (meta.Count > 0)
         {
@@ -471,7 +483,7 @@ public static class PdfExporter
         par.AddFormattedText($"{(t.IsComplete ? "[x] " : "[ ] ")}", TextFormat.Bold);
         par.AddFormattedText(t.Name, TextFormat.Bold);
         var meta = new List<string>();
-        if (t.Deadline.HasValue) meta.Add($"due {t.Deadline.Value:yyyy-MM-dd}");
+        if (TaskWhen(t) is string tw) meta.Add(tw);
         if (t.Recurrence != RecurrenceKind.None) meta.Add(t.Recurrence.ToString().ToLowerInvariant());
         if (meta.Count > 0)
         {

@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using AA.Models;
@@ -97,7 +98,7 @@ public partial class BoardPage : UserControl
             headerBorder.Child = headerDock;
             dock.Children.Add(headerBorder);
 
-            var list = new ListBox { Style = colStyle, Tag = status.ToString() };
+            var list = new ListBox { Style = colStyle, Tag = status.ToString(), SelectionMode = SelectionMode.Extended };
             list.PreviewMouseLeftButtonDown += List_PreviewMouseLeftButtonDown;
             list.PreviewMouseRightButtonDown += List_PreviewMouseRightButtonDown;
             list.PreviewMouseMove += List_PreviewMouseMove;
@@ -122,11 +123,13 @@ public partial class BoardPage : UserControl
         open.Click += (_, _) => { if (list.SelectedItem is Card c) OpenEditor(c.Task); };
         var openFiles = new MenuItem { Header = "Open all files (routine)" };
         openFiles.Click += (_, _) => { if (list.SelectedItem is Card c) OpenAllFiles(c.Task); };
-        var del = new MenuItem { Header = "Delete task" };
-        del.Click += (_, _) => { if (list.SelectedItem is Card c) DeleteTask(c.Task); };
         cm.Items.Add(open);
         cm.Items.Add(openFiles);
+        // Batch done/undone across every selected card.
+        BatchDoneMenu.Add(cm, _repo!, () => list.SelectedItems.OfType<Card>().Select(c => (object)c.Task), Refresh);
         cm.Items.Add(new Separator());
+        var del = new MenuItem { Header = "Delete task" };
+        del.Click += (_, _) => { if (list.SelectedItem is Card c) DeleteTask(c.Task); };
         cm.Items.Add(del);
         return cm;
     }
@@ -167,6 +170,13 @@ public partial class BoardPage : UserControl
             _repo.Save();
             Refresh();
         }
+    }
+
+    private void FromSavedList_Click(object sender, RoutedEventArgs e)
+    {
+        if (_repo == null) return;
+        var created = SavedListPicker.PickAndAddTasks(_repo, Window.GetWindow(this));
+        if (created.Count > 0) Refresh();
     }
 
     private void OpenEditor(TaskItem t)
@@ -219,9 +229,9 @@ public partial class BoardPage : UserControl
 
     private void List_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
-        // WPF doesn't select on right-click; do it so the context menu acts on the clicked card.
-        var item = FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject);
-        if (item != null) item.IsSelected = true;
+        // WPF doesn't select on right-click. Select the clicked card, but keep an existing multi-selection
+        // intact when the click lands on a card that's already selected (so batch actions act on all of them).
+        if (sender is Selector list) BatchDoneMenu.RightClickSelect(list, e.OriginalSource as DependencyObject);
     }
 
     private void List_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -259,11 +269,7 @@ public partial class BoardPage : UserControl
         if (sender is ListBox lb && lb.SelectedItem is Card card) OpenEditor(card.Task);
     }
 
-    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject
-    {
-        while (d != null && d is not T) d = VisualTreeHelper.GetParent(d);
-        return d as T;
-    }
+    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject => UiTree.FindAncestor<T>(d);
 
     /// <summary>Lightweight per-card view-model rebuilt on every Refresh.</summary>
     private sealed class Card
@@ -285,7 +291,14 @@ public partial class BoardPage : UserControl
 
             bool overdue = t.Deadline.HasValue && t.Deadline.Value.Date < DateTime.Today && t.Status != WorkStatus.Done;
             var meta = new List<string>();
-            if (t.Deadline.HasValue) meta.Add($"Due {t.Deadline.Value:yyyy-MM-dd}" + (overdue ? "  ·  OVERDUE" : ""));
+            if (t.Deadline.HasValue)
+            {
+                // Show the working range when set, else the single due date. OVERDUE stays keyed on the deadline (end).
+                string when = t.RangeStart.HasValue && t.RangeStart.Value.Date < t.Deadline.Value.Date
+                    ? $"{t.RangeStart.Value:yyyy-MM-dd} → {t.Deadline.Value:yyyy-MM-dd}"
+                    : $"Due {t.Deadline.Value:yyyy-MM-dd}";
+                meta.Add(when + (overdue ? "  ·  OVERDUE" : ""));
+            }
             if (t.Recurrence != RecurrenceKind.None) meta.Add(t.Recurrence.ToString());
             Meta = string.Join("   ·   ", meta);
             MetaBrush = overdue ? OverdueBrush : MutedBrush;

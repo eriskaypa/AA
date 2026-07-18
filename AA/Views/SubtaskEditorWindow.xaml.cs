@@ -22,6 +22,7 @@ public partial class SubtaskEditorWindow : Window
         NameBox.Text = task.Name;
         DescBox.Text = task.Description;
         DeadlinePicker.SelectedDate = task.Deadline;
+        StartPicker.SelectedDate = task.RangeStart;
         RecurrenceBox.ItemsSource = Enum.GetValues(typeof(RecurrenceKind));
         RecurrenceBox.SelectedItem = task.Recurrence;
         StatusBox.ItemsSource = Enum.GetValues(typeof(WorkStatus));
@@ -31,6 +32,7 @@ public partial class SubtaskEditorWindow : Window
         DurationBox.Text = task.DurationMinutes.ToString();
         ContainerCtrl.Load(task.Container, repo);
         _suppress = false;
+        UpdateRangeUi();
 
         Title = $"Edit subtask — {task.Name}";
         Closing += (_, _) => { ContainerCtrl.FlushPending(); _repo.FlushIfDirty(); };
@@ -52,8 +54,47 @@ public partial class SubtaskEditorWindow : Window
     private void Deadline_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_suppress) return;
-        _task.Deadline = DeadlinePicker.SelectedDate;
+        ApplyDates(editedStart: false);
+    }
+    private void Start_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppress) return;
+        ApplyDates(editedStart: true);
+    }
+    private void ClearRange_Click(object sender, RoutedEventArgs e)
+    {
+        _suppress = true;
+        StartPicker.SelectedDate = null;
+        _suppress = false;
+        _task.RangeStart = null;
         _repo.MarkDirty();
+        UpdateRangeUi();
+    }
+
+    /// <summary>Push both date pickers through the smart normaliser (deadline = last date), write the
+    /// coerced pair back to the task, and refresh the hint.</summary>
+    private void ApplyDates(bool editedStart)
+    {
+        var (s, d) = WorkRange.Coerce(StartPicker.SelectedDate, DeadlinePicker.SelectedDate, editedStart);
+        _suppress = true;
+        StartPicker.SelectedDate = s;
+        DeadlinePicker.SelectedDate = d;
+        _suppress = false;
+        _task.RangeStart = s;
+        _task.Deadline = d;
+        _repo.MarkDirty();
+        UpdateRangeUi();
+    }
+
+    private void UpdateRangeUi()
+    {
+        ClearRangeBtn.Visibility = _task.RangeStart.HasValue ? Visibility.Visible : Visibility.Collapsed;
+        RangeHint.Text = _task.HasRange
+            ? $"range · {(int)(_task.Deadline!.Value.Date - _task.RangeStart!.Value.Date).TotalDays + 1} days"
+            : "";
+        // Grey out impossible days: the deadline can't precede the start, the start can't follow the deadline.
+        DeadlinePicker.DisplayDateStart = _task.RangeStart;
+        StartPicker.DisplayDateEnd = _task.Deadline;
     }
     private void Recurrence_Changed(object sender, SelectionChangedEventArgs e)
     {

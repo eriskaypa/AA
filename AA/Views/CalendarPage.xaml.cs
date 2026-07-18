@@ -32,8 +32,18 @@ public partial class CalendarPage : UserControl
         }
         if (repo.Data.Ui.CalendarFontScale is double fs && fs >= 10 && fs <= 30)
             TaskGrid.FontSize = fs;
+
+        // Right-click: batch mark the selected schedule rows done / not done (acts on the underlying items).
+        var cm = new ContextMenu();
+        BatchDoneMenu.Add(cm, repo, () => TaskGrid.SelectedItems.OfType<ScheduleRow>().Select(r => r.Item),
+            Refresh, separatorFirst: false);
+        TaskGrid.ContextMenu = cm;
+
         Refresh();
     }
+
+    private void TaskGrid_RightDown(object sender, MouseButtonEventArgs e)
+        => BatchDoneMenu.RightClickSelect(TaskGrid, e.OriginalSource as DependencyObject);
 
     public DateTime? CalendarSelectedDate => Cal.SelectedDate;
     public string CalendarViewMode =>
@@ -80,42 +90,58 @@ public partial class CalendarPage : UserControl
         bool agenda = RbAgenda.IsChecked == true;
         if (RbDay.IsChecked == true)
         {
-            filtered = rows.Where(r => r.Deadline!.Value.Date == d.Date);
+            // A ranged task shows on EVERY day of its span, not just its deadline.
+            filtered = rows.Where(r => r.Covers(d));
             DayLabel.Text = $"Schedule — {d:yyyy-MM-dd}";
         }
         else if (RbWeek.IsChecked == true)
         {
             var start = d.AddDays(-(int)d.DayOfWeek);
             var end = start.AddDays(7);
-            filtered = rows.Where(r => r.Deadline!.Value.Date >= start.Date && r.Deadline!.Value.Date < end.Date);
+            // Interval overlap: any range touching the week appears, even if it starts before / ends after.
+            filtered = rows.Where(r => r.EffectiveStart.Date < end.Date && r.Deadline!.Value.Date >= start.Date);
             DayLabel.Text = $"Schedule — week of {start:yyyy-MM-dd}";
         }
         else if (RbMonth.IsChecked == true)
         {
-            filtered = rows.Where(r => r.Deadline!.Value.Year == d.Year && r.Deadline!.Value.Month == d.Month);
+            var monthStart = new DateTime(d.Year, d.Month, 1);
+            var monthEnd = monthStart.AddMonths(1);
+            filtered = rows.Where(r => r.EffectiveStart.Date < monthEnd && r.Deadline!.Value.Date >= monthStart);
             DayLabel.Text = $"Schedule — {d:yyyy-MM}";
         }
         else if (agenda)
         {
-            filtered = rows.Where(r => r.Deadline!.Value.Date >= DateTime.Today);
+            filtered = rows.Where(r => r.Deadline!.Value.Date >= DateTime.Today || r.Covers(DateTime.Today));
             DayLabel.Text = "Agenda — upcoming by day";
         }
         else
         {
-            filtered = rows.Where(r => r.Deadline!.Value.Date >= DateTime.Today);
+            filtered = rows.Where(r => r.Deadline!.Value.Date >= DateTime.Today || r.Covers(DateTime.Today));
             DayLabel.Text = "Schedule — all upcoming";
         }
 
-        var ordered = filtered.OrderBy(r => r.Deadline).ToList();
         if (agenda)
         {
-            var view = new ListCollectionView(ordered);
-            view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ScheduleRow.Deadline), new DateGroupConverter()));
+            // Fan each ranged row out into one occurrence per covered day (from today onward) so it appears
+            // under every day it spans; long ranges are capped so the list can't explode.
+            const int MaxSpanDays = 31;
+            var occurrences = new List<ScheduleRow>();
+            foreach (var r in filtered)
+            {
+                if (!r.IsRanged) { occurrences.Add(r); continue; }
+                var from = r.EffectiveStart.Date < DateTime.Today ? DateTime.Today : r.EffectiveStart.Date;
+                var to = r.Deadline!.Value.Date;
+                if ((to - from).TotalDays > MaxSpanDays) { occurrences.Add(r.AtOccurrence(to)); continue; }
+                for (var day = from; day <= to; day = day.AddDays(1))
+                    occurrences.Add(r.AtOccurrence(day));
+            }
+            var view = new ListCollectionView(occurrences.OrderBy(r => r.GroupKey).ThenBy(r => r.Name).ToList());
+            view.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ScheduleRow.GroupKey), new DateGroupConverter()));
             TaskGrid.ItemsSource = view;
         }
         else
         {
-            TaskGrid.ItemsSource = ordered;
+            TaskGrid.ItemsSource = filtered.OrderBy(r => r.EffectiveStart).ThenBy(r => r.Deadline).ToList();
         }
     }
 
@@ -151,15 +177,7 @@ public partial class CalendarPage : UserControl
         Refresh();
     }
 
-    private static T? FindAncestor<T>(DependencyObject d) where T : DependencyObject
-    {
-        while (d != null)
-        {
-            if (d is T t) return t;
-            d = System.Windows.Media.VisualTreeHelper.GetParent(d);
-        }
-        return null;
-    }
+    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject => UiTree.FindAncestor<T>(d);
 
     /// <summary>Uniform schedule row wrapping either a TaskItem (or subtask) or a procedure
     /// ChecklistStep, exposing the same property names the grid binds to (Name/Deadline/Status/
@@ -170,7 +188,26 @@ public partial class CalendarPage : UserControl
         public object Item { get; }
         public string Name { get; }
         public DateTime? Deadline { get; }
+        /// <summary>Optional working-range start (tasks only). The range END is the Deadline.</summary>
+        public DateTime? RangeStart { get; }
         public string Recurrence { get; }
+
+        /// <summary>First day this row occupies — the range start if set and valid, else the deadline. The
+        /// start is clamped to the deadline so an out-of-order range from an imported/hand-edited file
+        /// degrades to a single-day point (matching TaskItem.CoversDay and PlannerPage.DueSpan) instead of
+        /// vanishing from the Day/Week filters.</summary>
+        public DateTime EffectiveStart =>
+            RangeStart is DateTime s && Deadline is DateTime d && s.Date <= d.Date ? s.Date : Deadline!.Value;
+        /// <summary>True when this row spans more than a single day.</summary>
+        public bool IsRanged => RangeStart is DateTime s && Deadline is DateTime d && s.Date < d.Date;
+        /// <summary>True when [start..deadline] covers <paramref name="day"/> (point rows cover only the deadline).</summary>
+        public bool Covers(DateTime day) => Deadline != null && EffectiveStart.Date <= day.Date && Deadline.Value.Date >= day.Date;
+        /// <summary>"start → deadline" when ranged, else the plain deadline date. Bound by the schedule grid.</summary>
+        public string RangeDisplay => IsRanged ? $"{RangeStart:yyyy-MM-dd} → {Deadline:yyyy-MM-dd}" : $"{Deadline:yyyy-MM-dd}";
+        /// <summary>Agenda-only: the specific covered day this occurrence represents (null = group by deadline).</summary>
+        public DateTime? OccurrenceDate { get; set; }
+        /// <summary>Day-bucket key for grouping (Agenda occurrence day if set, else the deadline).</summary>
+        public DateTime? GroupKey => OccurrenceDate ?? Deadline;
         // Status reflects the LIVE underlying state so it updates the instant Done is toggled on the
         // schedule (a task's IsComplete flips its WorkStatus; a step just toggles Done).
         public string Status => Item switch
@@ -196,24 +233,28 @@ public partial class CalendarPage : UserControl
         }
         public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 
-        private ScheduleRow(object item, string name, DateTime? deadline, string recurrence,
+        private ScheduleRow(object item, string name, DateTime? rangeStart, DateTime? deadline, string recurrence,
             bool complete, Action<bool> apply)
         {
-            Item = item; Name = name; Deadline = deadline; Recurrence = recurrence;
+            Item = item; Name = name; RangeStart = rangeStart; Deadline = deadline; Recurrence = recurrence;
             _isComplete = complete; _apply = apply;
         }
 
+        /// <summary>A lightweight copy pinned to one covered day, for the Agenda per-day fan-out.</summary>
+        public ScheduleRow AtOccurrence(DateTime day) =>
+            new(Item, Name, RangeStart, Deadline, Recurrence, _isComplete, _apply) { OccurrenceDate = day.Date };
+
         public static ScheduleRow ForTask(TaskItem t) =>
-            new(t, t.Name, t.Deadline, t.Recurrence.ToString(), t.IsComplete, v => t.IsComplete = v);
+            new(t, t.Name, t.RangeStart, t.Deadline, t.Recurrence.ToString(), t.IsComplete, v => t.IsComplete = v);
 
         public static ScheduleRow ForStep(ChecklistStep s, Procedure p) =>
-            new(s, $"{s.Title}   ·  [{p.Name}]", s.Deadline, "", s.Done, v => s.Done = v);
+            new(s, $"{s.Title}   ·  [{p.Name}]", null, s.Deadline, "", s.Done, v => s.Done = v);
 
         public static ScheduleRow ForCrewStep(ChecklistStep s, CrewMember c) =>
-            new(s, $"{s.Title}   ·  👤 {(c.FullName.Length > 0 ? c.FullName : "(unnamed)")}", s.Deadline, "", s.Done, v => s.Done = v);
+            new(s, $"{s.Title}   ·  👤 {(c.FullName.Length > 0 ? c.FullName : "(unnamed)")}", null, s.Deadline, "", s.Done, v => s.Done = v);
 
         public static ScheduleRow ForProcedure(Procedure p) =>
-            new(p, p.Name, p.Deadline, p.Recurrence.ToString(), p.Status == WorkStatus.Done,
+            new(p, p.Name, null, p.Deadline, p.Recurrence.ToString(), p.Status == WorkStatus.Done,
                 v => p.Status = v ? WorkStatus.Done : WorkStatus.Todo);
     }
 

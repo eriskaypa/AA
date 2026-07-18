@@ -17,7 +17,14 @@
             </DockPanel>
             <DockPanel Margin="0,8,0,0">
                 <TextBlock Text="Deadline:" Width="100" VerticalAlignment="Center"/>
-                <DatePicker x:Name="DeadlinePicker" Width="200" HorizontalAlignment="Left" SelectedDateChanged="Deadline_Changed"/>
+                <DatePicker x:Name="DeadlinePicker" Width="150" HorizontalAlignment="Left" SelectedDateChanged="Deadline_Changed"
+                            ToolTip="The task's due date — also the LAST day of the working range."/>
+                <TextBlock Text="Start (optional):" VerticalAlignment="Center" Margin="18,0,4,0"/>
+                <DatePicker x:Name="StartPicker" Width="150" HorizontalAlignment="Left" SelectedDateChanged="Start_Changed"
+                            ToolTip="Optional first day of the range you'll work on this. Leave empty for a single-day task; the deadline stays the last day."/>
+                <Button x:Name="ClearRangeBtn" Content="Clear range" Margin="8,0,0,0" Padding="6,1" Click="ClearRange_Click"
+                        ToolTip="Remove the start date (keeps the deadline)."/>
+                <TextBlock x:Name="RangeHint" VerticalAlignment="Center" Margin="10,0,0,0" Foreground="{DynamicResource Muted}"/>
             </DockPanel>
             <DockPanel Margin="0,4,0,0">
                 <TextBlock Text="Recurrence:" Width="100" VerticalAlignment="Center"/>

@@ -139,6 +139,7 @@ public static class DataDiff
         {
             case TaskItem tb when a is TaskItem ta:
                 if (ta.Deadline != tb.Deadline) n.Add(Field($"deadline: {Fmt(ta.Deadline)} → {Fmt(tb.Deadline)}"));
+                if (ta.RangeStart != tb.RangeStart) n.Add(Field($"start: {Fmt(ta.RangeStart)} → {Fmt(tb.RangeStart)}"));
                 if (ta.Recurrence != tb.Recurrence) n.Add(Field($"recurrence: {ta.Recurrence} → {tb.Recurrence}"));
                 if (ta.Status != tb.Status) n.Add(Field($"status: {ta.Status} → {tb.Status}"));
                 DiffTasks(ta.Subtasks, tb.Subtasks, names, n, "subtask");

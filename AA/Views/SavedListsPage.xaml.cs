@@ -104,7 +104,6 @@ public partial class SavedListsPage : UserControl
         ItemsPreview.ItemsSource = t.Items.Select(it =>
         {
             var meta = new List<string>();
-            if (it.DurationMinutes > 0) meta.Add($"~{it.DurationMinutes}m");
             if (it.IsJob) meta.Add("job");
             bool hasNotes = !string.IsNullOrWhiteSpace(it.Container?.RichTextXaml);
             int files = it.Container?.Files.Count ?? 0;

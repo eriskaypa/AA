@@ -8,7 +8,7 @@
     <DockPanel Margin="12">
         <TextBlock DockPanel.Dock="Top" x:Name="HeaderText" FontSize="15" FontWeight="Bold" Margin="0,0,0,8"/>
         <TextBlock DockPanel.Dock="Top" Foreground="{DynamicResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8"
-                   Text="Edit the items in this saved list (title, duration, notes &amp; files). Deadlines/done aren't stored in a saved list — they're set when you apply it. Close to save."/>
+                   Text="Edit the items in this saved list (title, duration, notes &amp; files). Deadlines, working-ranges and done aren't stored in a saved list — they're set when you apply it. Close to save."/>
         <Border DockPanel.Dock="Bottom" Padding="0,10,0,0">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
                 <Button Content="Close" MinWidth="80" Click="Close_Click"/>

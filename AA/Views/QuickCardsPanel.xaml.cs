@@ -273,9 +273,5 @@ public partial class QuickCardsPanel : UserControl
         _repo?.FlushIfDirty();
     }
 
-    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject
-    {
-        while (d != null && d is not T) d = VisualTreeHelper.GetParent(d);
-        return d as T;
-    }
+    private static T? FindAncestor<T>(DependencyObject? d) where T : DependencyObject => UiTree.FindAncestor<T>(d);
 }

@@ -168,7 +168,47 @@ public class TaskItem : HierarchyItem, IJob
 {
     [JsonIgnore] public override ItemKind Kind => ItemKind.Task;
     private DateTime? _deadline;
-    public DateTime? Deadline { get => _deadline; set => Set(ref _deadline, value); }
+    public DateTime? Deadline { get => _deadline; set { if (Set(ref _deadline, value)) OnRangeDerivedChanged(); } }
+
+    /// <summary>Optional first day of the working range ("range of doing it"). The range's LAST date is
+    /// the <see cref="Deadline"/> — i.e. the deadline IS the range end. Null = no range: the task is a
+    /// single point on its deadline, exactly as before (back-compat: older saves have no field → null).
+    /// Only meaningful alongside a Deadline and is kept &lt;= Deadline by <see cref="AA.Services.WorkRange"/>.</summary>
+    private DateTime? _rangeStart;
+    public DateTime? RangeStart { get => _rangeStart; set { if (Set(ref _rangeStart, value)) OnRangeDerivedChanged(); } }
+
+    // The range-derived read-only props below are computed, so their bindings only refresh if we raise
+    // PropertyChanged for them whenever either date changes (Set only notifies the literal property).
+    private void OnRangeDerivedChanged()
+    {
+        OnChanged(nameof(HasRange));
+        OnChanged(nameof(RangeFirst));
+        OnChanged(nameof(WhenText));
+    }
+
+    /// <summary>True when the task spans more than one day — a real working range to draw across days.</summary>
+    [JsonIgnore] public bool HasRange => _rangeStart is DateTime s && _deadline is DateTime d && s.Date < d.Date;
+
+    /// <summary>The first day this task occupies on a calendar/planner — the range start if set, else the deadline.</summary>
+    [JsonIgnore] public DateTime? RangeFirst => _rangeStart ?? _deadline;
+
+    /// <summary>Bindable one-liner for lists/columns: "start → deadline" when ranged, "yyyy-MM-dd" for a
+    /// plain deadline, "" when undated. Self-contained (no Services dependency) so views can bind directly.</summary>
+    [JsonIgnore] public string WhenText =>
+        _deadline is not DateTime d ? ""
+        : _rangeStart is DateTime s && s.Date < d.Date ? $"{s:yyyy-MM-dd} → {d:yyyy-MM-dd}"
+        : $"{d:yyyy-MM-dd}";
+
+    /// <summary>True when the working range [start..deadline] covers <paramref name="day"/>. A task with no
+    /// range covers only its deadline day; a task with no deadline covers nothing.</summary>
+    public bool CoversDay(DateTime day)
+    {
+        if (_deadline is not DateTime d) return false;
+        var end = d.Date;
+        var start = _rangeStart is DateTime s && s.Date <= end ? s.Date : end;
+        var q = day.Date;
+        return q >= start && q <= end;
+    }
 
     private bool _isJob;
     public bool IsJob { get => _isJob; set => Set(ref _isJob, value); }

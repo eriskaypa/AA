@@ -32,7 +32,8 @@
                         </StackPanel>
                     </DockPanel>
                 </Border>
-                <ListView x:Name="TaskGrid" MouseDoubleClick="TaskGrid_DoubleClick"
+                <ListView x:Name="TaskGrid" MouseDoubleClick="TaskGrid_DoubleClick" SelectionMode="Extended"
+                          PreviewMouseRightButtonDown="TaskGrid_RightDown"
                           FontSize="15" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
@@ -66,11 +67,12 @@
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>
-                            <GridViewColumn Header="Deadline" Width="160">
+                            <GridViewColumn Header="When" Width="210">
                                 <GridViewColumn.CellTemplate>
                                     <DataTemplate>
-                                        <TextBlock Text="{Binding Deadline, StringFormat='yyyy-MM-dd HH:mm'}"
-                                                   TextWrapping="Wrap" VerticalAlignment="Top"/>
+                                        <TextBlock Text="{Binding RangeDisplay}"
+                                                   TextWrapping="Wrap" VerticalAlignment="Top"
+                                                   ToolTip="Working range (start → deadline) when set, otherwise the due date."/>
                                     </DataTemplate>
                                 </GridViewColumn.CellTemplate>
                             </GridViewColumn>

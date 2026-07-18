@@ -852,11 +852,32 @@ public partial class HierarchyPage : UserControl
     private object BuildTaskSpecifics(TaskItem t)
     {
         var sp = new StackPanel { Margin = new Thickness(8) };
+
+        // Deadline (range end) + optional working-range start. They self-correct to keep start <= deadline.
         var dock1 = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
         dock1.Children.Add(new TextBlock { Text = "Deadline:", Width = 120, VerticalAlignment = VerticalAlignment.Center });
-        var dp = new DatePicker { SelectedDate = t.Deadline, Width = 200, HorizontalAlignment = HorizontalAlignment.Left };
-        dp.SelectedDateChanged += (_, _) => { t.Deadline = dp.SelectedDate; _repo!.MarkDirty(); };
+        var dp = new DatePicker { SelectedDate = t.Deadline, Width = 160, HorizontalAlignment = HorizontalAlignment.Left,
+            ToolTip = "Due date — also the LAST day of the working range." };
         dock1.Children.Add(dp);
+        dock1.Children.Add(new TextBlock { Text = "Start (optional):", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(16, 0, 4, 0) });
+        var sdp = new DatePicker { SelectedDate = t.RangeStart, Width = 160, HorizontalAlignment = HorizontalAlignment.Left,
+            ToolTip = "Optional first day of the working range. Leave empty for a single-day task." };
+        dock1.Children.Add(sdp);
+        bool dateSync = false;
+        dp.SelectedDateChanged += (_, _) =>
+        {
+            if (dateSync) return;
+            var (s, d) = AA.Services.WorkRange.Coerce(sdp.SelectedDate, dp.SelectedDate, editedStart: false);
+            dateSync = true; sdp.SelectedDate = s; dp.SelectedDate = d; dateSync = false;
+            t.RangeStart = s; t.Deadline = d; _repo!.MarkDirty();
+        };
+        sdp.SelectedDateChanged += (_, _) =>
+        {
+            if (dateSync) return;
+            var (s, d) = AA.Services.WorkRange.Coerce(sdp.SelectedDate, dp.SelectedDate, editedStart: true);
+            dateSync = true; sdp.SelectedDate = s; dp.SelectedDate = d; dateSync = false;
+            t.RangeStart = s; t.Deadline = d; _repo!.MarkDirty();
+        };
         sp.Children.Add(dock1);
 
         var dock2 = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
@@ -941,10 +962,10 @@ public partial class HierarchyPage : UserControl
         var editSub = new Button { Content = "Edit...", Margin = new Thickness(4, 0, 0, 0), ToolTip = "Open this subtask in a dedicated editor with its own deadline, container and files." };
         btnRow.Children.Add(addSub); btnRow.Children.Add(delSub); btnRow.Children.Add(editSub);
         sp.Children.Add(btnRow);
-        var sub = new ListView { Height = 220 };
+        var sub = new ListView { Height = 220, SelectionMode = SelectionMode.Extended };
         var gv = new GridView();
         gv.Columns.Add(StrikeWrapColumn("Name", "Name", "IsComplete", 280));
-        gv.Columns.Add(new GridViewColumn { Header = "Deadline", Width = 160, DisplayMemberBinding = new System.Windows.Data.Binding("Deadline") });
+        gv.Columns.Add(new GridViewColumn { Header = "When", Width = 190, DisplayMemberBinding = new System.Windows.Data.Binding("WhenText") });
         gv.Columns.Add(new GridViewColumn { Header = "Status", Width = 110, DisplayMemberBinding = new System.Windows.Data.Binding("Status") });
         gv.Columns.Add(new GridViewColumn { Header = "Done", Width = 60, DisplayMemberBinding = new System.Windows.Data.Binding("IsComplete") });
         sub.View = gv;
@@ -975,6 +996,11 @@ public partial class HierarchyPage : UserControl
         }
         editSub.Click += (_, _) => OpenSubEditor();
         sub.MouseDoubleClick += (_, _) => OpenSubEditor();
+        // Right-click: batch mark selected subtasks done / not done.
+        var subMenu = new ContextMenu();
+        BatchDoneMenu.Add(subMenu, _repo!, () => sub.SelectedItems.Cast<object>(), () => sub.Items.Refresh(), separatorFirst: false);
+        sub.ContextMenu = subMenu;
+        sub.PreviewMouseRightButtonDown += (_, e) => BatchDoneMenu.RightClickSelect(sub, e.OriginalSource as DependencyObject);
         VirtualizingPanel.SetIsVirtualizing(sub, true);
         VirtualizingPanel.SetVirtualizationMode(sub, VirtualizationMode.Recycling);
         ScrollViewer.SetCanContentScroll(sub, true);
@@ -1087,7 +1113,7 @@ public partial class HierarchyPage : UserControl
         bar.Children.Add(addStep); bar.Children.Add(delStep); bar.Children.Add(linkTasks); bar.Children.Add(newStepTask); bar.Children.Add(linkEq); bar.Children.Add(editStep);
         Grid.SetRow(bar, 3); grid.Children.Add(bar);
 
-        var lv = new ListView();
+        var lv = new ListView { SelectionMode = SelectionMode.Extended };
         var gv = new GridView();
         var doneCol = new GridViewColumn { Header = "Done", Width = 50 };
         var tmpl = new DataTemplate();
@@ -1122,6 +1148,11 @@ public partial class HierarchyPage : UserControl
         gv.Columns.Add(stepDueCol);
         lv.View = gv;
         lv.ItemsSource = p.Steps;
+        // Right-click: batch mark selected steps done / not done.
+        var stepMenu = new ContextMenu();
+        BatchDoneMenu.Add(stepMenu, _repo!, () => lv.SelectedItems.Cast<object>(), () => lv.Items.Refresh(), separatorFirst: false);
+        lv.ContextMenu = stepMenu;
+        lv.PreviewMouseRightButtonDown += (_, e) => BatchDoneMenu.RightClickSelect(lv, e.OriginalSource as DependencyObject);
         Grid.SetRow(lv, 4); grid.Children.Add(lv);
 
         builderBtn.Click += (_, _) =>

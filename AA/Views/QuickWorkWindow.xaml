@@ -59,6 +59,7 @@
                 <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Margin="6,0,6,6" TextChanged="Search_Changed" Tag="Search tasks &amp; procedures..."/>
                 <TextBlock x:Name="CountText" DockPanel.Dock="Bottom" Margin="8,6" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"/>
                 <ListBox x:Name="PendingList" BorderThickness="0" HorizontalContentAlignment="Stretch"
+                         SelectionMode="Extended"
                          SelectionChanged="Pending_SelectionChanged"
                          PreviewMouseRightButtonDown="List_RightButtonSelect"
                          VirtualizingPanel.IsVirtualizingWhenGrouping="True"
@@ -76,6 +77,9 @@
                     </ListBox.ItemTemplate>
                     <ListBox.ContextMenu>
                         <ContextMenu>
+                            <MenuItem Header="✓ Mark selected as done" Click="MarkSelectedDone_Click"/>
+                            <MenuItem Header="○ Mark selected as not done" Click="MarkSelectedNotDone_Click"/>
+                            <Separator/>
                             <MenuItem Header="🪣 Sort into buckets..." Click="MoveToBucket_Click"/>
                             <MenuItem Header="Remove from buckets" Click="RemoveFromBucket_Click"/>
                         </ContextMenu>

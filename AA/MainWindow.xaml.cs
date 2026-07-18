@@ -1057,16 +1057,10 @@ public partial class MainWindow : Window
         MainTabs.SelectedItem = sel ?? (desired.Count > 0 ? desired[0] : null);
     }
 
+    // Content-safe: e.OriginalSource can be a FlowDocument/Run (rich-text content) when a tab hosts a
+    // rich-text editor; walking that via VisualTreeHelper.GetParent would throw. UiTree handles it.
     private static T? FindAncestor<T>(System.Windows.DependencyObject? d) where T : System.Windows.DependencyObject
-    {
-        while (d != null)
-        {
-            if (d is T t) return t;
-            d = System.Windows.Media.VisualTreeHelper.GetParent(d)
-                ?? (d as System.Windows.FrameworkElement)?.Parent as System.Windows.DependencyObject;
-        }
-        return null;
-    }
+        => AA.Views.UiTree.FindAncestor<T>(d);
 
     // ---- Custom tab colours ----
     private void MenuTabColors_Click(object sender, RoutedEventArgs e)

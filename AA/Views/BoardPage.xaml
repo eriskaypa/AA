@@ -66,6 +66,8 @@
                     <TextBox x:Name="SearchBox" Width="180" Margin="0,0,10,0" TextChanged="SearchBox_TextChanged"/>
                     <CheckBox x:Name="HideDoneChk" Content="Hide done" VerticalAlignment="Center" Margin="0,0,10,0"
                               Checked="HideDone_Changed" Unchecked="HideDone_Changed"/>
+                    <Button Content="+ From saved list" Click="FromSavedList_Click" Margin="0,0,6,0"
+                            ToolTip="Search your saved lists and add items as real tasks"/>
                     <Button Content="+ New task" Style="{StaticResource AccentButton}" Click="NewTask_Click"/>
                 </StackPanel>
             </DockPanel>

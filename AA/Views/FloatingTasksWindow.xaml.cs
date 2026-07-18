@@ -188,14 +188,22 @@ public partial class FloatingTasksWindow : Window
 
     private void CollectTask(TaskItem owner, TaskItem t, DateTime day, List<DueItem> items, HashSet<Guid> seen)
     {
-        if (!t.IsComplete && t.Deadline?.Date == day && seen.Add(t.Id))
+        // A ranged task shows on every day its working window covers, not only the deadline day.
+        if (!t.IsComplete && t.CoversDay(day) && seen.Add(t.Id))
         {
             bool isSub = !ReferenceEquals(owner, t);
+            string kind = isSub ? $"Subtask · {owner.Name}" : "Task";
+            if (t.HasRange)
+            {
+                string where = day.Date == t.Deadline!.Value.Date ? "ends today"
+                    : day.Date == t.RangeStart!.Value.Date ? "starts today" : "ongoing";
+                kind += $" · {where}";
+            }
             items.Add(new DueItem
             {
                 Icon = isSub ? "↳" : "✓",
                 Title = t.Name,
-                Sub = isSub ? $"Subtask · {owner.Name}" : "Task",
+                Sub = kind,
                 Accent = TaskBrush,
                 Nav = owner
             });
