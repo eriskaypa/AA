@@ -738,26 +738,29 @@ public static class PdfExporter
         {
             case WpfRun run:
                 if (string.IsNullOrEmpty(run.Text)) return false;
-                AddRun(par, run, run.Text);
-                return true;
+                // Plain runs may contain bare URLs / e-mail addresses the user just typed or pasted as
+                // text — turn those into real clickable PDF links too, not only formal Hyperlink elements.
+                return AddRunAutoLinked(par, run);
             case WpfLineBreak:
                 par.AddLineBreak();
                 return true;
             case WpfHyperlink hl:
                 {
-                    // Render hyperlink text with the hyperlink's own formatting and
-                    // wire it to the target URI so it stays clickable in the PDF.
+                    var uri = NormalizeLinkUri(hl.NavigateUri?.ToString());
+                    if (uri == null)
+                    {
+                        // No explicit target: render the display text as ordinary runs so auto-linking wires
+                        // up only a URL substring (if any) rather than making the whole label clickable.
+                        var plain = false;
+                        foreach (var child in hl.Inlines) plain |= RenderInline(par, child);
+                        return plain;
+                    }
+                    // A real target: the whole display text is the clickable link.
+                    var link = par.AddHyperlink(uri, HyperlinkType.Web);
                     var any = false;
-                    var uri = hl.NavigateUri?.ToString();
-                    MigraDoc.DocumentObjectModel.Hyperlink? link = null;
-                    if (!string.IsNullOrEmpty(uri)) link = par.AddHyperlink(uri, HyperlinkType.Web);
                     foreach (var child in hl.Inlines)
                     {
-                        if (link != null && child is WpfRun lr && !string.IsNullOrEmpty(lr.Text))
-                        {
-                            link.AddFormattedText(lr.Text, ResolveFormat(lr));
-                            any = true;
-                        }
+                        if (child is WpfRun lr && !string.IsNullOrEmpty(lr.Text)) { AddLinkedText(link, lr, lr.Text); any = true; }
                         else any |= RenderInline(par, child);
                     }
                     return any;
@@ -780,6 +783,81 @@ public static class PdfExporter
             ft.Font.Name = ResolveFontName(source.FontFamily.Source);
         if (source.FontSize > 0)
             ft.Font.Size = source.FontSize * 0.75; // WPF px -> pt
+    }
+
+    // ---------- clickable links (formal Hyperlinks + auto-detected URLs / e-mails) ----------
+
+    private static readonly Color LinkBlue = new Color(11, 97, 164);
+
+    // URL (http/https/www.) or e-mail address. Deliberately conservative:
+    //  * a start-of-token lookbehind means `www.`/`http`/an address only match at the START of a token,
+    //    so mid-token text like `backup_www.tar.gz` or `C:\svc\www.cache\x` is NOT mis-linked — and it
+    //    also keeps matching linear (non-boundary positions fail in O(1), so a long unbroken paste can't
+    //    drive the local-part scan quadratically);
+    //  * the atomic local part and non-overlapping domain labels remove backtracking from the mail branch.
+    private static readonly System.Text.RegularExpressions.Regex LinkRegex = new(
+        @"(?<=^|[\s(\[<""'])(?:(?<url>(?:https?://|www\.)[^\s<>()]+)|(?<mail>(?>[A-Za-z0-9._%+\-]+)@[A-Za-z0-9\-]+(?:\.[A-Za-z0-9\-]+)*\.[A-Za-z]{2,}))",
+        System.Text.RegularExpressions.RegexOptions.Compiled | System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>Render a plain run, promoting any bare URL / e-mail it contains into a clickable link
+    /// while keeping the surrounding text (and the run's own formatting) intact.</summary>
+    private static bool AddRunAutoLinked(Paragraph par, WpfRun run)
+    {
+        var text = run.Text;
+        bool any = false;
+        foreach (var (seg, uri) in ScanLinks(text))
+        {
+            if (seg.Length == 0) continue;
+            if (uri != null) AddLinkedText(par.AddHyperlink(uri, HyperlinkType.Web), run, seg);
+            else AddRun(par, run, seg);
+            any = true;
+        }
+        return any;
+    }
+
+    /// <summary>Add link text to a MigraDoc hyperlink, carrying the source run's font/size but forcing the
+    /// familiar blue-underlined link look so it reads as a link on the page as well as being clickable.</summary>
+    private static void AddLinkedText(MigraDoc.DocumentObjectModel.Hyperlink link, WpfInline source, string text)
+    {
+        var ft = link.AddFormattedText(text, ResolveFormat(source) | TextFormat.Underline);
+        ft.Color = LinkBlue;
+        if (source.FontFamily != null && !string.IsNullOrEmpty(source.FontFamily.Source))
+            ft.Font.Name = ResolveFontName(source.FontFamily.Source);
+        if (source.FontSize > 0)
+            ft.Font.Size = source.FontSize * 0.75;
+    }
+
+    /// <summary>Split text into alternating (text, uri) segments. A non-null uri marks a clickable link;
+    /// trailing sentence punctuation is pushed back into the following plain-text segment.</summary>
+    private static IEnumerable<(string text, string? uri)> ScanLinks(string text)
+    {
+        if (string.IsNullOrEmpty(text)) yield break;
+        int last = 0;
+        foreach (System.Text.RegularExpressions.Match m in LinkRegex.Matches(text))
+        {
+            var raw = m.Value;
+            int len = raw.Length;
+            while (len > 0 && ".,;:!?)]}'\"".IndexOf(raw[len - 1]) >= 0) len--;   // trim trailing punctuation
+            if (len == 0) continue;
+            var linkText = raw.Substring(0, len);
+            if (m.Index > last) yield return (text.Substring(last, m.Index - last), null);
+            yield return (linkText, ToUri(linkText, m.Groups["mail"].Success));
+            last = m.Index + len;
+        }
+        if (last < text.Length) yield return (text.Substring(last), null);
+    }
+
+    private static string ToUri(string linkText, bool isMail) =>
+        isMail ? "mailto:" + linkText
+        : linkText.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? "https://" + linkText
+        : linkText;
+
+    /// <summary>Normalise a formal hyperlink's target (add a scheme to a bare www. host); null when empty.</summary>
+    private static string? NormalizeLinkUri(string? uri)
+    {
+        if (string.IsNullOrWhiteSpace(uri)) return null;
+        uri = uri.Trim();
+        return uri.StartsWith("www.", StringComparison.OrdinalIgnoreCase) ? "https://" + uri : uri;
     }
 
     private static TextFormat ResolveFormat(WpfInline source)
