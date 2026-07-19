@@ -61,6 +61,133 @@ public partial class ContainerEditor : UserControl
         Rtb.PreviewKeyDown += Rtb_PreviewKeyDown;
         Rtb.PreviewTextInput += Rtb_PreviewTextInput;
         CommandManager.AddPreviewExecutedHandler(Rtb, Rtb_PreviewExecuted);
+
+        // Custom right-click menu (rebuilt per open) so we can offer "Paste text only" while still
+        // surfacing native spelling suggestions. Setting an (empty) menu suppresses the default one.
+        Rtb.ContextMenu = new ContextMenu();
+        Rtb.ContextMenuOpening += Rtb_ContextMenuOpening;
+        Rtb.PreviewMouseRightButtonDown += Rtb_PreviewMouseRightButtonDown;
+    }
+
+    // ---- Right-click menu + "Paste text only" ----
+
+    private void Rtb_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        // Move the caret under the cursor so the menu's spelling suggestions and the paste target match
+        // where the user clicked — unless the click lands inside an existing selection, which we keep so
+        // Cut/Copy still act on it.
+        var tp = Rtb.GetPositionFromPoint(e.GetPosition(Rtb), snapToText: true);
+        if (tp == null) return;
+        var sel = Rtb.Selection;
+        bool insideSelection = !sel.IsEmpty && sel.Start.CompareTo(tp) <= 0 && sel.End.CompareTo(tp) >= 0;
+        if (!insideSelection) Rtb.CaretPosition = tp;
+    }
+
+    private void Rtb_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        var menu = Rtb.ContextMenu ??= new ContextMenu();
+        menu.Items.Clear();
+
+        // Native spelling suggestions for the right-clicked word (preserves the default proofing UX).
+        var spell = Rtb.GetSpellingError(Rtb.CaretPosition);
+        if (spell != null)
+        {
+            // A misspelled word can sit inside a LOCKED run (the lock is a background marker and doesn't
+            // disable spell-checking). "Correct" rewrites text, so it must obey the lock like every other
+            // edit path; "Ignore All" only touches the dictionary, so it stays available.
+            bool lockedWord = _hasAnyLock && CaretInsideLocked(Rtb.CaretPosition);
+            if (lockedWord)
+            {
+                menu.Items.Add(new MenuItem { Header = "(locked — can't correct)", IsEnabled = false });
+            }
+            else
+            {
+                bool any = false;
+                foreach (var s in spell.Suggestions)
+                {
+                    var suggestion = s;
+                    var mi = new MenuItem { Header = suggestion, FontWeight = FontWeights.Bold };
+                    mi.Click += (_, _) =>
+                    {
+                        if (_hasAnyLock && CaretInsideLocked(Rtb.CaretPosition)) { ShowLockedHint(); return; }
+                        spell.Correct(suggestion);
+                    };
+                    menu.Items.Add(mi);
+                    any = true;
+                }
+                if (!any) menu.Items.Add(new MenuItem { Header = "(no spelling suggestions)", IsEnabled = false });
+                var ignore = new MenuItem { Header = "Ignore All" };
+                ignore.Click += (_, _) => spell.IgnoreAll();
+                menu.Items.Add(ignore);
+            }
+            menu.Items.Add(new Separator());
+        }
+
+        menu.Items.Add(CmdItem("Cut", ApplicationCommands.Cut));
+        menu.Items.Add(CmdItem("Copy", ApplicationCommands.Copy));
+        menu.Items.Add(CmdItem("Paste", ApplicationCommands.Paste));
+        var pasteText = new MenuItem
+        {
+            Header = "Paste text only",
+            InputGestureText = "Ctrl+Shift+V",
+            IsEnabled = ClipboardHasText(),
+            ToolTip = "Paste the clipboard as plain text, dropping all formatting."
+        };
+        pasteText.Click += (_, _) => PasteTextOnly();
+        menu.Items.Add(pasteText);
+        menu.Items.Add(new Separator());
+        menu.Items.Add(CmdItem("Select All", ApplicationCommands.SelectAll));
+    }
+
+    private MenuItem CmdItem(string header, RoutedUICommand cmd)
+        => new() { Header = header, Command = cmd, CommandTarget = Rtb };
+
+    private static bool ClipboardHasText()
+    {
+        try { return Clipboard.ContainsText(); } catch { return false; }
+    }
+
+    /// <summary>Insert the clipboard's text at the caret with NO formatting — the inserted run adopts the
+    /// destination's style, so every colour/font/size/link from the source is dropped. Respects the
+    /// per-run edit lock exactly like the normal Paste command.</summary>
+    private void PasteTextOnly()
+    {
+        try
+        {
+            if (!Clipboard.ContainsText()) return;
+            InsertPlainText(Clipboard.GetText());   // GetText ignores any Rtf/Html/Xaml -> formatting dropped
+        }
+        catch { /* clipboard unavailable — nothing to paste */ }
+    }
+
+    /// <summary>Insert <paramref name="text"/> at the caret with no formatting (it adopts the destination
+    /// style). Respects the per-run edit lock exactly like the normal Paste command, and is a single
+    /// undo unit.</summary>
+    private void InsertPlainText(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+
+        // Lock check against the current caret/selection (same rule the Paste command uses).
+        if (_hasAnyLock)
+        {
+            var sel = Rtb.Selection;
+            bool blocked = sel.IsEmpty ? CaretInsideLocked(Rtb.CaretPosition) : RangeOverlapsLocked(sel.Start, sel.End);
+            if (blocked) { ShowLockedHint(); return; }
+        }
+
+        // Everything below is one undo unit — including creating the insertion paragraph when the document
+        // was emptied (Load clears all blocks), so a single Ctrl+Z fully reverts the paste.
+        Rtb.BeginChange();
+        if (Rtb.Document.Blocks.Count == 0)
+        {
+            Rtb.Document.Blocks.Add(new Paragraph());
+            Rtb.CaretPosition = Rtb.Document.ContentEnd;
+        }
+        Rtb.Selection.Text = text;                 // plain text, inherits destination formatting
+        Rtb.CaretPosition = Rtb.Selection.End;     // collapse the caret to just after the inserted text
+        Rtb.EndChange();
+        Rtb.Focus();
+        // Rtb.TextChanged fires -> the debounced PersistRichText saves the edit.
     }
 
     private void OnRtbPasting(object sender, DataObjectPastingEventArgs e)
@@ -677,6 +804,15 @@ public partial class ContainerEditor : UserControl
 
     private void Rtb_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        // Ctrl+Shift+V — paste as plain text (strip formatting). Handled before the lock fast-path so it
+        // works in every document; PasteTextOnly itself enforces the lock.
+        if (e.Key == Key.V && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            e.Handled = true;
+            PasteTextOnly();
+            return;
+        }
+
         if (!_hasAnyLock) return;   // fast path: no locked text -> no per-key work
         // Locked text is ALWAYS uneditable. The app password only gates adding/removing the
         // lock itself (via the 🔒 / 🔓 toolbar buttons), not normal typing.
