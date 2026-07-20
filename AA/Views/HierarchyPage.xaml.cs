@@ -864,17 +864,21 @@ public partial class HierarchyPage : UserControl
             ToolTip = "Optional first day of the working range. Leave empty for a single-day task." };
         dock1.Children.Add(sdp);
         bool dateSync = false;
+        // Each handler coerces against the MODEL's partner value, never the sibling picker: this pane is
+        // long-lived (it isn't rebuilt on tab switch), so a deadline set elsewhere — a batch "Set deadline",
+        // the Board, the Calendar — can leave the sibling showing a stale date. Reading the model means a
+        // stale control can never write its old value back over a newer one.
         dp.SelectedDateChanged += (_, _) =>
         {
             if (dateSync) return;
-            var (s, d) = AA.Services.WorkRange.Coerce(sdp.SelectedDate, dp.SelectedDate, editedStart: false);
+            var (s, d) = AA.Services.WorkRange.Coerce(t.RangeStart, dp.SelectedDate, editedStart: false);
             dateSync = true; sdp.SelectedDate = s; dp.SelectedDate = d; dateSync = false;
             t.RangeStart = s; t.Deadline = d; _repo!.MarkDirty();
         };
         sdp.SelectedDateChanged += (_, _) =>
         {
             if (dateSync) return;
-            var (s, d) = AA.Services.WorkRange.Coerce(sdp.SelectedDate, dp.SelectedDate, editedStart: true);
+            var (s, d) = AA.Services.WorkRange.Coerce(sdp.SelectedDate, t.Deadline, editedStart: true);
             dateSync = true; sdp.SelectedDate = s; dp.SelectedDate = d; dateSync = false;
             t.RangeStart = s; t.Deadline = d; _repo!.MarkDirty();
         };
@@ -999,6 +1003,7 @@ public partial class HierarchyPage : UserControl
         // Right-click: batch mark selected subtasks done / not done.
         var subMenu = new ContextMenu();
         BatchDoneMenu.Add(subMenu, _repo!, () => sub.SelectedItems.Cast<object>(), () => sub.Items.Refresh(), separatorFirst: false);
+        BatchDeadlineMenu.Add(subMenu, _repo!, () => sub.SelectedItems.Cast<object>(), () => sub.Items.Refresh());
         sub.ContextMenu = subMenu;
         sub.PreviewMouseRightButtonDown += (_, e) => BatchDoneMenu.RightClickSelect(sub, e.OriginalSource as DependencyObject);
         VirtualizingPanel.SetIsVirtualizing(sub, true);
@@ -1151,6 +1156,7 @@ public partial class HierarchyPage : UserControl
         // Right-click: batch mark selected steps done / not done.
         var stepMenu = new ContextMenu();
         BatchDoneMenu.Add(stepMenu, _repo!, () => lv.SelectedItems.Cast<object>(), () => lv.Items.Refresh(), separatorFirst: false);
+        BatchDeadlineMenu.Add(stepMenu, _repo!, () => lv.SelectedItems.Cast<object>(), () => lv.Items.Refresh());
         lv.ContextMenu = stepMenu;
         lv.PreviewMouseRightButtonDown += (_, e) => BatchDoneMenu.RightClickSelect(lv, e.OriginalSource as DependencyObject);
         Grid.SetRow(lv, 4); grid.Children.Add(lv);

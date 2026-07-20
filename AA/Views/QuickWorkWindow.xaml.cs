@@ -175,6 +175,39 @@ public partial class QuickWorkWindow : Window
         if (sender is ListBox lb) BatchDoneMenu.RightClickSelect(lb, e.OriginalSource as DependencyObject);
     }
 
+    private void SetSelectedDeadline_Click(object sender, RoutedEventArgs e)
+    {
+        var items = PendingList.SelectedItems.OfType<PendingRow>().Select(r => (object)r.Item).ToList();
+        if (items.Count == 0)
+        {
+            MessageBox.Show(this, "Select one or more items first, then set the deadline.",
+                "Set deadline", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var existing = items.Select(i => i is TaskItem t ? t.Deadline : i is Procedure p ? p.Deadline : null).Distinct().ToList();
+        var dlg = new DatePromptWindow("Set deadline",
+            $"Apply one deadline to {items.Count} selected item{(items.Count == 1 ? "" : "s")}:",
+            existing.Count == 1 ? existing[0] : null)
+        { Owner = this };
+        if (dlg.ShowDialog() != true) return;
+        int n = AA.Services.BatchDeadline.SetDeadlineAll(items, dlg.SelectedDate);
+        if (n > 0) { _repo.MarkDirty(); _repo.FlushIfDirty(); }
+        // RefreshPending() deliberately suppresses the selection change, so the open detail pane would keep
+        // showing the pre-batch dates — push the new model values back into its pickers.
+        SyncDetailDates();
+        RefreshPending();
+    }
+
+    /// <summary>Re-seed the detail pane's date pickers from the selected item (after an external change).</summary>
+    private void SyncDetailDates()
+    {
+        if (_selected == null) return;
+        _qwDateSync = true;
+        if (_qwDeadline != null) _qwDeadline.SelectedDate = Deadline(_selected);
+        if (_qwStart != null) _qwStart.SelectedDate = _selected is TaskItem t ? t.RangeStart : null;
+        _qwDateSync = false;
+    }
+
     private void MarkSelectedDone_Click(object sender, RoutedEventArgs e) => MarkSelected(true);
     private void MarkSelectedNotDone_Click(object sender, RoutedEventArgs e) => MarkSelected(false);
     private void MarkSelected(bool done)
@@ -575,7 +608,9 @@ public partial class QuickWorkWindow : Window
             if (_suppress || _selected == null || _qwDateSync) return;
             if (_selected is TaskItem tt && _qwStart != null)
             {
-                var (s, d) = AA.Services.WorkRange.Coerce(_qwStart.SelectedDate, dp.SelectedDate, editedStart: false);
+                // Coerce against the MODEL, not the sibling picker: this pane stays open across a batch
+                // "Set deadline", so the sibling can hold a stale date that would otherwise be written back.
+                var (s, d) = AA.Services.WorkRange.Coerce(tt.RangeStart, dp.SelectedDate, editedStart: false);
                 _qwDateSync = true; _qwStart.SelectedDate = s; dp.SelectedDate = d; _qwDateSync = false;
                 tt.RangeStart = s; tt.Deadline = d;
             }
@@ -593,7 +628,8 @@ public partial class QuickWorkWindow : Window
         dp.SelectedDateChanged += (_, _) =>
         {
             if (_suppress || _qwDateSync) return;
-            var (s, d) = AA.Services.WorkRange.Coerce(dp.SelectedDate, _qwDeadline?.SelectedDate, editedStart: true);
+            // Partner value comes from the model (see MakeDeadlinePicker) so a stale sibling can't win.
+            var (s, d) = AA.Services.WorkRange.Coerce(dp.SelectedDate, t.Deadline, editedStart: true);
             _qwDateSync = true; dp.SelectedDate = s; if (_qwDeadline != null) _qwDeadline.SelectedDate = d; _qwDateSync = false;
             t.RangeStart = s; t.Deadline = d;
             _repo.MarkDirty();
@@ -776,6 +812,7 @@ public partial class QuickWorkWindow : Window
         // Right-click: batch mark selected children done / not done.
         var childMenu = new ContextMenu();
         BatchDoneMenu.Add(childMenu, _repo, () => list.SelectedItems.Cast<object>(), RefreshPending, separatorFirst: false);
+        BatchDeadlineMenu.Add(childMenu, _repo, () => list.SelectedItems.Cast<object>(), RefreshPending);
         list.ContextMenu = childMenu;
         list.PreviewMouseRightButtonDown += (_, e) => BatchDoneMenu.RightClickSelect(list, e.OriginalSource as DependencyObject);
 

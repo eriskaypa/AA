@@ -79,6 +79,8 @@
                         <ContextMenu>
                             <MenuItem Header="✓ Mark selected as done" Click="MarkSelectedDone_Click"/>
                             <MenuItem Header="○ Mark selected as not done" Click="MarkSelectedNotDone_Click"/>
+                            <MenuItem Header="📅 Set deadline for selected…" Click="SetSelectedDeadline_Click"
+                                      ToolTip="Give every selected item the same deadline (or clear it)."/>
                             <Separator/>
                             <MenuItem Header="🪣 Sort into buckets..." Click="MoveToBucket_Click"/>
                             <MenuItem Header="Remove from buckets" Click="RemoveFromBucket_Click"/>

@@ -127,6 +127,7 @@ public partial class BoardPage : UserControl
         cm.Items.Add(openFiles);
         // Batch done/undone across every selected card.
         BatchDoneMenu.Add(cm, _repo!, () => list.SelectedItems.OfType<Card>().Select(c => (object)c.Task), Refresh);
+        BatchDeadlineMenu.Add(cm, _repo!, () => list.SelectedItems.OfType<Card>().Select(c => (object)c.Task), Refresh, separatorFirst: false);
         cm.Items.Add(new Separator());
         var del = new MenuItem { Header = "Delete task" };
         del.Click += (_, _) => { if (list.SelectedItem is Card c) DeleteTask(c.Task); };
@@ -140,21 +141,43 @@ public partial class BoardPage : UserControl
         var q = SearchBox.Text?.Trim() ?? "";
         bool hideDone = HideDoneChk.IsChecked == true;
 
-        var tasks = _repo.Data.Tasks.AsEnumerable();
+        // Every task AND every nested subtask is its own card, grouped by its own status — so a subtask
+        // (regardless of deadline) lands in To Do just like a task. The parent path gives it context.
+        var flat = FlattenTasks().ToList();
         if (!string.IsNullOrEmpty(q))
-            tasks = tasks.Where(t => t.Name.Contains(q, StringComparison.OrdinalIgnoreCase));
+            flat = flat.Where(x => x.task.Name.Contains(q, StringComparison.OrdinalIgnoreCase)).ToList();
         if (hideDone)
-            tasks = tasks.Where(t => t.Status != WorkStatus.Done);
-        var all = tasks.ToList();
+            flat = flat.Where(x => x.task.Status != WorkStatus.Done).ToList();
 
         for (int i = 0; i < Columns.Length; i++)
         {
             var (status, _, color) = Columns[i];
             var accent = Freeze(color);
-            var cards = all.Where(t => t.Status == status).Select(t => new Card(t, accent)).ToList();
+            var cards = flat.Where(x => x.task.Status == status).Select(x => new Card(x.task, accent, x.path)).ToList();
             _lists[i].ItemsSource = cards;
             _counts[i].Text = cards.Count.ToString();
         }
+    }
+
+    /// <summary>Every task and every descendant subtask, paired with the " › "-joined path of its ancestors
+    /// ("" for a top-level task). A visited-set guards against accidental cycles.</summary>
+    private IEnumerable<(TaskItem task, string path)> FlattenTasks()
+    {
+        var seen = new HashSet<Guid>();
+        foreach (var t in _repo!.Data.Tasks)
+            foreach (var x in WalkTasks(t, "", seen)) yield return x;
+    }
+
+    private static IEnumerable<(TaskItem task, string path)> WalkTasks(TaskItem t, string parentPath, HashSet<Guid> seen)
+    {
+        if (!seen.Add(t.Id)) yield break;
+        yield return (t, parentPath);
+        // Use a placeholder for an empty name so a subtask of an unnamed parent still shows a "↳ …" path
+        // (an empty name would otherwise collapse to "" and make the subtask look top-level).
+        var seg = string.IsNullOrWhiteSpace(t.Name) ? "(unnamed)" : t.Name;
+        var childPath = parentPath.Length == 0 ? seg : $"{parentPath} › {seg}";
+        foreach (var st in t.Subtasks)
+            foreach (var x in WalkTasks(st, childPath, seen)) yield return x;
     }
 
     private void SearchBox_TextChanged(object sender, TextChangedEventArgs e) => Refresh();
@@ -215,12 +238,30 @@ public partial class BoardPage : UserControl
     private void DeleteTask(TaskItem t)
     {
         if (_repo == null) return;
-        if (MessageBox.Show($"Delete task '{t.Name}'?", "Confirm",
+        int subs = CountDescendants(t);
+        string extra = subs > 0 ? $"\n\nThis also deletes its {subs} subtask(s)." : "";
+        if (MessageBox.Show($"Delete task '{t.Name}'?{extra}", "Confirm",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        _repo.Data.Tasks.Remove(t);
+        // A card can be a nested subtask, so remove it from wherever it actually lives.
+        RemoveTaskAnywhere(_repo.Data.Tasks, t);
         _repo.PurgeReferences(t.Id);
         _repo.Save();
         Refresh();
+    }
+
+    private static bool RemoveTaskAnywhere(System.Collections.Generic.ICollection<TaskItem> coll, TaskItem t)
+    {
+        if (coll.Remove(t)) return true;
+        foreach (var item in coll)
+            if (RemoveTaskAnywhere(item.Subtasks, t)) return true;
+        return false;
+    }
+
+    private static int CountDescendants(TaskItem t)
+    {
+        int n = t.Subtasks.Count;
+        foreach (var s in t.Subtasks) n += CountDescendants(s);
+        return n;
     }
 
     // ---- Drag & drop between columns ----
@@ -280,14 +321,17 @@ public partial class BoardPage : UserControl
         public Brush Accent { get; }
         public string Meta { get; }
         public string Badges { get; }
+        public string Parent { get; }
         public Brush MetaBrush { get; }
         public Visibility MetaVisible => string.IsNullOrEmpty(Meta) ? Visibility.Collapsed : Visibility.Visible;
         public Visibility BadgesVisible => string.IsNullOrEmpty(Badges) ? Visibility.Collapsed : Visibility.Visible;
+        public Visibility ParentVisible => string.IsNullOrEmpty(Parent) ? Visibility.Collapsed : Visibility.Visible;
 
-        public Card(TaskItem t, Brush accent)
+        public Card(TaskItem t, Brush accent, string parentPath = "")
         {
             Task = t;
             Accent = accent;
+            Parent = parentPath.Length > 0 ? $"↳ {parentPath}" : "";
 
             bool overdue = t.Deadline.HasValue && t.Deadline.Value.Date < DateTime.Today && t.Status != WorkStatus.Done;
             var meta = new List<string>();

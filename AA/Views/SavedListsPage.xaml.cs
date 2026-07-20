@@ -35,6 +35,8 @@ public partial class SavedListsPage : UserControl
     {
         public required string Title { get; init; }
         public required string Meta { get; init; }
+        /// <summary>The saved-list item behind this row, so it can be opened read-only on double-click.</summary>
+        public required ChecklistTemplateItem Item { get; init; }
     }
 
     private ChecklistTemplate? Selected => (ListsBox.SelectedItem as ListRow)?.Tpl;
@@ -109,8 +111,21 @@ public partial class SavedListsPage : UserControl
             int files = it.Container?.Files.Count ?? 0;
             if (hasNotes) meta.Add("notes");
             if (files > 0) meta.Add($"{files} file{(files == 1 ? "" : "s")}");
-            return new ItemRow { Title = it.Title.Length > 0 ? it.Title : "(untitled)", Meta = string.Join("  ·  ", meta) };
+            return new ItemRow { Title = it.Title.Length > 0 ? it.Title : "(untitled)", Meta = string.Join("  ·  ", meta), Item = it };
         }).ToList();
+    }
+
+    /// <summary>Double-clicking an item opens its notes + files READ-ONLY, so links can be followed without
+    /// exporting a PDF first — and without any risk of editing the reusable saved list.</summary>
+    private void ItemsPreview_DoubleClick(object sender, System.Windows.Input.MouseButtonEventArgs e)
+    {
+        if (ItemsPreview.SelectedItem is not ItemRow row) return;
+        var listName = Selected?.Name;
+        new ContainerViewerWindow(
+            row.Title,
+            row.Item.Container,
+            $"Saved-list item{(string.IsNullOrWhiteSpace(listName) ? "" : $" · {listName}")} — read-only. Click a link to open it; double-click a file to open it.")
+        { Owner = Window.GetWindow(this) }.ShowDialog();
     }
 
     // ---- Groups ----

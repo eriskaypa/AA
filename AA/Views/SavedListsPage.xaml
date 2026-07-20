@@ -94,7 +94,9 @@
             <Border Grid.Row="1" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
                 <DockPanel Margin="10">
                     <TextBlock DockPanel.Dock="Top" Text="Items" FontWeight="Bold" Margin="0,0,0,6"/>
-                    <ListBox x:Name="ItemsPreview" BorderThickness="0" HorizontalContentAlignment="Stretch">
+                    <ListBox x:Name="ItemsPreview" BorderThickness="0" HorizontalContentAlignment="Stretch"
+                             MouseDoubleClick="ItemsPreview_DoubleClick"
+                             ToolTip="Double-click an item to view its notes and files (read-only) — links open straight from there.">
                         <ListBox.ItemTemplate>
                             <DataTemplate>
                                 <DockPanel Margin="0,2">

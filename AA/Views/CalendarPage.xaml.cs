@@ -37,6 +37,7 @@ public partial class CalendarPage : UserControl
         var cm = new ContextMenu();
         BatchDoneMenu.Add(cm, repo, () => TaskGrid.SelectedItems.OfType<ScheduleRow>().Select(r => r.Item),
             Refresh, separatorFirst: false);
+        BatchDeadlineMenu.Add(cm, repo, () => TaskGrid.SelectedItems.OfType<ScheduleRow>().Select(r => r.Item), Refresh);
         TaskGrid.ContextMenu = cm;
 
         Refresh();
