@@ -1,7 +1,7 @@
 <Window x:Class="AA.Views.FloatingTasksWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Due today &amp; tomorrow"
+        Title="Overdue, today &amp; tomorrow"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="True" ResizeMode="CanResize"
         Width="350" Height="480" MinWidth="260" MinHeight="220" SizeToContent="Manual">

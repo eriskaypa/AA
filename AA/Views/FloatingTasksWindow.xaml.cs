@@ -10,9 +10,9 @@ using AA.Services;
 
 namespace AA.Views;
 
-/// <summary>Small always-on-top window listing everything due today and tomorrow — tasks, subtasks,
-/// procedures (their deadlines), and notify-enabled Shippalm work orders — so the next two days are
-/// visible at a glance.</summary>
+/// <summary>Small always-on-top window listing everything overdue (past deadline, not done) plus what's
+/// due today and tomorrow — tasks, subtasks, procedures, and their checklist/crew steps — so nothing
+/// urgent drops off the radar.</summary>
 public partial class FloatingTasksWindow : Window
 {
     private AppRepository? _repo;
@@ -23,6 +23,7 @@ public partial class FloatingTasksWindow : Window
     private static readonly Brush ProcBrush = Frozen("#FF2E9E5B");   // green
     private static readonly Brush JobBrush  = Frozen("#FF4FC3F7");   // blue — scheduled Planner jobs
     private static readonly Brush CrewBrush = Frozen("#FF9C6ADE");   // purple — crew checklist items
+    private static readonly Brush OverdueBrush = Frozen("#FFE05252"); // red — past-due, not done
     private static readonly Brush MutedBrush = Frozen("#FF8A8A8A");
     private static SolidColorBrush Frozen(string hex)
     { var b = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)); b.Freeze(); return b; }
@@ -101,6 +102,8 @@ public partial class FloatingTasksWindow : Window
         /// <summary>Custom click action (used for crew items, which aren't HierarchyItems).
         /// Takes precedence over <see cref="Nav"/> when set.</summary>
         public Action? OnClick;
+        /// <summary>Ordering key for the Overdue section (oldest deadline first); unused elsewhere.</summary>
+        public DateTime SortDate = DateTime.MaxValue;
     }
 
     public void Refresh()
@@ -109,18 +112,22 @@ public partial class FloatingTasksWindow : Window
         if (_repo == null) return;
         var today = DateTime.Today;
         var tomorrow = today.AddDays(1);
-        HeaderSub.Text = $"Today {today:ddd, dd MMM}  ·  Tomorrow {tomorrow:ddd, dd MMM}";
 
+        var overdueItems = CollectOverdue();
         var todayItems = Collect(today);
         var tomorrowItems = Collect(tomorrow);
 
+        HeaderSub.Text = (overdueItems.Count > 0 ? $"{overdueItems.Count} overdue  ·  " : "")
+            + $"Today {today:ddd, dd MMM}  ·  Tomorrow {tomorrow:ddd, dd MMM}";
+
+        if (overdueItems.Count > 0) AddSection("OVERDUE", today, overdueItems);
         AddSection("TODAY", today, todayItems);
         AddSection("TOMORROW", tomorrow, tomorrowItems);
 
-        if (todayItems.Count == 0 && tomorrowItems.Count == 0)
+        if (overdueItems.Count == 0 && todayItems.Count == 0 && tomorrowItems.Count == 0)
             Host.Children.Add(new TextBlock
             {
-                Text = "Nothing due today or tomorrow 🎉",
+                Text = "Nothing overdue, or due today or tomorrow 🎉",
                 Foreground = MutedBrush, TextAlignment = TextAlignment.Center,
                 Margin = new Thickness(0, 24, 0, 0), TextWrapping = TextWrapping.Wrap
             });
@@ -211,6 +218,67 @@ public partial class FloatingTasksWindow : Window
         foreach (var st in t.Subtasks) CollectTask(owner, st, day, items, seen);
     }
 
+    /// <summary>Everything past its deadline and not yet done — tasks/subtasks, procedures, procedure and
+    /// crew checklist steps — so overdue work never silently drops off the window. Oldest first.</summary>
+    private List<DueItem> CollectOverdue()
+    {
+        var items = new List<DueItem>();
+        if (_repo == null) return items;
+        var today = DateTime.Today;
+        var seen = new HashSet<Guid>();
+
+        foreach (var t in _repo.Data.Tasks) CollectOverdueTask(t, t, today, items, seen);
+
+        foreach (var p in _repo.Data.Procedures)
+        {
+            if (p.Status != WorkStatus.Done && p.Deadline is DateTime pd && pd.Date < today && seen.Add(p.Id))
+                items.Add(MkOverdue("📋", p.Name, "Procedure", pd, today, p));
+            foreach (var s in p.Steps)
+                if (!s.Done && s.Deadline is DateTime sd && sd.Date < today && seen.Add(s.Id))
+                    items.Add(MkOverdue("☑", s.Title, $"Checklist step · {p.Name}", sd, today, p));
+        }
+
+        foreach (var c in _repo.Data.Crew)
+        {
+            var member = c;
+            foreach (var s in member.Checklist)
+                if (!s.Done && s.Deadline is DateTime sd && sd.Date < today && seen.Add(s.Id))
+                    items.Add(MkOverdue("🧑‍✈️", s.Title,
+                        $"Crew checklist · {(member.FullName.Length > 0 ? member.FullName : "(unnamed)")}", sd, today,
+                        null, _navigateCrew != null ? () => _navigateCrew(member) : null));
+        }
+
+        return items.OrderBy(i => i.SortDate).ToList();
+    }
+
+    private void CollectOverdueTask(TaskItem owner, TaskItem t, DateTime today, List<DueItem> items, HashSet<Guid> seen)
+    {
+        // Deadline (the range END) is what makes a task overdue — a task still inside its working range
+        // isn't overdue and shows under TODAY instead.
+        if (!t.IsComplete && t.Deadline is DateTime d && d.Date < today && seen.Add(t.Id))
+        {
+            bool isSub = !ReferenceEquals(owner, t);
+            items.Add(MkOverdue(isSub ? "↳" : "✓", t.Name, isSub ? $"Subtask · {owner.Name}" : "Task", d, today, owner));
+        }
+        foreach (var st in t.Subtasks) CollectOverdueTask(owner, st, today, items, seen);
+    }
+
+    private static DueItem MkOverdue(string icon, string title, string kind, DateTime due, DateTime today,
+        HierarchyItem? nav, Action? onClick = null)
+    {
+        int days = (int)(today - due.Date).TotalDays;
+        return new DueItem
+        {
+            Icon = icon,
+            Title = title,
+            Sub = $"{kind} · {days}d overdue (was due {due:ddd, dd MMM})",
+            Accent = OverdueBrush,
+            Nav = nav,
+            OnClick = onClick,
+            SortDate = due.Date
+        };
+    }
+
     private static bool JobDone(IJob j) => j switch
     {
         TaskItem t => t.IsComplete,
@@ -245,8 +313,10 @@ public partial class FloatingTasksWindow : Window
         var hdr = new TextBlock
         {
             Text = $"{label}   ({items.Count})",
-            FontWeight = FontWeights.Bold, FontSize = 12, Foreground = MutedBrush,
-            Margin = new Thickness(2, label == "TODAY" ? 0 : 14, 0, 6)
+            FontWeight = FontWeights.Bold, FontSize = 12,
+            Foreground = label == "OVERDUE" ? OverdueBrush : MutedBrush,
+            // The first section (Overdue when present, else Today) hugs the top; later sections get a gap.
+            Margin = new Thickness(2, Host.Children.Count == 0 ? 0 : 14, 0, 6)
         };
         Host.Children.Add(hdr);
 

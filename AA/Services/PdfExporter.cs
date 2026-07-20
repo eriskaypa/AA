@@ -20,6 +20,11 @@ using WpfRun = System.Windows.Documents.Run;
 using WpfLineBreak = System.Windows.Documents.LineBreak;
 using WpfSpan = System.Windows.Documents.Span;
 using WpfHyperlink = System.Windows.Documents.Hyperlink;
+using WpfTable = System.Windows.Documents.Table;
+using WpfTableCell = System.Windows.Documents.TableCell;
+using WpfTableRow = System.Windows.Documents.TableRow;
+using MdElements = MigraDoc.DocumentObjectModel.DocumentElements;
+using MdCell = MigraDoc.DocumentObjectModel.Tables.Cell;
 
 namespace AA.Services;
 
@@ -147,7 +152,6 @@ public static class PdfExporter
                 par.AddFormattedText($"{n++}. ", TextFormat.Bold);
                 par.AddText(it.Title ?? "");
                 var meta = new List<string>();
-                if (it.DurationMinutes > 0) meta.Add($"~{it.DurationMinutes}m");
                 if (it.IsJob) meta.Add("schedulable");
                 if (meta.Count > 0)
                 {
@@ -608,7 +612,7 @@ public static class PdfExporter
             if (string.IsNullOrWhiteSpace(textPeek)) return;
 
             if (!string.IsNullOrEmpty(heading)) H1(sec, heading);
-            foreach (var block in fd.Blocks) RenderBlock(sec, block);
+            foreach (var block in fd.Blocks) RenderBlock(sec.Elements, block);
         }
 
         // When rendered under a subtask, push everything to the requested indent
@@ -648,14 +652,18 @@ public static class PdfExporter
         return System.Net.WebUtility.HtmlDecode(sb.ToString()).Trim();
     }
 
-    private static void RenderBlock(Section sec, WpfBlock block, double listLevelCm = 0)
+    private static void RenderBlock(MdElements target, WpfBlock block, double listLevelCm = 0)
     {
         switch (block)
         {
             case WpfParagraph p:
                 {
-                    var par = sec.AddParagraph();
+                    var par = target.AddParagraph();
                     ApplyParagraphFormat(par, p);
+                    // Whole-line highlight: MigraDoc can't shade a sub-run span, but if every run in the
+                    // paragraph shares one background we can shade the paragraph (the common "highlight
+                    // this line" case). Partial (a few words) highlights aren't representable in MigraDoc.
+                    if (UniformInlineBackground(p) is Color hi) par.Format.Shading.Color = hi;
                     var anyText = false;
                     foreach (var inline in p.Inlines) anyText |= RenderInline(par, inline);
                     if (!anyText) par.AddText(" ");
@@ -678,7 +686,7 @@ public static class PdfExporter
                         {
                             if (b is WpfParagraph lp)
                             {
-                                var par = sec.AddParagraph();
+                                var par = target.AddParagraph();
                                 ApplyParagraphFormat(par, lp);
                                 // Position the bullet/number at this nesting level with a hanging
                                 // indent so wrapped lines align under the text, not the marker.
@@ -689,17 +697,132 @@ public static class PdfExporter
                             }
                             else if (b is WpfList nested)
                             {
-                                RenderBlock(sec, nested, listLevelCm + 0.6);
+                                RenderBlock(target, nested, listLevelCm + 0.6);
                             }
-                            else RenderBlock(sec, b, listLevelCm);
+                            else RenderBlock(target, b, listLevelCm);
                         }
                     }
                     break;
                 }
+            case WpfTable table:
+                RenderTable(target, table);
+                break;
             case WpfSection s:
-                foreach (var b in s.Blocks) RenderBlock(sec, b, listLevelCm);
+                foreach (var b in s.Blocks) RenderBlock(target, b, listLevelCm);
                 break;
         }
+    }
+
+    // ---------- tables (Insert-table in the editor -> a real MigraDoc table, not dropped) ----------
+
+    private static void RenderTable(MdElements target, WpfTable wt)
+    {
+        var rows = wt.RowGroups.SelectMany(g => g.Rows).ToList();
+        if (rows.Count == 0) return;
+        // True column count must account for row-spans carried down from earlier rows (a rowspan that is
+        // NOT in the widest row would otherwise be under-counted, dropping a real cell). Simulate placement.
+        int colCount = Math.Max(wt.Columns.Count, TrueColumnCount(rows));
+        if (colCount < 1) colCount = 1;
+
+        var mt = target.AddTable();
+        mt.Borders.Visible = false;               // borders are applied per-cell, mirroring the editor
+        var widths = ComputeColumnWidthsCm(wt, colCount, 16.0);
+        for (int c = 0; c < colCount; c++) mt.AddColumn(Unit.FromCentimeter(widths[c]));
+        for (int r = 0; r < rows.Count; r++) mt.AddRow();
+
+        // Track cells covered by a row/column span so real cells land in the right column.
+        var occupied = new bool[rows.Count, colCount];
+        for (int r = 0; r < rows.Count; r++)
+        {
+            int col = 0;
+            foreach (var wc in rows[r].Cells)
+            {
+                while (col < colCount && occupied[r, col]) col++;
+                if (col >= colCount) break;
+                int cs = Math.Clamp(Math.Max(1, wc.ColumnSpan), 1, colCount - col);
+                int rs = Math.Clamp(Math.Max(1, wc.RowSpan), 1, rows.Count - r);
+
+                var mcell = mt.Rows[r].Cells[col];
+                if (cs > 1) mcell.MergeRight = cs - 1;
+                if (rs > 1) mcell.MergeDown = rs - 1;
+                ApplyCellBorders(mcell, wc);
+                if (TryGetColor(wc.Background, out var bg)) mcell.Shading.Color = bg;
+                if (wc.FontWeight.ToOpenTypeWeight() >= 600) mcell.Format.Font.Bold = true;  // header row
+                RenderCellContent(mcell, wc);
+
+                for (int dr = 0; dr < rs; dr++)
+                    for (int dc = 0; dc < cs; dc++)
+                        occupied[r + dr, col + dc] = true;
+                col += cs;
+            }
+        }
+    }
+
+    /// <summary>How many columns the table truly needs — simulates cell placement with an unbounded grid
+    /// (skipping cells still covered by a row-span from an earlier row) and returns the furthest column
+    /// reached. Prevents dropping a cell when a row-span lives outside the widest row (pasted tables).</summary>
+    private static int TrueColumnCount(List<WpfTableRow> rows)
+    {
+        var occupied = new HashSet<(int r, int c)>();
+        int maxCol = 0;
+        for (int r = 0; r < rows.Count; r++)
+        {
+            int col = 0;
+            foreach (var wc in rows[r].Cells)
+            {
+                while (occupied.Contains((r, col))) col++;
+                int cs = Math.Max(1, wc.ColumnSpan);
+                int rs = Math.Max(1, wc.RowSpan);
+                for (int dr = 0; dr < rs; dr++)
+                    for (int dc = 0; dc < cs; dc++)
+                        occupied.Add((r + dr, col + dc));
+                col += cs;
+                if (col > maxCol) maxCol = col;
+            }
+        }
+        return maxCol;
+    }
+
+    private static void RenderCellContent(MdCell mcell, WpfTableCell wc)
+    {
+        int before = mcell.Elements.Count;
+        foreach (var b in wc.Blocks) RenderBlock(mcell.Elements, b);
+        if (mcell.Elements.Count == before) mcell.AddParagraph();   // keep empty cells non-collapsed
+    }
+
+    private static void ApplyCellBorders(MdCell mcell, WpfTableCell wc)
+    {
+        var th = wc.BorderThickness;
+        double w = Math.Max(Math.Max(th.Left, th.Right), Math.Max(th.Top, th.Bottom));
+        if (w <= 0) { mcell.Borders.Visible = false; return; }
+        mcell.Borders.Width = w;
+        mcell.Borders.Color = TryGetColor(wc.BorderBrush, out var bc) ? bc : new Color(120, 120, 120);
+    }
+
+    /// <summary>Column widths in cm: honour explicit absolute (px) widths, otherwise split the printable
+    /// width (~16 cm) evenly \u2014 which is how the editor's auto-width columns look.</summary>
+    private static double[] ComputeColumnWidthsCm(WpfTable wt, int colCount, double totalCm)
+    {
+        const double pxToCm = 2.54 / 96.0;
+        var w = new double[colCount];
+        bool anyAbsolute = false;
+        for (int c = 0; c < colCount && c < wt.Columns.Count; c++)
+        {
+            var gl = wt.Columns[c].Width;
+            if (gl.IsAbsolute && gl.Value > 0) { w[c] = gl.Value * pxToCm; anyAbsolute = true; }
+        }
+        if (!anyAbsolute)
+        {
+            for (int c = 0; c < colCount; c++) w[c] = totalCm / colCount;
+            return w;
+        }
+        double known = w.Where(x => x > 0).Sum();
+        int missing = w.Count(x => x <= 0);
+        double each = missing > 0 ? Math.Max(1.0, (totalCm - known) / missing) : 0;
+        for (int c = 0; c < colCount; c++) if (w[c] <= 0) w[c] = each;
+        double tot = w.Sum();
+        if (tot > totalCm) { double k = totalCm / tot; for (int c = 0; c < colCount; c++) w[c] *= k; }
+        return w;
     }
 
     private static void ApplyParagraphFormat(Paragraph par, WpfParagraph wp)
@@ -777,7 +900,7 @@ public static class PdfExporter
 
     private static void AddRun(Paragraph par, WpfInline source, string text)
     {
-        var ft = par.AddFormattedText(text, ResolveFormat(source));
+        var ft = par.AddFormattedText(ApplyStrike(source, text), ResolveFormat(source));
         if (TryGetColor(source.Foreground, out var fg)) ft.Color = fg;
         if (source.FontFamily != null && !string.IsNullOrEmpty(source.FontFamily.Source))
             ft.Font.Name = ResolveFontName(source.FontFamily.Source);
@@ -819,7 +942,7 @@ public static class PdfExporter
     /// familiar blue-underlined link look so it reads as a link on the page as well as being clickable.</summary>
     private static void AddLinkedText(MigraDoc.DocumentObjectModel.Hyperlink link, WpfInline source, string text)
     {
-        var ft = link.AddFormattedText(text, ResolveFormat(source) | TextFormat.Underline);
+        var ft = link.AddFormattedText(ApplyStrike(source, text), ResolveFormat(source) | TextFormat.Underline);
         ft.Color = LinkBlue;
         if (source.FontFamily != null && !string.IsNullOrEmpty(source.FontFamily.Source))
             ft.Font.Name = ResolveFontName(source.FontFamily.Source);
@@ -866,15 +989,80 @@ public static class PdfExporter
         if (source.FontWeight.ToOpenTypeWeight() >= 600) format |= TextFormat.Bold;
         if (source.FontStyle == System.Windows.FontStyles.Italic || source.FontStyle == System.Windows.FontStyles.Oblique)
             format |= TextFormat.Italic;
-        if (source.TextDecorations != null && source.TextDecorations.Count > 0)
-        {
-            var dec = source.TextDecorations[0];
-            // MigraDoc's TextFormat enum has no Strikethrough flag in this version; underline both
-            // strikethrough and underline runs so the reader still sees a visible decoration.
+        // Real underline only — strikethrough is rendered in the text itself (see ApplyStrike), because
+        // MigraDoc has no strikethrough flag and rendering it as underline would be misleading.
+        if (HasDecoration(source, System.Windows.TextDecorationLocation.Underline))
             format |= TextFormat.Underline;
-            _ = dec; // suppress unused warning
-        }
         return format;
+    }
+
+    private static bool HasDecoration(WpfInline s, System.Windows.TextDecorationLocation loc) =>
+        s.TextDecorations != null && s.TextDecorations.Any(d => d.Location == loc);
+
+    // MigraDoc/PDFsharp has no strikethrough font flag, so struck text gets the Unicode combining
+    // long-stroke overlay (U+0336) after each character — a genuine line through the glyphs that stays
+    // selectable — instead of the old, misleading fallback to underline.
+    private const char CombiningStrikeChar = '̶';   // combining long stroke overlay
+    private static string ApplyStrike(WpfInline source, string text)
+    {
+        if (string.IsNullOrEmpty(text) || !HasDecoration(source, System.Windows.TextDecorationLocation.Strikethrough))
+            return text;
+        var sb = new StringBuilder(text.Length * 2);
+        for (int i = 0; i < text.Length;)
+        {
+            // Advance a full code point so the combining overlay never lands inside a surrogate pair (emoji).
+            int n = char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]) ? 2 : 1;
+            sb.Append(text, i, n);
+            // Strike glyphs only, not whitespace: a combining mark on a space produces a stray stroke at a
+            // soft-wrap boundary (the mark stays attached to the space that moves to the next line).
+            if (!char.IsControl(text[i]) && !char.IsWhiteSpace(text[i])) sb.Append(CombiningStrikeChar);
+            i += n;
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>If every text run in the paragraph shares one non-transparent background, return it (so the
+    /// whole paragraph can be shaded); null when backgrounds are mixed/absent.</summary>
+    private static Color? UniformInlineBackground(WpfParagraph p)
+    {
+        Color? found = null;
+        bool anyText = false;
+        foreach (var run in EnumRuns(p.Inlines))
+        {
+            if (string.IsNullOrEmpty(run.Text)) continue;
+            anyText = true;
+            if (!TryGetColor(EffectiveBackground(run), out var c)) return null;
+            if (found == null) found = c;
+            else if (!found.Value.Equals(c)) return null;
+        }
+        if (!anyText || found is not Color fc) return null;
+        // The edit-lock marks protected text with a pale-gold background sentinel — don't leak that
+        // internal marker into the PDF as a highlight.
+        if (fc.R == 255 && fc.G == 230 && fc.B == 153) return null;
+        return fc;
+    }
+
+    private static IEnumerable<WpfRun> EnumRuns(System.Windows.Documents.InlineCollection inlines)
+    {
+        foreach (var il in inlines)
+        {
+            if (il is WpfRun r) yield return r;
+            else if (il is WpfSpan sp) foreach (var x in EnumRuns(sp.Inlines)) yield return x; // Hyperlink : Span
+        }
+    }
+
+    /// <summary>A run's effective highlight: its own background, else the nearest ancestor's (WPF paints a
+    /// span's/paragraph's background behind its text even though Background isn't an inherited property).</summary>
+    private static System.Windows.Media.Brush? EffectiveBackground(System.Windows.Documents.TextElement te)
+    {
+        System.Windows.DependencyObject? d = te;
+        while (d is System.Windows.Documents.TextElement t)
+        {
+            if (t.Background != null) return t.Background;
+            if (t is WpfParagraph) break;   // stop at the paragraph — don't inherit a table cell/row background
+            d = t.Parent;
+        }
+        return null;
     }
 
     private static bool TryGetColor(System.Windows.Media.Brush? brush, out Color color)
