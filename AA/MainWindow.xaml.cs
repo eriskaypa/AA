@@ -26,7 +26,7 @@ public partial class MainWindow : Window
     private DateTime? _lastSeenRemote;
 
     // Shared save file (single-file multi-instance sync) state.
-    private DispatcherTimer? _sharedSaveTimer;   // periodic save to the shared file (every 10 min)
+    private DispatcherTimer? _sharedSaveTimer;   // periodic save to the shared file (every 1 min)
     private DispatcherTimer? _sharedSyncTimer;   // periodic poll for external updates
     private DispatcherTimer? _sharedDebounce;    // debounce for FileSystemWatcher bursts
     private FileSystemWatcher? _sharedWatcher;
@@ -61,7 +61,7 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(new Action(() => CrewPg.CheckExpiries(interactive: false)),
             DispatcherPriority.Background);
 
-        // If a shared save file is configured, start the 10-min push + external-update watch, and do an
+        // If a shared save file is configured, start the 1-min push + external-update watch, and do an
         // immediate check so we adopt a newer bundle another copy wrote while this PC was closed.
         _sharedLastSeen = _repo?.Data.LastModified;
         _lastSyncedStamp = _repo?.Data.LastModified;   // treat startup state as in-sync with the bundle
@@ -741,8 +741,8 @@ public partial class MainWindow : Window
         var path = DataStore.SharedSaveFile;
         if (string.IsNullOrWhiteSpace(path)) return;
 
-        // Save to the shared file every 10 minutes (only when there are changes, to avoid churn).
-        _sharedSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(10) };
+        // Save to the shared file every minute (only when there are changes, to avoid churn).
+        _sharedSaveTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(1) };
         _sharedSaveTimer.Tick += (_, _) => SharedSaveTick();
         _sharedSaveTimer.Start();
 
@@ -787,15 +787,48 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>Every 10 minutes: first reconcile (adopt a newer bundle another copy wrote), then push
+    /// <summary>Every minute: first reconcile (adopt a newer bundle another copy wrote), then push
     /// our data AND attachments to the shared bundle if we have changes.</summary>
+    private bool _sharedPushRunning;
+
     private void SharedSaveTick()
     {
         if (_repo == null || string.IsNullOrWhiteSpace(DataStore.SharedSaveFile) || _handlingSharedUpdate) return;
         CheckSharedFileForUpdate();                 // don't overwrite a newer version from another copy
         FlushAllEditors();
         if (!_repo.IsDirty) return;                 // nothing changed — don't churn the shared bundle
-        PushToShared("Shared save");
+        _ = PushToSharedBackground("Shared save");  // offload the (potentially heavy) zip off the UI thread
+    }
+
+    /// <summary>The periodic-tick push. The UI-thread parts (flush/capture/save + the atomic rename + stamp
+    /// bookkeeping) stay on the UI thread; only the heavy re-zip of data + attachments is offloaded to a
+    /// background thread — so a 1-minute cadence with large attachments doesn't freeze the window. A running
+    /// guard means a slow push never stacks with the next tick. (On-close still uses the synchronous
+    /// <see cref="PushToShared"/> so the final save completes before exit.)</summary>
+    private async System.Threading.Tasks.Task PushToSharedBackground(string label)
+    {
+        if (_sharedPushRunning) return;
+        var path = DataStore.SharedSaveFile;
+        if (_repo == null || string.IsNullOrWhiteSpace(path)) return;
+        _sharedPushRunning = true;
+        var tmp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            FlushAllEditors();
+            CaptureUiState();
+            _repo.Save();                            // write local data.json (UI thread)
+            await System.Threading.Tasks.Task.Run(() => DataStore.ExportFolderToZip(tmp));  // heavy IO off-thread
+            File.Move(tmp, path!, overwrite: true);  // fast atomic replace (back on the UI thread)
+            _sharedLastSeen = _repo.Data.LastModified;
+            _lastSyncedStamp = _repo.Data.LastModified;   // our local state now matches the bundle
+            StatusBlock.Text = $"{label} written {DateTime.Now:HH:mm:ss} (data + attachments).";
+        }
+        catch (Exception ex) { StatusBlock.Text = $"{label} failed: {ex.Message}"; }
+        finally
+        {
+            try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
+            _sharedPushRunning = false;
+        }
     }
 
     /// <summary>Bundle the current data AND all attachments into the shared ZIP, written atomically

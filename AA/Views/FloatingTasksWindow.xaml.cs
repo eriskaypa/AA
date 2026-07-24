@@ -104,6 +104,9 @@ public partial class FloatingTasksWindow : Window
         public Action? OnClick;
         /// <summary>Ordering key for the Overdue section (oldest deadline first); unused elsewhere.</summary>
         public DateTime SortDate = DateTime.MaxValue;
+        /// <summary>The completable model behind this row (TaskItem / Procedure / ChecklistStep), so the row
+        /// gets a "done" checkbox. Null for rows that aren't directly completable.</summary>
+        public object? Item;
     }
 
     public void Refresh()
@@ -147,11 +150,11 @@ public partial class FloatingTasksWindow : Window
         // subtask with its own deadline).
         foreach (var p in _repo.Data.Procedures)
         {
-            if (p.Deadline?.Date == day && seen.Add(p.Id))
-                items.Add(new DueItem { Icon = "📋", Title = p.Name, Sub = "Procedure", Accent = ProcBrush, Nav = p });
+            if (p.Status != WorkStatus.Done && p.Deadline?.Date == day && seen.Add(p.Id))
+                items.Add(new DueItem { Icon = "📋", Title = p.Name, Sub = "Procedure", Accent = ProcBrush, Nav = p, Item = p });
             foreach (var s in p.Steps)
                 if (!s.Done && s.Deadline?.Date == day && seen.Add(s.Id))
-                    items.Add(new DueItem { Icon = "☑", Title = s.Title, Sub = $"Checklist step · {p.Name}", Accent = ProcBrush, Nav = p });
+                    items.Add(new DueItem { Icon = "☑", Title = s.Title, Sub = $"Checklist step · {p.Name}", Accent = ProcBrush, Nav = p, Item = s });
         }
 
         // Crew members' personal checklist items with a deadline on this day (not done). Clicking a row
@@ -167,7 +170,8 @@ public partial class FloatingTasksWindow : Window
                         Title = s.Title,
                         Sub = $"Crew checklist · {(member.FullName.Length > 0 ? member.FullName : "(unnamed)")}",
                         Accent = CrewBrush,
-                        OnClick = _navigateCrew != null ? () => _navigateCrew(member) : null
+                        OnClick = _navigateCrew != null ? () => _navigateCrew(member) : null,
+                        Item = s
                     });
         }
 
@@ -184,7 +188,8 @@ public partial class FloatingTasksWindow : Window
                 Sub = $"Scheduled {j.ScheduledStart:HH:mm}" + (ctx.Length > 0 ? $" · {ctx}" : ""),
                 Accent = JobBrush,
                 Nav = nav,
-                OnClick = onClick
+                OnClick = onClick,
+                Item = j
             });
         }
 
@@ -212,7 +217,8 @@ public partial class FloatingTasksWindow : Window
                 Title = t.Name,
                 Sub = kind,
                 Accent = TaskBrush,
-                Nav = owner
+                Nav = owner,
+                Item = t
             });
         }
         foreach (var st in t.Subtasks) CollectTask(owner, st, day, items, seen);
@@ -232,10 +238,10 @@ public partial class FloatingTasksWindow : Window
         foreach (var p in _repo.Data.Procedures)
         {
             if (p.Status != WorkStatus.Done && p.Deadline is DateTime pd && pd.Date < today && seen.Add(p.Id))
-                items.Add(MkOverdue("📋", p.Name, "Procedure", pd, today, p));
+                items.Add(MkOverdue("📋", p.Name, "Procedure", pd, today, p, item: p));
             foreach (var s in p.Steps)
                 if (!s.Done && s.Deadline is DateTime sd && sd.Date < today && seen.Add(s.Id))
-                    items.Add(MkOverdue("☑", s.Title, $"Checklist step · {p.Name}", sd, today, p));
+                    items.Add(MkOverdue("☑", s.Title, $"Checklist step · {p.Name}", sd, today, p, item: s));
         }
 
         foreach (var c in _repo.Data.Crew)
@@ -245,7 +251,7 @@ public partial class FloatingTasksWindow : Window
                 if (!s.Done && s.Deadline is DateTime sd && sd.Date < today && seen.Add(s.Id))
                     items.Add(MkOverdue("🧑‍✈️", s.Title,
                         $"Crew checklist · {(member.FullName.Length > 0 ? member.FullName : "(unnamed)")}", sd, today,
-                        null, _navigateCrew != null ? () => _navigateCrew(member) : null));
+                        null, _navigateCrew != null ? () => _navigateCrew(member) : null, item: s));
         }
 
         return items.OrderBy(i => i.SortDate).ToList();
@@ -258,13 +264,13 @@ public partial class FloatingTasksWindow : Window
         if (!t.IsComplete && t.Deadline is DateTime d && d.Date < today && seen.Add(t.Id))
         {
             bool isSub = !ReferenceEquals(owner, t);
-            items.Add(MkOverdue(isSub ? "↳" : "✓", t.Name, isSub ? $"Subtask · {owner.Name}" : "Task", d, today, owner));
+            items.Add(MkOverdue(isSub ? "↳" : "✓", t.Name, isSub ? $"Subtask · {owner.Name}" : "Task", d, today, owner, item: t));
         }
         foreach (var st in t.Subtasks) CollectOverdueTask(owner, st, today, items, seen);
     }
 
     private static DueItem MkOverdue(string icon, string title, string kind, DateTime due, DateTime today,
-        HierarchyItem? nav, Action? onClick = null)
+        HierarchyItem? nav, Action? onClick = null, object? item = null)
     {
         int days = (int)(today - due.Date).TotalDays;
         return new DueItem
@@ -275,7 +281,8 @@ public partial class FloatingTasksWindow : Window
             Accent = OverdueBrush,
             Nav = nav,
             OnClick = onClick,
-            SortDate = due.Date
+            SortDate = due.Date,
+            Item = item
         };
     }
 
@@ -343,6 +350,24 @@ public partial class FloatingTasksWindow : Window
             Cursor = (it.Nav != null || it.OnClick != null) ? Cursors.Hand : Cursors.Arrow
         };
         var dock = new DockPanel();
+
+        // Completable rows get a "done" checkbox — tick it to mark the item complete; it then drops off
+        // the window (a done item is no longer overdue or due).
+        if (it.Item != null)
+        {
+            var chk = new CheckBox
+            {
+                IsChecked = IsItemDone(it.Item),
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, 1, 6, 0),
+                ToolTip = "Mark done"
+            };
+            chk.Checked += (_, _) => CompleteItem(it.Item, true);
+            chk.Unchecked += (_, _) => CompleteItem(it.Item, false);
+            DockPanel.SetDock(chk, Dock.Left);
+            dock.Children.Add(chk);
+        }
+
         dock.Children.Add(new TextBlock
         {
             Text = it.Icon, FontSize = 15, Width = 24, VerticalAlignment = VerticalAlignment.Top,
@@ -362,10 +387,31 @@ public partial class FloatingTasksWindow : Window
         dock.Children.Add(sp);
         border.Child = dock;
 
-        if (it.OnClick != null)
-            border.MouseLeftButtonUp += (_, _) => it.OnClick();
-        else if (it.Nav != null)
-            border.MouseLeftButtonUp += (_, _) => { _navigate?.Invoke(it.Nav); };
+        if (it.OnClick != null || it.Nav != null)
+            border.MouseLeftButtonUp += (_, e) =>
+            {
+                // A click on the row's checkbox marks it done — it must not also navigate.
+                if (e.OriginalSource is DependencyObject src && UiTree.FindAncestor<CheckBox>(src) != null) return;
+                if (it.OnClick != null) it.OnClick();
+                else _navigate?.Invoke(it.Nav!);
+            };
         return border;
+    }
+
+    private static bool IsItemDone(object? item) => item switch
+    {
+        TaskItem t => t.IsComplete,
+        Procedure p => p.Status == WorkStatus.Done,
+        ChecklistStep s => s.Done,
+        _ => false
+    };
+
+    /// <summary>Mark the row's underlying item done/undone, persist, and rebuild the list (a completed item
+    /// leaves the window). Refresh is deferred so we don't tear down the checkbox from inside its own event.</summary>
+    private void CompleteItem(object? item, bool done)
+    {
+        if (_repo == null || item == null) return;
+        if (BatchDone.SetDone(item, done)) { _repo.MarkDirty(); _repo.FlushIfDirty(); }
+        Dispatcher.BeginInvoke(new Action(Refresh));
     }
 }
