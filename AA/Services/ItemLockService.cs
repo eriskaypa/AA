@@ -76,6 +76,10 @@ public static class ItemLockService
     /// <summary>True when the item is locked and has NOT been unlocked this session (so it must be gated).</summary>
     public static bool IsGated(HierarchyItem item) => item.IsLockProtected && !_unlocked.Contains(item.Id);
 
+    /// <summary>Re-gate a single item that was unlocked this session, so it must be unlocked again to open
+    /// (no effect if it isn't password-protected).</summary>
+    public static void Relock(HierarchyItem item) => _unlocked.Remove(item.Id);
+
     /// <summary>Forget every session unlock so all locked items are gated again.</summary>
     public static void RelockAll() => _unlocked.Clear();
 }

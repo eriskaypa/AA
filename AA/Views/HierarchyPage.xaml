@@ -105,6 +105,9 @@
                         <Button DockPanel.Dock="Right" Content="Export PDF..." Click="ExportPdf_Click" Margin="6,0,0,0" ToolTip="Export this item, its hierarchy and relationships to an A4 PDF."/>
                         <Button DockPanel.Dock="Right" x:Name="LockBtn" Content="🔒 Lock" Click="LockBtn_Click" Margin="6,0,0,0"
                                 ToolTip="Password-protect this entry (with an optional hint). The master password always unlocks."/>
+                        <Button DockPanel.Dock="Right" x:Name="RelockBtn" Content="🔒 Lock again" Click="RelockBtn_Click" Margin="6,0,0,0"
+                                Visibility="Collapsed"
+                                ToolTip="Re-gate this entry now — it will need the password again to open (this session)."/>
                         <TextBox x:Name="NameBox" TextChanged="NameBox_TextChanged"
                                  LostFocus="NameBox_LostFocus" KeyDown="NameBox_KeyDown"/>
                     </DockPanel>

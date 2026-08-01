@@ -649,4 +649,17 @@ public class UiState
     /// <summary>Sidebar group expanded/collapsed state, keyed by "kind|groupName".
     /// Missing entries are treated as expanded (default).</summary>
     public Dictionary<string, bool> GroupExpanded { get; set; } = new();
+
+    // --- Crew roster + table view ---
+    /// <summary>How the Crew roster is sorted (a <c>CrewSortMode</c> name). Null = default (sign-off).</summary>
+    public string? CrewSortMode { get; set; }
+    /// <summary>Full ordered list of ALL column KEYS in the crew table window (display order, shown AND
+    /// hidden — so a hidden column keeps its place). Empty/null = never configured (use the defaults).</summary>
+    public List<string> CrewTableColumns { get; set; } = new();
+    /// <summary>Which of <see cref="CrewTableColumns"/> are actually shown. An empty list here with a
+    /// non-empty order means the user deliberately unticked everything (respected, not reset to defaults).</summary>
+    public List<string> CrewTableShownColumns { get; set; } = new();
+    /// <summary>Date display for the crew table: a <c>CrewDateFormat</c> name and the separator character(s).</summary>
+    public string? CrewTableDateFormat { get; set; }
+    public string? CrewTableDateSeparator { get; set; }
 }

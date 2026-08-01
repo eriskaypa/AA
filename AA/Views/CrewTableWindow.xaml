@@ -1,0 +1,75 @@
+<Window x:Class="AA.Views.CrewTableWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Crew — table view" Height="640" Width="1120"
+        WindowStartupLocation="CenterOwner"
+        Icon="pack://application:,,,/AA.ico">
+    <DockPanel Margin="10">
+        <!-- Top bar: date format / separator / export -->
+        <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" BorderBrush="{DynamicResource BorderB}"
+                BorderThickness="1" CornerRadius="4" Padding="8,6" Margin="0,0,0,6">
+            <WrapPanel>
+                <TextBlock Text="Date format:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <ComboBox x:Name="FormatBox" Width="185" Margin="0,0,12,0" SelectionChanged="Config_Changed"/>
+                <TextBlock Text="Separator:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <TextBox x:Name="SepBox" Width="46" Margin="0,0,12,0" MaxLength="3" TextChanged="Sep_Changed"
+                         ToolTip="Character(s) placed between date parts, e.g. - / ."/>
+                <Button Content="📄 Export to Excel (.xlsx)…" Style="{StaticResource AccentButton}" Click="Export_Click"/>
+                <TextBlock x:Name="CountText" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="{DynamicResource Muted}"/>
+            </WrapPanel>
+        </Border>
+
+        <!-- Bottom bar -->
+        <Border DockPanel.Dock="Bottom" Padding="0,8,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="Close" MinWidth="90" IsCancel="True" Click="Close_Click"/>
+            </StackPanel>
+        </Border>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="270"/>
+                <ColumnDefinition Width="6"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Column chooser / order -->
+            <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" Padding="8,5"
+                            BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
+                        <TextBlock Text="Columns — tick to show, ↑/↓ to reorder" FontWeight="Bold" TextWrapping="Wrap"/>
+                    </Border>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="6,6">
+                        <Button Content="↑" MinWidth="34" Margin="0,0,4,0" Click="Up_Click" ToolTip="Move selected column up"/>
+                        <Button Content="↓" MinWidth="34" Margin="0,0,10,0" Click="Down_Click" ToolTip="Move selected column down"/>
+                        <Button Content="All" MinWidth="40" Margin="0,0,4,0" Click="All_Click"/>
+                        <Button Content="None" MinWidth="46" Click="None_Click"/>
+                    </StackPanel>
+                    <ListBox x:Name="ColsBox" BorderThickness="0" HorizontalContentAlignment="Stretch"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <CheckBox Content="{Binding Header}" Margin="2,1"
+                                          IsChecked="{Binding Shown, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                          Checked="Shown_Changed" Unchecked="Shown_Changed"/>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
+            </Border>
+
+            <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{DynamicResource BorderB}"/>
+
+            <!-- The table -->
+            <Border Grid.Column="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+                <ListView x:Name="Table" BorderThickness="0"
+                          ScrollViewer.HorizontalScrollBarVisibility="Auto">
+                    <ListView.View>
+                        <GridView x:Name="Grid"/>
+                    </ListView.View>
+                </ListView>
+            </Border>
+        </Grid>
+    </DockPanel>
+</Window>

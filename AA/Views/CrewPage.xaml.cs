@@ -18,6 +18,10 @@ public partial class CrewPage : UserControl
     private AppRepository? _repo;
     private CrewMember? _selected;
     private bool _expiringOnly;
+    private CrewSortMode _sortMode = CrewSortMode.SignOffDate;
+    private bool _loadingSort;
+
+    private sealed record SortOption(CrewSortMode Mode, string Label);
 
     /// <summary>Contracts within this many days (or already past) are treated as "expiring".</summary>
     public const int WarnDays = 60;
@@ -46,7 +50,70 @@ public partial class CrewPage : UserControl
     {
         _repo = repo;
         _selected = null;
+        _sortMode = Enum.TryParse<CrewSortMode>(repo.Data.Ui.CrewSortMode, out var sm) ? sm : CrewSortMode.SignOffDate;
+
+        if (SortBox.ItemsSource == null)
+        {
+            SortBox.ItemsSource = new[]
+            {
+                new SortOption(CrewSortMode.SignOffDate, "Sign-off date"),
+                new SortOption(CrewSortMode.LastName,    "Last name"),
+                new SortOption(CrewSortMode.FirstName,   "First name"),
+                new SortOption(CrewSortMode.Cid,         "CID"),
+                new SortOption(CrewSortMode.BirthDate,   "Birth date"),
+            };
+            SortBox.DisplayMemberPath = nameof(SortOption.Label);
+        }
+        _loadingSort = true;
+        SortBox.SelectedItem = ((SortOption[])SortBox.ItemsSource).FirstOrDefault(o => o.Mode == _sortMode);
+        _loadingSort = false;
+
         Refresh();
+    }
+
+    private void SortBox_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingSort || _repo == null) return;
+        if (SortBox.SelectedItem is SortOption o)
+        {
+            _sortMode = o.Mode;
+            _repo.Data.Ui.CrewSortMode = _sortMode.ToString();
+            _repo.MarkDirty();
+            Refresh();
+        }
+    }
+
+    /// <summary>Order a crew set by the current sort mode. Unknown/blank sort keys sink to the bottom.</summary>
+    private IEnumerable<CrewMember> SortCrew(IEnumerable<CrewMember> crew, DateTime today) => _sortMode switch
+    {
+        // Blank keys sink last (OrderBy on the "is blank" flag puts false/non-blank first).
+        CrewSortMode.LastName  => crew.OrderBy(c => string.IsNullOrWhiteSpace(c.LastName))
+                                      .ThenBy(c => c.LastName, StringComparer.OrdinalIgnoreCase)
+                                      .ThenBy(c => c.FirstName, StringComparer.OrdinalIgnoreCase),
+        CrewSortMode.FirstName => crew.OrderBy(c => string.IsNullOrWhiteSpace(c.FirstName))
+                                      .ThenBy(c => c.FirstName, StringComparer.OrdinalIgnoreCase)
+                                      .ThenBy(c => c.LastName, StringComparer.OrdinalIgnoreCase),
+        CrewSortMode.Cid       => crew.OrderBy(c => string.IsNullOrWhiteSpace(c.EmployeeId))
+                                      .ThenBy(c => c.EmployeeId, StringComparer.OrdinalIgnoreCase)
+                                      .ThenBy(c => c.FullName, StringComparer.OrdinalIgnoreCase),
+        CrewSortMode.BirthDate => crew.OrderBy(c => CrewMember.ParseDate(c.DateOfBirth) ?? DateTime.MaxValue)
+                                      .ThenBy(c => c.FullName, StringComparer.OrdinalIgnoreCase),
+        _                      => crew.OrderBy(c => c.DaysUntilSignOff(today) ?? int.MaxValue)
+                                      .ThenBy(c => c.FullName, StringComparer.OrdinalIgnoreCase),
+    };
+
+    private void TableView_Click(object sender, RoutedEventArgs e)
+    {
+        if (_repo == null) return;
+        if (_repo.Data.Crew.Count == 0)
+        {
+            MessageBox.Show(Window.GetWindow(this), "No crew yet — import a COMPAS report first.",
+                "Table view", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var sorted = SortCrew(_repo.Data.Crew, DateTime.Today).ToList();
+        new CrewTableWindow(_repo, sorted) { Owner = Window.GetWindow(this) }.ShowDialog();
+        _repo.FlushIfDirty();   // persist any column/format choices made in the window
     }
 
     /// <summary>Crew whose contract is overdue or within <see cref="WarnDays"/> days.</summary>
@@ -96,10 +163,8 @@ public partial class CrewPage : UserControl
         if (_expiringOnly)
             crew = crew.Where(c => c.DaysUntilSignOff(today) is int d && d <= WarnDays);
 
-        // Soonest-expiring first (unknown dates sink to the bottom), then by name.
-        var rows = crew
-            .OrderBy(c => c.DaysUntilSignOff(today) ?? int.MaxValue)
-            .ThenBy(c => c.FullName, StringComparer.OrdinalIgnoreCase)
+        // Ordered by the chosen sort mode (default: soonest-expiring first, unknown dates last).
+        var rows = SortCrew(crew, today)
             .Select(c =>
             {
                 var (text, brush) = Expiry(c, today);

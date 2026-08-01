@@ -32,3 +32,6 @@ google_client_secret.json
 google-token/
 data.json
 crash.log
+
+# Local scratch / review artifacts
+.scratch/

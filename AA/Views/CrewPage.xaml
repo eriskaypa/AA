@@ -23,11 +23,16 @@
                 </Border>
                 <Border DockPanel.Dock="Top" Background="{DynamicResource Panel}" Padding="6,4" BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
                     <WrapPanel>
-                        <Button Content="Contract expiries" Margin="0,0,4,0" Click="CheckExpiries_Click"
+                        <Button Content="Contract expiries" Margin="0,0,4,4" Click="CheckExpiries_Click"
                                 ToolTip="List crew whose contracts (sign-off dates) are due soon or overdue."/>
-                        <ToggleButton x:Name="ExpiringOnlyBtn" Content="Expiring only" Margin="0,0,4,0" Click="ExpiringOnly_Click"
+                        <ToggleButton x:Name="ExpiringOnlyBtn" Content="Expiring only" Margin="0,0,4,4" Click="ExpiringOnly_Click"
                                       ToolTip="Show only crew whose contract is overdue or within 60 days."/>
-                        <Button Content="Clear all" Click="ClearAll_Click" ToolTip="Remove every crew member from the roster."/>
+                        <Button Content="Clear all" Margin="0,0,10,4" Click="ClearAll_Click" ToolTip="Remove every crew member from the roster."/>
+                        <TextBlock Text="Sort:" VerticalAlignment="Center" Margin="0,0,4,4"/>
+                        <ComboBox x:Name="SortBox" Width="130" Margin="0,0,10,4" SelectionChanged="SortBox_Changed"
+                                  ToolTip="Order the roster by last name, first name, CID, birth date or sign-off date."/>
+                        <Button Content="▦ Table view…" Margin="0,0,0,4" Click="TableView_Click"
+                                ToolTip="Open all crew in a tabulated window: choose columns and order, set the date format, and export to Excel."/>
                     </WrapPanel>
                 </Border>
                 <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Margin="6" TextChanged="SearchBox_TextChanged" Tag="Search name / rank / nationality / ID..."/>

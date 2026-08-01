@@ -448,7 +448,12 @@ public partial class HierarchyPage : UserControl
 
     private void UpdateLockButton()
     {
-        if (_selected == null) { LockBtn.Visibility = Visibility.Collapsed; return; }
+        if (_selected == null)
+        {
+            LockBtn.Visibility = Visibility.Collapsed;
+            RelockBtn.Visibility = Visibility.Collapsed;
+            return;
+        }
         bool gated = ItemLockService.IsGated(_selected);
         // While gated, the overlay handles unlocking; hide the manage button until unlocked.
         LockBtn.Visibility = gated ? Visibility.Collapsed : Visibility.Visible;
@@ -456,6 +461,16 @@ public partial class HierarchyPage : UserControl
         LockBtn.ToolTip = _selected.IsLockProtected
             ? "This entry is password-protected. Click to change the password/hint or remove the lock."
             : "Password-protect this entry (with an optional hint). The master password always unlocks.";
+        // "Lock again" only makes sense for a protected entry that is currently unlocked this session.
+        RelockBtn.Visibility = (_selected.IsLockProtected && !gated) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RelockBtn_Click(object sender, RoutedEventArgs e)
+    {
+        if (_selected == null) return;
+        ItemLockService.Relock(_selected);
+        ApplyLockGate();
+        StatusText($"'{_selected.Name}' locked again — the password is needed to open it.");
     }
 
     private string KindWord() => _kind switch

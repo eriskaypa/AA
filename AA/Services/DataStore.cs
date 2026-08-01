@@ -217,11 +217,22 @@ public static class DataStore
         return data;
     }
 
-    public static void Save(AppData data)
+    public static void Save(AppData data) => WriteData(SerializeForSave(data));
+
+    /// <summary>Serialize the model to the JSON we persist (normalising file paths first). CPU-bound and
+    /// O(model size); the debounced autosave runs this on the UI thread to capture a consistent snapshot,
+    /// then hands the string to <see cref="WriteData"/> on a background thread so disk I/O never blocks typing.</summary>
+    public static string SerializeForSave(AppData data)
+    {
+        NormalizeFilePaths(data);
+        return JsonSerializer.Serialize(data, Opts);
+    }
+
+    /// <summary>Atomically write already-serialized data to the current data file (safe off the UI thread).</summary>
+    public static void WriteData(string json)
     {
         Directory.CreateDirectory(AppFolder);
-        NormalizeFilePaths(data);
-        AtomicWrite(CurrentDataFile, JsonSerializer.Serialize(data, Opts));
+        AtomicWrite(CurrentDataFile, json);
     }
 
     public static void SaveTo(AppData data, string path)

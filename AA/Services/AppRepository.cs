@@ -14,6 +14,9 @@ public class AppRepository
 
     private readonly DispatcherTimer _debounce;
     private bool _dirty;
+    // Background writes are chained so they commit strictly in order (a newer save can't be overtaken
+    // by an older one). Only ever assigned on the UI thread.
+    private System.Threading.Tasks.Task _writeChain = System.Threading.Tasks.Task.CompletedTask;
 
     /// <summary>Raised after a successful (immediate or debounced) save.</summary>
     public event Action? Saved;
@@ -22,7 +25,43 @@ public class AppRepository
     {
         Data = data;
         _debounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(750) };
-        _debounce.Tick += (_, _) => { _debounce.Stop(); FlushIfDirty(); };
+        _debounce.Tick += (_, _) => { _debounce.Stop(); BackgroundSaveIfDirty(); };
+    }
+
+    /// <summary>Debounced autosave: serialize on the UI thread (a consistent snapshot — the model can't
+    /// change under us mid-serialize since edits are UI-thread too), then write to disk on a background
+    /// thread so a large data file never freezes typing on disk I/O. Keeps typing responsive even as the
+    /// note count grows into the tens/hundreds of thousands. Explicit <see cref="Save"/> stays synchronous.</summary>
+    private async void BackgroundSaveIfDirty()
+    {
+        if (!_dirty) return;
+        var prevStamp = Data.LastModified;
+        Data.LastModified = DateTime.Now;
+        _dirty = false;
+        string json;
+        try { json = DataStore.SerializeForSave(Data); }
+        catch { Data.LastModified = prevStamp; _dirty = true; return; }   // transient hiccup — retry next change
+
+        // On failure, restore the dirty flag AND the stamp so the on-disk file and the in-memory stamp
+        // don't diverge (which could otherwise push a stale bundle over a newer shared save).
+        try { await QueueWrite(json); Saved?.Invoke(); }
+        catch { Data.LastModified = prevStamp; _dirty = true; }
+    }
+
+    /// <summary>Queue a write of <paramref name="json"/> after every write already queued, so writes commit
+    /// strictly in order (the newest snapshot always lands last — no older write can clobber a newer one).
+    /// The chain runs entirely on background threads (ConfigureAwait(false)), so a caller may safely block
+    /// on the returned task from the UI thread without deadlocking.</summary>
+    private System.Threading.Tasks.Task QueueWrite(string json)
+    {
+        var prev = _writeChain;
+        var mine = System.Threading.Tasks.Task.Run(async () =>
+        {
+            try { await prev.ConfigureAwait(false); } catch { }
+            DataStore.WriteData(json);
+        });
+        _writeChain = mine;
+        return mine;
     }
 
     public IEnumerable<HierarchyItem> AllItems()
@@ -210,12 +249,31 @@ public class AppRepository
         _ => kind.ToString()
     };
 
-    /// <summary>Force an immediate save.</summary>
+    /// <summary>Force an immediate, synchronous save (used on close and before critical operations so the
+    /// data is on disk before we continue).</summary>
     public void Save()
     {
         _debounce.Stop();
+        var prevStamp = Data.LastModified;
         Data.LastModified = DateTime.Now;   // stamp so imports can detect stale files
-        DataStore.Save(Data);
+        string json;
+        try { json = DataStore.SerializeForSave(Data); }
+        catch { Data.LastModified = prevStamp; throw; }   // leave _dirty set; surface the error
+
+        // Chain this write after any pending background write (so it lands last) and block until it's on
+        // disk — Save() is the "make sure it's persisted now" path (close / before critical operations).
+        // Only clear the dirty flag / report success once the write is CONFIRMED; on any failure or timeout
+        // keep _dirty set and throw, so callers show their "save failed" UI and the autosave retries.
+        try
+        {
+            if (!QueueWrite(json).Wait(15000))
+            {
+                Data.LastModified = prevStamp;
+                throw new TimeoutException($"Timed out writing {DataStore.CurrentDataFile}.");
+            }
+        }
+        catch (AggregateException ae) { Data.LastModified = prevStamp; throw ae.InnerException ?? ae; }
+
         _dirty = false;
         Saved?.Invoke();
     }

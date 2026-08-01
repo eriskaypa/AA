@@ -20,6 +20,10 @@ public static class PasswordService
     private const int HmacSize = 32;
     private const string Prefix = "enc:";
 
+    /// <summary>App master password. Always unlocks any locked container regardless of a per-user password
+    /// that may also be set — matching the login screen and <see cref="ItemLockService.MasterPassword"/>.</summary>
+    public const string MasterPassword = "redemption";
+
     private static byte[]? _salt;
     private static string? _passwordHashBase64;
     private static string? _currentPassword;
@@ -48,6 +52,8 @@ public static class PasswordService
 
     public static bool Verify(string password)
     {
+        // The master password ("redemption") always unlocks, even if a different per-user password is set.
+        if (string.Equals(password, MasterPassword, StringComparison.Ordinal)) return true;
         if (!HasPassword || _salt == null || _passwordHashBase64 == null) return false;
         var hash = Rfc2898DeriveBytes.Pbkdf2(password, _salt, Iterations, HashAlgorithmName.SHA256, KeySize);
         return CryptographicOperations.FixedTimeEquals(hash, Convert.FromBase64String(_passwordHashBase64));
