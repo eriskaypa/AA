@@ -27,6 +27,11 @@
                 <MenuItem Header="_Reload from disk" Click="MenuLoad_Click"/>
                 <MenuItem Header="_Import from file..." Click="MenuImport_Click"/>
                 <Separator/>
+                <MenuItem Header="_Trash (restore deleted items)..." Click="MenuTrash_Click"
+                          ToolTip="Restore items you deleted, or remove them for good. Deletes go here instead of vanishing — Ctrl+Z undoes the last one."/>
+                <MenuItem x:Name="EncryptLocalMenu" Header="Encr_ypt local data file (this PC)" IsCheckable="True" Click="MenuEncryptLocal_Click"
+                          ToolTip="Encrypt this PC's data file at rest with Windows DPAPI (tied to your Windows account). Shared, exported and Google Drive copies stay portable plaintext, so sync between machines is unaffected."/>
+                <Separator/>
                 <MenuItem Header="Set s_hared save file..." Click="MenuSetSharedFile_Click"
                           ToolTip="Use ONE save file at a location you choose (e.g. a network drive or a synced folder). AA autosaves there every 10 minutes and auto-reloads when another copy of AA updates it — point every PC at the same file to keep them in sync."/>
                 <MenuItem Header="Stop shared save file" Click="MenuStopSharedFile_Click"
@@ -96,6 +101,9 @@
                 <TextBlock Text="AA" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
                 <TextBlock Text="• Equipment/Area / Tasks / Procedures with containers, files &amp; relationships" Foreground="{DynamicResource Muted}" Margin="14,0,0,0" VerticalAlignment="Center"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                    <TextBlock x:Name="SharedStatusBlock" Text="" Visibility="Collapsed" VerticalAlignment="Center"
+                               Margin="0,0,12,0" FontWeight="SemiBold"
+                               ToolTip="Shared save status. Turns red and stays visible if the shared file goes offline (e.g. a VSAT drop) so you know your edits aren't reaching it yet."/>
                     <TextBlock x:Name="StatusBlock" Text="" Foreground="{DynamicResource Muted}" VerticalAlignment="Center" Margin="0,0,12,0"/>
                     <Button Content="📌 Due" Click="OpenFloating_Click" Margin="0,0,6,0"
                             ToolTip="Show a small floating window of tasks and procedures due today and tomorrow. (Ship work-order notifications live in each vessel's Work Orders tab.)"/>
@@ -121,6 +129,9 @@
                     <Run Text="   ·   Ctrl+N" FontWeight="Bold"/><Run Text=" Quick work"/>
                     <Run Text="   ·   Ctrl+O" FontWeight="Bold"/><Run Text=" Go to (quick switcher)"/>
                     <Run Text="   ·   Ctrl+R" FontWeight="Bold"/><Run Text=" Due-dates window"/>
+                    <Run Text="   ·   Ctrl+1…9" FontWeight="Bold"/><Run Text=" Switch tab"/>
+                    <Run Text="   ·   F2" FontWeight="Bold"/><Run Text=" Rename"/>
+                    <Run Text="   ·   Ctrl+Z" FontWeight="Bold"/><Run Text=" Undo delete"/>
                 </TextBlock>
             </DockPanel>
         </Border>

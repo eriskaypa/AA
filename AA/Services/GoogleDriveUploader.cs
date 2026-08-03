@@ -72,7 +72,9 @@ public static class GoogleDriveUploader
             new[] { DriveService.Scope.DriveFile },
             "user",
             ct,
-            new FileDataStore(DataStore.GoogleTokenFolder, fullPath: true));
+            // DPAPI-encrypt the cached refresh token at rest (migrates an existing plaintext token on
+            // first read) instead of the library's default cleartext FileDataStore.
+            new DpapiDataStore(DataStore.GoogleTokenFolder));
 
         return new DriveService(new BaseClientService.Initializer
         {

@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Windows.Threading;
 using AA.Models;
 
@@ -21,6 +23,11 @@ public class AppRepository
     /// <summary>Raised after a successful (immediate or debounced) save.</summary>
     public event Action? Saved;
 
+    /// <summary>When true, ALL persistence is suppressed (no autosave, no explicit Save). Set when the
+    /// data file was present but unreadable at load, so the app's empty/placeholder model can never be
+    /// written back over the real file on disk.</summary>
+    public bool SuspendSaving { get; set; }
+
     public AppRepository(AppData data)
     {
         Data = data;
@@ -34,7 +41,7 @@ public class AppRepository
     /// note count grows into the tens/hundreds of thousands. Explicit <see cref="Save"/> stays synchronous.</summary>
     private async void BackgroundSaveIfDirty()
     {
-        if (!_dirty) return;
+        if (SuspendSaving || !_dirty) return;
         var prevStamp = Data.LastModified;
         Data.LastModified = DateTime.Now;
         _dirty = false;
@@ -253,6 +260,7 @@ public class AppRepository
     /// data is on disk before we continue).</summary>
     public void Save()
     {
+        if (SuspendSaving) return;   // read-only safe mode — never write over an unreadable file
         _debounce.Stop();
         var prevStamp = Data.LastModified;
         Data.LastModified = DateTime.Now;   // stamp so imports can detect stale files
@@ -278,9 +286,21 @@ public class AppRepository
         Saved?.Invoke();
     }
 
+    /// <summary>Detach this repository before it is discarded (a data reload/import swaps in a new one):
+    /// stop the debounce timer, suspend any further saving, and drop the Saved subscribers. Without this
+    /// the outgoing repo's still-running <see cref="DispatcherTimer"/> keeps it (and its whole data graph)
+    /// alive and can tick after the swap, writing its now-discarded data over the freshly-loaded file.</summary>
+    public void Detach()
+    {
+        SuspendSaving = true;
+        _debounce.Stop();
+        Saved = null;
+    }
+
     /// <summary>Schedule a save shortly after the last edit; coalesces rapid changes.</summary>
     public void MarkDirty()
     {
+        if (SuspendSaving) return;
         _dirty = true;
         _debounce.Stop();
         _debounce.Start();
@@ -292,6 +312,283 @@ public class AppRepository
     public void FlushIfDirty()
     {
         if (_dirty) Save();
+    }
+
+    // ---------- Trash (soft delete) + Undo ----------
+
+    private const int MaxTrashItems = 200;
+    private static readonly TimeSpan TrashRetention = TimeSpan.FromDays(90);
+    private static readonly JsonSerializerOptions TrashOpts = new()
+    {
+        ReferenceHandler = ReferenceHandler.IgnoreCycles,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    private static string TrashType(ItemKind kind) => kind switch
+    {
+        ItemKind.Equipment => "Equipment",
+        ItemKind.Task => "Task",
+        ItemKind.Procedure => "Procedure",
+        ItemKind.Vessel => "Vessel",
+        _ => ""
+    };
+
+    /// <summary>Soft-delete a top-level hierarchy item: capture it (full subtree) into the Trash, remove
+    /// it from its live collection, and scrub dangling references. Reversible via <see cref="RestoreTrash"/>
+    /// / <see cref="UndoLastDelete"/>. Returns the Trash entry (or null if the kind isn't trashable).</summary>
+    public TrashedItem? TrashHierarchyItem(HierarchyItem item)
+    {
+        var type = TrashType(item.Kind);
+        if (type.Length == 0) return null;
+        var ti = new TrashedItem
+        {
+            ItemType = type,
+            ItemId = item.Id,
+            Name = item.Name,
+            KindLabel = KindLabel(item.Kind),
+            PayloadJson = JsonSerializer.Serialize(item, item.GetType(), TrashOpts)
+        };
+        switch (item)
+        {
+            case Equipment eq: Data.Equipment.Remove(eq); break;
+            case TaskItem t: Data.Tasks.Remove(t); break;
+            case Procedure p: Data.Procedures.Remove(p); break;
+            case Vessel v: Data.Vessels.Remove(v); break;
+            default: return null;
+        }
+        // References are scrubbed only when the item is PERMANENTLY removed (permanent delete / prune), so
+        // a restore brings the relationship graph back intact (both sides of two-way links, one-way
+        // Equipment→Procedure/Task links, and step links).
+        AddToTrash(ti);
+        LogRemoved(KindLabel(item.Kind), item.Name, "moved to Trash");
+        MarkDirty();
+        return ti;
+    }
+
+    /// <summary>Soft-delete a crew member into the Trash.</summary>
+    public TrashedItem TrashCrew(CrewMember m)
+    {
+        var ti = new TrashedItem
+        {
+            ItemType = "Crew",
+            ItemId = m.Id,
+            Name = string.IsNullOrWhiteSpace(m.FullName) ? m.LastName : m.FullName,
+            KindLabel = "Crew member",
+            PayloadJson = JsonSerializer.Serialize(m, TrashOpts)
+        };
+        Data.Crew.Remove(m);
+        AddToTrash(ti);
+        LogRemoved("Crew member", ti.Name, "moved to Trash");
+        MarkDirty();
+        return ti;
+    }
+
+    private void AddToTrash(TrashedItem ti)
+    {
+        Data.Trash.Add(ti);
+        PruneTrash();
+    }
+
+    /// <summary>Enforce the Trash retention window (90 days) and count cap (200), oldest first, so it can
+    /// never bloat the save file / shared bundle. Safe to call any time — notably once on load, so
+    /// retention is honoured even if the user stops deleting things (the add-time prune alone wouldn't).
+    /// A permanently-removed item has its dangling references scrubbed.</summary>
+    public void PruneTrash()
+    {
+        bool changed = false;
+        var cutoff = DateTime.UtcNow - TrashRetention;
+        for (int i = Data.Trash.Count - 1; i >= 0; i--)
+            if (Data.Trash[i].DeletedUtc < cutoff) { EvictAt(i); changed = true; }
+        while (Data.Trash.Count > MaxTrashItems)
+        {
+            var oldest = Data.Trash.OrderBy(t => t.DeletedUtc).First();
+            EvictAt(Data.Trash.IndexOf(oldest));
+            changed = true;
+        }
+        if (changed) MarkDirty();
+    }
+
+    private void EvictAt(int i)
+    {
+        PurgeReferences(Data.Trash[i].ItemId);   // gone for good — scrub any dangling links now
+        Data.Trash.RemoveAt(i);
+    }
+
+    /// <summary>Restore a trashed item to its original collection. Returns its ItemType
+    /// ("Equipment"/"Task"/"Procedure"/"Vessel"/"Crew") so the caller can refresh the right page,
+    /// or null if it couldn't be restored.</summary>
+    public string? RestoreTrash(TrashedItem ti)
+    {
+        try
+        {
+            switch (ti.ItemType)
+            {
+                case "Equipment":
+                    var eq = JsonSerializer.Deserialize<Equipment>(ti.PayloadJson, TrashOpts);
+                    if (eq == null) return null;
+                    if (!Data.Equipment.Any(x => x.Id == eq.Id)) Data.Equipment.Add(eq);
+                    break;
+                case "Task":
+                    var t = JsonSerializer.Deserialize<TaskItem>(ti.PayloadJson, TrashOpts);
+                    if (t == null) return null;
+                    if (!Data.Tasks.Any(x => x.Id == t.Id)) Data.Tasks.Add(t);
+                    break;
+                case "Procedure":
+                    var p = JsonSerializer.Deserialize<Procedure>(ti.PayloadJson, TrashOpts);
+                    if (p == null) return null;
+                    if (!Data.Procedures.Any(x => x.Id == p.Id)) Data.Procedures.Add(p);
+                    break;
+                case "Vessel":
+                    var v = JsonSerializer.Deserialize<Vessel>(ti.PayloadJson, TrashOpts);
+                    if (v == null) return null;
+                    if (!Data.Vessels.Any(x => x.Id == v.Id)) Data.Vessels.Add(v);
+                    break;
+                case "Crew":
+                    var cm = JsonSerializer.Deserialize<CrewMember>(ti.PayloadJson, TrashOpts);
+                    if (cm == null) return null;
+                    if (!Data.Crew.Any(x => x.Id == cm.Id)) Data.Crew.Add(cm);
+                    break;
+                default: return null;
+            }
+        }
+        catch { return null; }
+        Data.Trash.Remove(ti);
+        LogAdded(ti.KindLabel, ti.Name, "restored from Trash");
+        MarkDirty();
+        return ti.ItemType;
+    }
+
+    /// <summary>Restore the most recently deleted item (Ctrl+Z). Returns its ItemType or null if the
+    /// Trash is empty / restore failed.</summary>
+    public string? UndoLastDelete()
+    {
+        var ti = Data.Trash.OrderByDescending(t => t.DeletedUtc).FirstOrDefault();
+        return ti == null ? null : RestoreTrash(ti);
+    }
+
+    public void PurgeTrash(TrashedItem ti)
+    {
+        if (Data.Trash.Remove(ti)) { PurgeReferences(ti.ItemId); MarkDirty(); }
+    }
+
+    public void EmptyTrash()
+    {
+        if (Data.Trash.Count == 0) return;
+        foreach (var ti in Data.Trash.ToList()) PurgeReferences(ti.ItemId);
+        Data.Trash.Clear();
+        MarkDirty();
+    }
+
+    // ---------- Recurrence: regenerate the next occurrence on completion ----------
+
+    private static DateTime NextOccurrence(DateTime from, RecurrenceKind r) => r switch
+    {
+        RecurrenceKind.Daily => from.AddDays(1),
+        RecurrenceKind.Weekly => from.AddDays(7),
+        RecurrenceKind.Monthly => from.AddMonths(1),
+        RecurrenceKind.Yearly => from.AddYears(1),
+        _ => from
+    };
+
+    private static T DeepClone<T>(T obj) =>
+        JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(obj, TrashOpts), TrashOpts)!;
+
+    /// <summary>Walk a completed recurring Task/Procedure and generate its next occurrence (once).
+    /// A monthly fire-drill task, once ticked complete, re-appears with next month's due date instead
+    /// of silently dropping off. Idempotent: the completed source is flagged so a re-save or a
+    /// complete/uncomplete toggle never spawns duplicates. Scope: top-level Tasks and Procedures.
+    /// Returns true if anything was generated (caller should refresh the affected pages).</summary>
+    public bool ReconcileRecurrences()
+    {
+        bool changed = false;
+
+        var newTasks = new List<TaskItem>();
+        foreach (var t in Data.Tasks.ToList())
+        {
+            if (t.Recurrence == RecurrenceKind.None || !t.IsComplete || t.RecurrenceSpawned) continue;
+            t.RecurrenceSpawned = true;                       // never spawn twice for this completion
+            var clone = DeepClone(t);
+            RenewTaskForNextOccurrence(clone);
+            var oldDeadline = t.Deadline;
+            var next = NextOccurrence(oldDeadline ?? DateTime.Today, t.Recurrence);
+            // Preserve a working-range length if the source had one.
+            if (t.RangeStart is DateTime rs && oldDeadline is DateTime dl && rs.Date < dl.Date)
+                clone.RangeStart = next.AddDays(-(dl.Date - rs.Date).Days);
+            else
+                clone.RangeStart = null;
+            clone.Deadline = next;
+            // Shift subtask deadlines by the same amount so the new occurrence's children aren't born in the
+            // past (else they'd read as immediately overdue in the due window / reminders).
+            if (oldDeadline is DateTime od) ShiftTaskChildDeadlines(clone, next.Date - od.Date);
+            newTasks.Add(clone);
+            LogAdded("Task (recurring)", clone.Name, $"next {t.Recurrence} occurrence → {next:yyyy-MM-dd}");
+            changed = true;
+        }
+        foreach (var nt in newTasks) Data.Tasks.Add(nt);
+
+        var newProcs = new List<Procedure>();
+        foreach (var p in Data.Procedures.ToList())
+        {
+            if (p.Recurrence == RecurrenceKind.None || p.Status != WorkStatus.Done || p.RecurrenceSpawned) continue;
+            p.RecurrenceSpawned = true;
+            var clone = DeepClone(p);
+            RenewProcedureForNextOccurrence(clone);
+            var oldDeadline = p.Deadline;
+            var next = NextOccurrence(oldDeadline ?? DateTime.Today, p.Recurrence);
+            clone.Deadline = next;
+            // Shift step deadlines by the same delta so they don't resurface already overdue.
+            if (oldDeadline is DateTime opd)
+            {
+                var delta = next.Date - opd.Date;
+                foreach (var s in clone.Steps)
+                    if (s.Deadline is DateTime sd) s.Deadline = sd.Add(delta);
+            }
+            newProcs.Add(clone);
+            LogAdded("Procedure (recurring)", clone.Name, $"next {p.Recurrence} occurrence → {clone.Deadline:yyyy-MM-dd}");
+            changed = true;
+        }
+        foreach (var np in newProcs) Data.Procedures.Add(np);
+
+        if (changed) MarkDirty();
+        return changed;
+    }
+
+    private static void RenewTaskForNextOccurrence(TaskItem t)
+    {
+        t.Id = Guid.NewGuid();
+        if (t.Container != null) t.Container.Id = Guid.NewGuid();
+        t.RecurrenceSpawned = false;
+        t.ScheduledStart = null;
+        t.IsComplete = false;             // also resets Status to Todo via the setter
+        foreach (var st in t.Subtasks) RenewTaskForNextOccurrence(st);
+    }
+
+    /// <summary>Shift every subtask's deadline (and working-range start) by <paramref name="delta"/> so the
+    /// regenerated occurrence's children keep their offset from the (advanced) parent deadline.</summary>
+    private static void ShiftTaskChildDeadlines(TaskItem t, TimeSpan delta)
+    {
+        foreach (var st in t.Subtasks)
+        {
+            if (st.Deadline is DateTime d) st.Deadline = d.Add(delta);
+            if (st.RangeStart is DateTime rs) st.RangeStart = rs.Add(delta);
+            ShiftTaskChildDeadlines(st, delta);
+        }
+    }
+
+    private static void RenewProcedureForNextOccurrence(Procedure p)
+    {
+        p.Id = Guid.NewGuid();
+        if (p.Container != null) p.Container.Id = Guid.NewGuid();
+        p.RecurrenceSpawned = false;
+        p.ScheduledStart = null;
+        p.Status = WorkStatus.Todo;
+        foreach (var s in p.Steps)
+        {
+            s.Id = Guid.NewGuid();
+            if (s.Container != null) s.Container.Id = Guid.NewGuid();
+            s.Done = false;
+            s.ScheduledStart = null;
+        }
     }
 
     // ---------- Sidebar groups ----------

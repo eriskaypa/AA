@@ -36,10 +36,21 @@
                     </WrapPanel>
                 </Border>
                 <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Margin="6" TextChanged="SearchBox_TextChanged" Tag="Search..."/>
+                <Grid>
                 <ListBox x:Name="ItemsList" SelectionChanged="ItemsList_SelectionChanged"
                          BorderThickness="0" SelectionMode="Extended"
                          HorizontalContentAlignment="Stretch"
-                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.CanContentScroll="True"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         VirtualizingPanel.ScrollUnit="Pixel">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <VirtualizingStackPanel/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding Name}" TextWrapping="Wrap"/>
@@ -87,6 +98,11 @@
                         </GroupStyle>
                     </ListBox.GroupStyle>
                 </ListBox>
+                <TextBlock x:Name="EmptyHint" Visibility="Collapsed" IsHitTestVisible="False"
+                           HorizontalAlignment="Center" VerticalAlignment="Center" TextAlignment="Center"
+                           TextWrapping="Wrap" MaxWidth="220" Margin="16"
+                           Foreground="{DynamicResource Muted}" FontSize="13"/>
+                </Grid>
             </DockPanel>
         </Border>
 

@@ -46,6 +46,12 @@ public static class DataStore
     /// <summary>When true, the app uses the dark theme. Persisted.</summary>
     public static bool DarkMode { get; private set; }
 
+    /// <summary>When true, the local active data file is encrypted at rest with Windows DPAPI (tied to
+    /// this Windows account). Opt-in and PER-MACHINE: shared-save bundles, ZIP exports and Drive backups
+    /// stay portable plaintext (a DPAPI blob can't be read on another machine/account), so cross-PC sync
+    /// is unaffected. Persisted.</summary>
+    public static bool EncryptLocalData { get; private set; }
+
     /// <summary>Last base location used by the Folder Builder. Persisted.</summary>
     public static string? FolderBuilderBase { get; private set; }
 
@@ -64,6 +70,7 @@ public static class DataStore
         public bool DarkMode { get; set; }
         public string? FolderBuilderBase { get; set; }
         public string? SharedSaveFile { get; set; }
+        public bool EncryptLocalData { get; set; }
     }
 
     public static void LoadSettings()
@@ -71,13 +78,14 @@ public static class DataStore
         try
         {
             Directory.CreateDirectory(AppFolder);
-            if (!File.Exists(SettingsFile)) { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; DarkMode = false; SharedSaveFile = null; PasswordService.LoadFrom(null, null); return; }
+            if (!File.Exists(SettingsFile)) { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; DarkMode = false; SharedSaveFile = null; EncryptLocalData = false; PasswordService.LoadFrom(null, null); return; }
             var s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(SettingsFile), Opts);
             CurrentDataFile = !string.IsNullOrWhiteSpace(s?.CurrentDataFile) && File.Exists(s!.CurrentDataFile)
                 ? s.CurrentDataFile! : DefaultDataFile;
             GoogleDriveFolder = s?.GoogleDriveFolder;
             SyncOnSave = s?.SyncOnSave ?? false;
             DarkMode = s?.DarkMode ?? false;
+            EncryptLocalData = s?.EncryptLocalData ?? false;
             FolderBuilderBase = s?.FolderBuilderBase;
             PasswordService.LoadFrom(s?.PasswordHash, s?.PasswordSalt);
 
@@ -85,7 +93,7 @@ public static class DataStore
             // always works from its local data file and pushes to / pulls from the bundle.
             SharedSaveFile = string.IsNullOrWhiteSpace(s?.SharedSaveFile) ? null : s!.SharedSaveFile;
         }
-        catch { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; DarkMode = false; SharedSaveFile = null; PasswordService.LoadFrom(null, null); }
+        catch { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; DarkMode = false; SharedSaveFile = null; EncryptLocalData = false; PasswordService.LoadFrom(null, null); }
     }
 
     public static void SetCurrentDataFile(string path)
@@ -111,6 +119,14 @@ public static class DataStore
     public static void SetDarkMode(bool on)
     {
         DarkMode = on;
+        WriteSettings();
+    }
+
+    /// <summary>Turn local at-rest DPAPI encryption on/off and persist the choice. The caller is
+    /// responsible for re-writing the active data file afterwards so it switches format.</summary>
+    public static void SetEncryptLocalData(bool on)
+    {
+        EncryptLocalData = on;
         WriteSettings();
     }
 
@@ -170,6 +186,7 @@ public static class DataStore
                 DarkMode = DarkMode,
                 FolderBuilderBase = FolderBuilderBase ?? existing?.FolderBuilderBase,
                 SharedSaveFile = SharedSaveFile,
+                EncryptLocalData = EncryptLocalData,
             };
             File.WriteAllText(SettingsFile, JsonSerializer.Serialize(s, Opts));
         }
@@ -191,16 +208,28 @@ public static class DataStore
     /// over the real file. False when the file was genuinely absent (empty is correct) or read fine.</summary>
     public static bool LastLoadFailed { get; private set; }
 
+    /// <summary>The current on-disk data-format version this build writes. Bump when the model grows a
+    /// field older builds must not silently drop; pair the bump with any needed forward migration.</summary>
+    public const int CurrentSchemaVersion = 1;
+
+    /// <summary>Set by <see cref="Load"/> to the file's schema version when it is NEWER than this build
+    /// understands (else null). The app warns rather than silently downgrading the file — unknown top-level
+    /// members are preserved via <see cref="AppData.ExtraData"/>, but a warning is still owed to the user.</summary>
+    public static int? LoadedNewerSchema { get; private set; }
+
     public static AppData Load()
     {
         Directory.CreateDirectory(AppFolder);
         Directory.CreateDirectory(FilesFolder);
         LastLoadFailed = false;
+        LoadedNewerSchema = null;
         if (!File.Exists(CurrentDataFile)) return new AppData();   // genuinely absent — empty is correct
         try
         {
-            var json = File.ReadAllText(CurrentDataFile);
+            var json = ReadDataText(CurrentDataFile);
             var data = JsonSerializer.Deserialize<AppData>(json, Opts) ?? new AppData();
+            if (data.SchemaVersion > CurrentSchemaVersion) LoadedNewerSchema = data.SchemaVersion;
+            MigrateSchema(data);
             NormalizeFilePaths(data);
             return data;
         }
@@ -211,10 +240,31 @@ public static class DataStore
     /// an empty result — e.g. shared-file reload — rely on this to skip a torn/locked read).</summary>
     public static AppData LoadFrom(string path)
     {
-        var json = File.ReadAllText(path);
+        var json = ReadDataText(path);   // transparently decrypts an encrypted local file
         var data = JsonSerializer.Deserialize<AppData>(json, Opts) ?? new AppData();
+        MigrateSchema(data);
         NormalizeFilePaths(data);
         return data;
+    }
+
+    /// <summary>One-time forward migrations applied to any file older than <see cref="CurrentSchemaVersion"/>.
+    /// v1 introduced recurrence regeneration: mark every ALREADY-completed recurring Task/Procedure as
+    /// spawned, so upgrading doesn't retroactively generate a backlog of (overdue) occurrences for work the
+    /// user completed under an older build. Recurrence then applies only to completions made from now on.</summary>
+    private static void MigrateSchema(AppData data)
+    {
+        if (data.SchemaVersion < 1)
+        {
+            foreach (var t in data.Tasks) MarkRecurringDoneAsSpawned(t);
+            foreach (var p in data.Procedures)
+                if (p.Recurrence != RecurrenceKind.None && p.Status == WorkStatus.Done) p.RecurrenceSpawned = true;
+        }
+    }
+
+    private static void MarkRecurringDoneAsSpawned(TaskItem t)
+    {
+        if (t.Recurrence != RecurrenceKind.None && t.IsComplete) t.RecurrenceSpawned = true;
+        foreach (var st in t.Subtasks) MarkRecurringDoneAsSpawned(st);
     }
 
     public static void Save(AppData data) => WriteData(SerializeForSave(data));
@@ -225,14 +275,78 @@ public static class DataStore
     public static string SerializeForSave(AppData data)
     {
         NormalizeFilePaths(data);
+        // Stamp the format version so an older build can detect (and warn about) a newer file. Never
+        // downgrade a higher stamp we're round-tripping — its newer fields live on in ExtraData.
+        if (data.SchemaVersion < CurrentSchemaVersion) data.SchemaVersion = CurrentSchemaVersion;
         return JsonSerializer.Serialize(data, Opts);
     }
 
-    /// <summary>Atomically write already-serialized data to the current data file (safe off the UI thread).</summary>
+    /// <summary>Atomically write already-serialized data to the current data file (safe off the UI thread).
+    /// Applies local at-rest encryption when <see cref="EncryptLocalData"/> is on.</summary>
     public static void WriteData(string json)
     {
         Directory.CreateDirectory(AppFolder);
-        AtomicWrite(CurrentDataFile, json);
+        WriteLocalDataFile(CurrentDataFile, json);
+    }
+
+    // ---- Local at-rest encryption (DPAPI, per-machine, opt-in) ----
+    // An encrypted local file is [EncMagic][DPAPI(UTF-8 JSON)]. Only the LOCAL active data file is ever
+    // encrypted; every portable artifact (shared bundle, ZIP export, Drive backup) is written plaintext
+    // via ReadDataText, so a DPAPI blob — unreadable on another machine/account — never leaves this PC.
+    private static readonly byte[] EncMagic = System.Text.Encoding.ASCII.GetBytes("AAENC1\n");
+
+    private static bool StartsWith(byte[] data, byte[] prefix)
+    {
+        if (data.Length < prefix.Length) return false;
+        for (int i = 0; i < prefix.Length; i++) if (data[i] != prefix[i]) return false;
+        return true;
+    }
+
+    /// <summary>Write JSON to a local data file, DPAPI-encrypting it when <see cref="EncryptLocalData"/>
+    /// is on (else plaintext). Always atomic.</summary>
+    /// <summary>True when <paramref name="path"/> resolves to somewhere inside the AA data folder — the
+    /// only place local encryption is applied (so an external active file chosen via Import / Save As stays
+    /// portable plaintext and is never rewritten as a machine-locked DPAPI blob).</summary>
+    private static bool IsUnderAppFolder(string path)
+    {
+        try
+        {
+            var full = Path.GetFullPath(path);
+            var root = Path.GetFullPath(AppFolder).TrimEnd('\\', '/') + Path.DirectorySeparatorChar;
+            return full.StartsWith(root, StringComparison.OrdinalIgnoreCase);
+        }
+        catch { return false; }
+    }
+
+    private static void WriteLocalDataFile(string path, string json)
+    {
+        if (EncryptLocalData && IsUnderAppFolder(path))
+        {
+            var plain = new System.Text.UTF8Encoding(false).GetBytes(json);
+            var enc = Dpapi.Protect(plain);
+            var buf = new byte[EncMagic.Length + enc.Length];
+            Buffer.BlockCopy(EncMagic, 0, buf, 0, EncMagic.Length);
+            Buffer.BlockCopy(enc, 0, buf, EncMagic.Length, enc.Length);
+            AtomicWrite(path, buf);
+        }
+        else AtomicWrite(path, json);
+    }
+
+    /// <summary>Read a data file as plaintext JSON, transparently DPAPI-decrypting an encrypted local
+    /// file. Throws if an encrypted file can't be decrypted (wrong machine/account, or corrupt) — callers
+    /// that must not adopt an empty result treat that as an unreadable file.</summary>
+    private static string ReadDataText(string path)
+    {
+        var raw = File.ReadAllBytes(path);
+        if (StartsWith(raw, EncMagic))
+        {
+            var enc = new byte[raw.Length - EncMagic.Length];
+            Buffer.BlockCopy(raw, EncMagic.Length, enc, 0, enc.Length);
+            return System.Text.Encoding.UTF8.GetString(Dpapi.Unprotect(enc));
+        }
+        // Plaintext (legacy or unencrypted). Strip a UTF-8 BOM if present so the parser is happy.
+        int off = (raw.Length >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF) ? 3 : 0;
+        return System.Text.Encoding.UTF8.GetString(raw, off, raw.Length - off);
     }
 
     public static void SaveTo(AppData data, string path)
@@ -241,19 +355,44 @@ public static class DataStore
         AtomicWrite(path, JsonSerializer.Serialize(data, Opts));
     }
 
-    /// <summary>Write via a temp file then rename over the target, so a concurrent reader (another
-    /// copy of AA, on a shared/network file) never observes a half-written or truncated file. The
-    /// rename is atomic on the same volume; a plain copy is the fallback for filesystems that refuse it.</summary>
+    /// <summary>Write via a temp file then swap it over the target, so a concurrent reader (another copy
+    /// of AA polling a shared/network file) never observes a half-written or truncated file. The temp is
+    /// flushed to disk (fsync) BEFORE the swap so a power loss on the vessel can't leave a zero-length or
+    /// partially-flushed file; the swap itself is atomic — File.Move-overwrite first, else File.Replace
+    /// (still atomic via ReplaceFile) — never a byte-by-byte copy a reader could catch mid-write. A plain
+    /// copy survives only as an absolute last resort for exotic filesystems that reject both atomic ops,
+    /// where persisting the save at all beats failing it.</summary>
     private static void AtomicWrite(string path, string content)
+        => AtomicWrite(path, new System.Text.UTF8Encoding(false).GetBytes(content));
+
+    private static void AtomicWrite(string path, byte[] bytes)
     {
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
         var tmp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
-            File.WriteAllText(tmp, content);
-            try { File.Move(tmp, path, overwrite: true); }        // atomic replace on the same volume
-            catch { File.Copy(tmp, path, overwrite: true); }      // fallback for filesystems that disallow it
+            using (var fs = new FileStream(tmp, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                fs.Write(bytes, 0, bytes.Length);
+                fs.Flush(flushToDisk: true);                      // durable on disk before we swap it in
+            }
+            if (!File.Exists(path))
+            {
+                File.Move(tmp, path);                             // first write — nothing to replace
+            }
+            else
+            {
+                try { File.Move(tmp, path, overwrite: true); }    // atomic replace on the same volume
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    try { File.Replace(tmp, path, null, ignoreMetadataErrors: true); } // still atomic
+                    catch (Exception ex2) when (ex2 is IOException or UnauthorizedAccessException or PlatformNotSupportedException)
+                    {
+                        File.Copy(tmp, path, overwrite: true);    // last resort only: keep the data over losing it
+                    }
+                }
+            }
         }
         finally { try { if (File.Exists(tmp)) File.Delete(tmp); } catch { } }
     }
@@ -385,10 +524,11 @@ public static class DataStore
         catch { return null; }
     }
 
-    /// <summary>Read just the LastModified stamp from a data.json file on disk.</summary>
+    /// <summary>Read just the LastModified stamp from a data.json file on disk (decrypting a local
+    /// encrypted file if needed).</summary>
     public static DateTime? PeekFileLastModified(string jsonPath)
     {
-        try { return ReadLastModified(File.ReadAllText(jsonPath)); }
+        try { return ReadLastModified(ReadDataText(jsonPath)); }
         catch { return null; }
     }
 
@@ -448,10 +588,12 @@ public static class DataStore
         try
         {
             Directory.CreateDirectory(staging);
+            // Always bundle PLAINTEXT (ReadDataText decrypts a local encrypted file) so the export /
+            // shared bundle / Drive backup is portable to any machine.
             if (File.Exists(CurrentDataFile))
-                File.Copy(CurrentDataFile, Path.Combine(staging, "data.json"), overwrite: true);
+                File.WriteAllText(Path.Combine(staging, "data.json"), ReadDataText(CurrentDataFile));
             else if (File.Exists(DefaultDataFile))
-                File.Copy(DefaultDataFile, Path.Combine(staging, "data.json"), overwrite: true);
+                File.WriteAllText(Path.Combine(staging, "data.json"), ReadDataText(DefaultDataFile));
             if (Directory.Exists(FilesFolder))
                 CopyDirectory(FilesFolder, Path.Combine(staging, "files"));
             ZipFile.CreateFromDirectory(staging, zipPath, CompressionLevel.Optimal, includeBaseDirectory: false);
@@ -513,8 +655,7 @@ public static class DataStore
             {
                 var data = LoadFrom(DefaultDataFile);
                 MigrateLegacyAbsolutePaths(data);
-                NormalizeFilePaths(data);
-                SaveTo(data, DefaultDataFile);
+                WriteLocalDataFile(DefaultDataFile, SerializeForSave(data));   // honors local encryption
             }
         }
         catch { }
@@ -550,18 +691,18 @@ public static class DataStore
                     File.Copy(f, Path.Combine(FilesFolder, name), overwrite: true);
                 }
 
-            // 2) Switch the local data index to the bundle's (atomic). Now the on-disk data.json only
-            //    references attachments that are already present.
+            // 2) Switch the local data index to the bundle's (atomic). The bundle is plaintext; write it
+            //    through the local encryption policy. Now the on-disk data.json only references attachments
+            //    that are already present.
             CurrentDataFile = DefaultDataFile;
-            AtomicWrite(DefaultDataFile, File.ReadAllText(dataSrc));
+            WriteLocalDataFile(DefaultDataFile, File.ReadAllText(dataSrc));
 
             // 3) Only now remove local attachments the bundle no longer has (safe orphans).
             foreach (var f in Directory.EnumerateFiles(FilesFolder))
                 if (!bundleNames.Contains(Path.GetFileName(f))) { try { File.Delete(f); } catch { } }
 
             var data = LoadFrom(DefaultDataFile);
-            NormalizeFilePaths(data);
-            SaveTo(data, DefaultDataFile);
+            WriteLocalDataFile(DefaultDataFile, SerializeForSave(data));
             WriteSettings();   // persist CurrentDataFile; settings/password/Google preserved via existing
         }
         finally { try { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); } catch { } }

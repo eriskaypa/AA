@@ -219,6 +219,9 @@ public class TaskItem : HierarchyItem, IJob
     [JsonIgnore] public string JobName => Name;
     private RecurrenceKind _recurrence;
     public RecurrenceKind Recurrence { get => _recurrence; set => Set(ref _recurrence, value); }
+    /// <summary>Set once completing this recurring task has generated its next occurrence, so a re-save
+    /// or a complete/uncomplete toggle never spawns duplicates. A generated occurrence starts false.</summary>
+    public bool RecurrenceSpawned { get; set; }
     private bool _isComplete;
     public bool IsComplete
     {
@@ -260,6 +263,9 @@ public class Procedure : HierarchyItem, IJob
     /// <summary>Recurrence for the procedure (like a Task's) — None / Daily / Weekly / Monthly / Yearly.</summary>
     private RecurrenceKind _recurrence;
     public RecurrenceKind Recurrence { get => _recurrence; set => Set(ref _recurrence, value); }
+    /// <summary>Set once completing this recurring procedure has generated its next occurrence, so a
+    /// re-save or a status toggle never spawns duplicates. A generated occurrence starts false.</summary>
+    public bool RecurrenceSpawned { get; set; }
 
     /// <summary>Workflow status for the procedure (like a Task's) — Todo / InProgress / Blocked / Done.</summary>
     private WorkStatus _status = WorkStatus.Todo;
@@ -569,6 +575,29 @@ public class QuickBucket : NotifyBase
     [JsonIgnore] public string Display => _category.Length > 0 ? $"{Name}  ·  {_category}" : (_name.Length > 0 ? _name : "(unnamed)");
 }
 
+/// <summary>A soft-deleted item held in the Trash so a delete can be undone or restored. Stores the
+/// full serialized payload (a Task carries its whole subtask subtree) plus enough metadata to list and
+/// re-home it. Trashed live objects are physically removed from their collections, so they never appear
+/// in search / board / calendar / due lists while in the Trash.</summary>
+public class TrashedItem
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    /// <summary>Which collection this came from / deserializes to: "Equipment", "Task", "Procedure",
+    /// "Vessel", or "Crew". Drives restore.</summary>
+    public string ItemType { get; set; } = "";
+    /// <summary>The deleted item's own Id (so restore can skip if something with that Id already exists).</summary>
+    public Guid ItemId { get; set; }
+    public string Name { get; set; } = "";
+    /// <summary>Human-readable kind label, e.g. "Equipment/Area", "Task", "Crew member".</summary>
+    public string KindLabel { get; set; } = "";
+    public DateTime DeletedUtc { get; set; } = DateTime.UtcNow;
+    /// <summary>JSON of the deleted object (the full subtree for a task with subtasks).</summary>
+    public string PayloadJson { get; set; } = "";
+    [JsonIgnore] public string DeletedLocal => DeletedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+    [JsonIgnore] public string Display =>
+        $"{(Name.Length > 0 ? Name : "(unnamed)")}   ·   {KindLabel}   ·   deleted {DeletedUtc.ToLocalTime():yyyy-MM-dd HH:mm}";
+}
+
 public class AppData
 {
     public ObservableCollection<Equipment> Equipment { get; set; } = new();
@@ -593,11 +622,24 @@ public class AppData
     public ObservableCollection<Port> Ports { get; set; } = new();
     /// <summary>Reusable crew schedules that can be applied to any crew member.</summary>
     public ObservableCollection<ScheduleTemplate> ScheduleTemplates { get; set; } = new();
+    /// <summary>Soft-deleted items (Equipment/Task/Procedure/Vessel/Crew) kept so a delete can be undone
+    /// or restored. Bounded + age-pruned by <see cref="AA.Services.AppRepository"/>.</summary>
+    public ObservableCollection<TrashedItem> Trash { get; set; } = new();
     public UiState Ui { get; set; } = new();
     /// <summary>Wall-clock time this database was last saved by the user. Stamped by
     /// <see cref="AA.Services.AppRepository.Save"/>; used to warn when an imported file is
     /// older than the data already on disk. Null on legacy databases (treated as unknown/old).</summary>
     public DateTime? LastModified { get; set; }
+
+    /// <summary>On-disk data-format version (see <see cref="AA.Services.DataStore.CurrentSchemaVersion"/>).
+    /// Stamped on every save so an older build can warn instead of silently downgrading a newer file.
+    /// 0 = a legacy file written before versioning existed.</summary>
+    public int SchemaVersion { get; set; }
+
+    /// <summary>JSON members this build doesn't recognise — captured and re-written on save so an OLDER
+    /// exe opening a file written by a NEWER one preserves the newer top-level fields instead of dropping
+    /// them (silent cross-version data loss on a portable exe shared between machines).</summary>
+    [JsonExtensionData] public Dictionary<string, System.Text.Json.JsonElement>? ExtraData { get; set; }
 }
 
 /// <summary>One activity-log record: an entry added or removed, stamped in UTC.</summary>
@@ -662,4 +704,11 @@ public class UiState
     /// <summary>Date display for the crew table: a <c>CrewDateFormat</c> name and the separator character(s).</summary>
     public string? CrewTableDateFormat { get; set; }
     public string? CrewTableDateSeparator { get; set; }
+
+    /// <summary>Local date (yyyy-MM-dd) the once-a-day reminder digest was last shown, so it pops at most
+    /// once per calendar day per PC. Empty = never shown.</summary>
+    public string? LastDigestDate { get; set; }
+
+    /// <summary>Unknown UI members from a newer build — preserved on save (see <see cref="AppData.ExtraData"/>).</summary>
+    [JsonExtensionData] public Dictionary<string, System.Text.Json.JsonElement>? ExtraData { get; set; }
 }

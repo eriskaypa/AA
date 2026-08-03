@@ -140,6 +140,32 @@ public partial class HierarchyPage : UserControl
         ItemsList.ItemsSource = view;
         // Row.Name is bound via the ListBox.ItemTemplate (a wrapping TextBlock), so the
         // sidebar wraps long task/item names to the panel width instead of clipping.
+
+        UpdateEmptyHint(total: Source().Count, shown: rows.Count(r => r.Item != null), searching: !string.IsNullOrEmpty(q));
+    }
+
+    /// <summary>Show guidance when the sidebar is empty: a first-run prompt when there are genuinely no
+    /// items of this kind, or a "no matches" note when a search filtered everything out.</summary>
+    private void UpdateEmptyHint(int total, int shown, bool searching)
+    {
+        if (total == 0)
+        {
+            EmptyHint.Text = _kind switch
+            {
+                ItemKind.Equipment => "No equipment or areas yet.\n\nClick “+ New” to add your first one.",
+                ItemKind.Task => "No tasks yet.\n\nClick “+ New” to add a task, or Ctrl+N for the quick-work window.",
+                ItemKind.Procedure => "No procedures yet.\n\nClick “+ New” to build your first checklist procedure.",
+                ItemKind.Vessel => "No vessels yet.\n\nClick “+ New” to add a vessel, then import its work orders and ports.",
+                _ => "Nothing here yet.\n\nClick “+ New” to add one."
+            };
+            EmptyHint.Visibility = Visibility.Visible;
+        }
+        else if (shown == 0 && searching)
+        {
+            EmptyHint.Text = "No items match your search.";
+            EmptyHint.Visibility = Visibility.Visible;
+        }
+        else EmptyHint.Visibility = Visibility.Collapsed;
     }
 
     private static string GroupSortKey(string g) => g == "Ungrouped" ? "\uFFFF" + g : g;
@@ -356,21 +382,33 @@ public partial class HierarchyPage : UserControl
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        if (MessageBox.Show($"Delete '{_selected.Name}'?", "Confirm", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
-        _repo.LogRemoved(AppRepository.KindLabel(_selected.Kind), _selected.Name);
-        switch (_selected)
-        {
-            case Equipment eq: _repo.Data.Equipment.Remove(eq); break;
-            case TaskItem t: _repo.Data.Tasks.Remove(t); break;
-            case Procedure p: _repo.Data.Procedures.Remove(p); break;
-            case Vessel v: _repo.Data.Vessels.Remove(v); break;
-        }
-        // Remove dangling references (two-way relations AND one-way procedure/task/equipment links).
-        _repo.PurgeReferences(_selected.Id);
+        if (MessageBox.Show($"Move '{_selected.Name}' to the Trash?\n\nYou can restore it from File ▸ Trash, or undo with Ctrl+Z.",
+                "Confirm delete", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        var name = _selected.Name;
+        // Soft-delete: the item (with its whole subtree) goes to the Trash so a mis-click is reversible.
+        _repo.TrashHierarchyItem(_selected);
         _repo.Save();
         _selected = null;
         DetailsRoot.IsEnabled = false;
         RefreshList();
+        StatusText($"'{name}' moved to Trash — Ctrl+Z to undo.");
+    }
+
+    /// <summary>Re-render the sidebar after data changed outside this page (e.g. an undo/restore or a
+    /// shared reload). Preserves the current selection by id where possible.</summary>
+    public void ReloadList()
+    {
+        var id = _selected?.Id;
+        RefreshList();
+        if (id is Guid g) SelectItemById(g);
+    }
+
+    /// <summary>Focus the name field for an inline rename (F2). No-op when nothing is selected.</summary>
+    public void BeginRename()
+    {
+        if (_selected == null) return;
+        NameBox.Focus();
+        NameBox.SelectAll();
     }
 
     private void ItemsList_SelectionChanged(object sender, SelectionChangedEventArgs e)

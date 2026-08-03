@@ -34,11 +34,32 @@ public partial class MainWindow : Window
     private DateTime? _lastSyncedStamp;          // data stamp we last pushed to / pulled from the bundle
     private bool _handlingSharedUpdate;
 
+    // Persistent shared-save health indicator. Two independent trouble signals: the folder is unreachable
+    // (reads fail) and/or the last push failed (writes aren't landing). The push-failure signal must NOT
+    // be cleared by a read-only reachability check, or a write-locked share would falsely read "synced".
+    private bool _sharedOffline;       // folder/bundle unreachable
+    private bool _sharedPushFailed;    // last push to the bundle threw
+    private DateTime? _sharedTroubleSince;
+    private DateTime? _sharedLastSyncOk;
+
+    // Background reminders (tray balloon + once-a-day digest).
+    private System.Windows.Forms.NotifyIcon? _tray;
+    private DispatcherTimer? _reminderTimer;
+    private string? _lastReminderKey;
+
+    // Recurrence reconcile re-entrancy guard.
+    private bool _reconciling;
+
+    // Safe mode: the data file was present but unreadable (locked / corrupt / can't decrypt). We refuse to
+    // save over it so a transient failure can't overwrite the real data with an empty model.
+    private bool _safeMode;
+
     public MainWindow()
     {
         InitializeComponent();
         Loaded += OnLoaded;
         Closing += OnClosing;
+        PreviewKeyDown += Window_PreviewKeyDown;
         // Keep the Crew tab badge in sync whenever the roster changes.
         CrewPg.Changed += UpdateCrewTabHeader;
 
@@ -53,6 +74,22 @@ public partial class MainWindow : Window
         StartAutoSaveTimer();
         SyncOnSaveMenu.IsChecked = DataStore.SyncOnSave;
         DarkModeMenu.IsChecked = DataStore.DarkMode;
+        EncryptLocalMenu.IsChecked = DataStore.EncryptLocalData;
+
+        // If the data file was present but unreadable, we're in read-only safe mode — tell the user
+        // clearly (saving is already disabled so the real file can't be overwritten with an empty model).
+        if (_safeMode)
+            MessageBox.Show(this,
+                "Your data file is present but could not be read — it may be locked by another program, still being written, corrupt, or (if you enabled local encryption) created under a different Windows account.\n\n" +
+                "AA opened in READ-ONLY safe mode and will NOT save over it, so nothing already on disk is lost. Close AA, restore a copy if needed (File ▸ Trash or a backup), then reopen.",
+                "Data file unreadable — safe mode", MessageBoxButton.OK, MessageBoxImage.Warning);
+        // A file written by a newer AA: unknown fields are preserved on save, but warn so the user knows
+        // to update before relying on this machine.
+        else if (DataStore.LoadedNewerSchema is int v)
+            MessageBox.Show(this,
+                $"This data file was saved by a newer version of AA (format v{v}; this build understands v{DataStore.CurrentSchemaVersion}).\n\n" +
+                "You can keep working — newer fields are preserved — but update AA on this PC to avoid missing new features' data.",
+                "Newer data format", MessageBoxButton.OK, MessageBoxImage.Information);
         // On startup, if sync is on and we're already signed in, see if another PC pushed a newer save.
         if (DataStore.SyncOnSave && GoogleDriveUploader.IsConfigured && GoogleDriveUploader.HasToken)
             CheckRemoteNewer(false);
@@ -68,11 +105,36 @@ public partial class MainWindow : Window
         StartSharedSaveSync();
         if (!string.IsNullOrWhiteSpace(DataStore.SharedSaveFile))
             Dispatcher.BeginInvoke(new Action(() => CheckSharedFileForUpdate()), DispatcherPriority.Background);
+
+        // Background reminders: a tray icon that can raise balloon notifications, and a periodic check.
+        InitTray();
+        _reminderTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
+        _reminderTimer.Tick += (_, _) => CheckReminders(force: false);
+        _reminderTimer.Start();
+
+        if (!_safeMode)
+        {
+            // Honour the Trash retention window even if the user never deletes again, then regenerate any
+            // missed recurring occurrences (a completed monthly drill re-raises the next one).
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _repo?.PruneTrash();
+                if (_repo != null && _repo.ReconcileRecurrences())
+                { TasksPage.ReloadList(); ProceduresPage.ReloadList(); }
+                ShowDailyDigestIfDue();
+                CheckReminders(force: false);
+            }), DispatcherPriority.Background);
+        }
     }
 
     private void OnClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         StopSharedSaveSync();   // stop the watcher so our final save doesn't trip a reload
+        try { _tray?.Dispose(); _tray = null; } catch { }
+
+        // In safe mode the loaded data isn't trustworthy — never save (or push) over the real file.
+        if (_safeMode) return;
+
         // Flush rich-text edits from whichever container is currently loaded.
         FlushAllEditors();
         CaptureUiState();
@@ -83,10 +145,15 @@ public partial class MainWindow : Window
         {
             try
             {
-                var fileStamp = DataStore.PeekZipLastModified(DataStore.SharedSaveFile);
+                var path = DataStore.SharedSaveFile!;
+                bool exists = File.Exists(path);
+                var fileStamp = exists ? DataStore.PeekZipLastModified(path) : null;
                 var local = _repo.Data.LastModified;
-                if (!fileStamp.HasValue || (local.HasValue && local.Value >= fileStamp.Value))
-                    PushToShared("Shared save (on close)");
+                // Push if the bundle doesn't exist yet (create it), OR it exists, is readable, and we're not
+                // older than it. If it exists but the stamp is unreadable (null — mid-write / transient IO),
+                // do NOT push: never clobber a peer's possibly-newer save on a stamp we couldn't read.
+                bool push = !exists || (fileStamp.HasValue && (!local.HasValue || local.Value >= fileStamp.Value));
+                if (push) PushToShared("Shared save (on close)");
             }
             catch { }
         }
@@ -116,7 +183,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            if (_repo == null) return;
+            if (_repo == null || _safeMode) return;
             EquipmentPage.FlushPendingEditors();
             TasksPage.FlushPendingEditors();
             ProceduresPage.FlushPendingEditors();
@@ -190,6 +257,13 @@ public partial class MainWindow : Window
 
     private void DoSave()
     {
+        if (_safeMode)
+        {
+            MessageBox.Show(this,
+                "AA is in read-only safe mode because the data file couldn't be read at startup, so saving is disabled to protect the file on disk. Close and reopen AA once the file is available.",
+                "Safe mode — not saving", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
         try
         {
             EquipmentPage.FlushPendingEditors();
@@ -367,7 +441,10 @@ public partial class MainWindow : Window
             if (!ReviewAndConfirmImport(data, data.LastModified, Path.GetFileName(dlg.FileName))) return;
             try
             {
+                _repo?.Detach();                   // stop the outgoing repo's debounce (no stale write / leak)
                 _repo = new AppRepository(data);
+                _safeMode = false;                 // a freshly imported, readable file
+                _repo.Saved += OnRepoSaved;
                 InitPagesAndRestoreUi();
                 // Remember this path as the active data file so future Saves and the next
                 // launch route to it instead of the default %LOCALAPPDATA%\AA\data.json.
@@ -773,6 +850,8 @@ public partial class MainWindow : Window
             }
         }
         catch { /* watcher is best-effort; the 60s poll still detects changes */ }
+
+        UpdateSharedIndicator();   // show the persistent "Shared save on / offline" indicator
     }
 
     private void StopSharedSaveSync()
@@ -822,8 +901,9 @@ public partial class MainWindow : Window
             _sharedLastSeen = _repo.Data.LastModified;
             _lastSyncedStamp = _repo.Data.LastModified;   // our local state now matches the bundle
             StatusBlock.Text = $"{label} written {DateTime.Now:HH:mm:ss} (data + attachments).";
+            SetSharedOnline(true);
         }
-        catch (Exception ex) { StatusBlock.Text = $"{label} failed: {ex.Message}"; }
+        catch (Exception ex) { StatusBlock.Text = $"{label} failed: {ex.Message}"; SetSharedPushFailed(); }
         finally
         {
             try { if (File.Exists(tmp)) File.Delete(tmp); } catch { }
@@ -848,8 +928,9 @@ public partial class MainWindow : Window
             _sharedLastSeen = _repo.Data.LastModified;
             _lastSyncedStamp = _repo.Data.LastModified;   // our local state now matches the bundle
             StatusBlock.Text = $"{label} written {DateTime.Now:HH:mm:ss} (data + attachments).";
+            SetSharedOnline(true);
         }
-        catch (Exception ex) { StatusBlock.Text = $"{label} failed: {ex.Message}"; }
+        catch (Exception ex) { StatusBlock.Text = $"{label} failed: {ex.Message}"; SetSharedPushFailed(); }
         finally { try { if (File.Exists(tmp)) File.Delete(tmp); } catch { } }
     }
 
@@ -859,14 +940,18 @@ public partial class MainWindow : Window
     {
         if (_repo == null || _handlingSharedUpdate) return;
         var path = DataStore.SharedSaveFile;
-        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
+        if (string.IsNullOrWhiteSpace(path)) return;
+        // Reachability drives the persistent OFFLINE indicator: on a VSAT/network drop the folder vanishes.
+        var dir = Path.GetDirectoryName(path);
+        if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir)) { SetSharedOffline(); return; }
+        if (!File.Exists(path)) { SetSharedOnline(false); return; }   // reachable; no bundle yet / nothing to pull
 
         var fileStamp = DataStore.PeekZipLastModified(path);
-        if (fileStamp == null) return;                  // unreadable / mid-write — try again next tick
+        if (fileStamp == null) return;                  // unreadable / mid-write — try again next tick (state unchanged)
         var local = _repo.Data.LastModified;
         bool newer = !local.HasValue || fileStamp.Value > local.Value;
-        if (!newer) return;
-        if (_sharedLastSeen.HasValue && fileStamp.Value == _sharedLastSeen.Value) return;
+        if (!newer) { SetSharedOnline(false); return; }
+        if (_sharedLastSeen.HasValue && fileStamp.Value == _sharedLastSeen.Value) { SetSharedOnline(false); return; }
 
         _handlingSharedUpdate = true;
         try
@@ -885,7 +970,7 @@ public partial class MainWindow : Window
                     "Yes = reload (discard my changes)\n" +
                     "No = keep mine (they overwrite the shared file on the next save)",
                     "Shared save updated", MessageBoxButton.YesNo, MessageBoxImage.Question);
-                if (choice != MessageBoxResult.Yes) { _sharedLastSeen = fileStamp; return; }
+                if (choice != MessageBoxResult.Yes) { _sharedLastSeen = fileStamp; SetSharedOnline(false); return; }
             }
             // Validates + extracts to a temp folder first, so a torn/locked bundle leaves local data intact.
             DataStore.ImportSharedBundle(path);
@@ -893,6 +978,7 @@ public partial class MainWindow : Window
             _sharedLastSeen = _repo.Data.LastModified;
             _lastSyncedStamp = _repo.Data.LastModified;   // now in sync with the bundle
             StatusBlock.Text = $"Reloaded the shared save with attachments ({DateTime.Now:HH:mm:ss}).";
+            SetSharedOnline(true);
         }
         catch (Exception ex) { StatusBlock.Text = $"Shared reload skipped (busy): {ex.Message}"; }
         finally { _handlingSharedUpdate = false; }
@@ -961,6 +1047,7 @@ public partial class MainWindow : Window
                 "Stop shared save file", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         StopSharedSaveSync();
         DataStore.SetSharedSaveFile(null);
+        UpdateSharedIndicator();   // hide the shared-save indicator
         StatusBlock.Text = "Stopped using the shared save file (now saving locally).";
     }
 
@@ -968,9 +1055,17 @@ public partial class MainWindow : Window
     {
         DataStore.LoadSettings();
         var data = DataStore.Load();
+        _repo?.Detach();   // stop the outgoing repo's debounce so it can't write stale data (or leak)
         _repo = new AppRepository(data);
+        // If the file was present but unreadable, don't let the (empty) model be saved back over it.
+        _safeMode = DataStore.LastLoadFailed;
+        _repo.SuspendSaving = _safeMode;
+        _repo.Saved += OnRepoSaved;   // regenerate recurring occurrences after each save
         InitPagesAndRestoreUi();
-        StatusBlock.Text = $"Loaded \u2014 {DataStore.CurrentDataFile}";
+        UpdateSharedIndicator();
+        StatusBlock.Text = _safeMode
+            ? "\u26a0 Data file unreadable \u2014 read-only safe mode (not saving)."
+            : $"Loaded \u2014 {DataStore.CurrentDataFile}";
     }
 
     private void InitPagesAndRestoreUi()
@@ -1196,5 +1291,230 @@ public partial class MainWindow : Window
         }
         if (!_restoringUi && _repo != null)
             _repo.Data.Ui.SelectedMainTabIndex = MainTabs.SelectedIndex;
+    }
+
+    // ---- Keyboard shortcuts: Ctrl+1..9 tabs, F2 rename, Ctrl+Z undo delete ----
+    private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+
+        // Ctrl+1..9 — jump to the Nth tab (in current display order).
+        if (ctrl && (e.Key is >= Key.D1 and <= Key.D9 || e.Key is >= Key.NumPad1 and <= Key.NumPad9))
+        {
+            int n = e.Key is >= Key.NumPad1 and <= Key.NumPad9 ? e.Key - Key.NumPad1 : e.Key - Key.D1;
+            if (n >= 0 && n < MainTabs.Items.Count) { MainTabs.SelectedIndex = n; e.Handled = true; }
+            return;
+        }
+
+        // F2 — rename the selected item on the active hierarchy page (ignored while editing text).
+        if (e.Key == Key.F2 && !IsTextInputFocused())
+        {
+            if (MainTabs.SelectedItem is TabItem ti && ti.Content is Views.HierarchyPage hp)
+            { hp.BeginRename(); e.Handled = true; }
+            return;
+        }
+
+        // Ctrl+Z — undo the last delete, but ONLY when a text/rich-text editor doesn't have focus (there,
+        // Ctrl+Z is the editor's own text-undo and must be left alone).
+        if (ctrl && e.Key == Key.Z && !IsTextInputFocused())
+        {
+            UndoDelete();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>True when a text-editing control has keyboard focus (so global keys defer to it).</summary>
+    private static bool IsTextInputFocused()
+    {
+        var f = Keyboard.FocusedElement;
+        return f is System.Windows.Controls.Primitives.TextBoxBase || f is PasswordBox;
+    }
+
+    private void UndoDelete()
+    {
+        if (_repo == null || _safeMode) return;
+        var type = _repo.UndoLastDelete();
+        if (type == null) { StatusBlock.Text = "Nothing to undo."; return; }
+        RefreshAfterRestore(type);
+        _repo.Save();
+        StatusBlock.Text = "Restored the last deleted item (Ctrl+Z).";
+    }
+
+    /// <summary>Refresh whichever page(s) a restored item belongs to.</summary>
+    private void RefreshAfterRestore(string type)
+    {
+        switch (type)
+        {
+            case "Equipment": EquipmentPage.ReloadList(); break;
+            case "Task": TasksPage.ReloadList(); break;
+            case "Procedure": ProceduresPage.ReloadList(); break;
+            case "Vessel": VesselsPage.ReloadList(); break;
+            case "Crew": CrewPg.Refresh(); UpdateCrewTabHeader(); break;
+        }
+    }
+
+    // ---- Trash ----
+    private void MenuTrash_Click(object sender, RoutedEventArgs e)
+    {
+        if (_repo == null) return;
+        var w = new Views.TrashWindow(_repo) { Owner = this };
+        w.Restored += RefreshAfterRestore;
+        w.ShowDialog();
+    }
+
+    // ---- Encrypt local data file (DPAPI, this PC only) ----
+    private void MenuEncryptLocal_Click(object sender, RoutedEventArgs e)
+    {
+        if (_repo == null) return;
+        if (_safeMode)
+        {
+            EncryptLocalMenu.IsChecked = DataStore.EncryptLocalData;
+            MessageBox.Show(this, "Can't change encryption in read-only safe mode.", "Safe mode",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        bool on = EncryptLocalMenu.IsChecked;
+        if (on && MessageBox.Show(this,
+                "Encrypt this PC's data file at rest with Windows DPAPI (tied to your Windows account)?\n\n" +
+                "• Only THIS machine's local file is encrypted.\n" +
+                "• Shared-save bundles, ZIP exports and Google Drive backups stay portable plaintext, so syncing between PCs still works.\n" +
+                "• It can only be read back under your Windows account on this PC.",
+                "Encrypt local data file", MessageBoxButton.OKCancel, MessageBoxImage.Information) != MessageBoxResult.OK)
+        {
+            EncryptLocalMenu.IsChecked = false;
+            return;
+        }
+        try
+        {
+            DataStore.SetEncryptLocalData(on);
+            _repo.Data.LastModified = DateTime.Now;
+            DataStore.Save(_repo.Data);   // rewrite the active file in the new (encrypted/plaintext) form
+            StatusBlock.Text = on ? "Local data file is now encrypted at rest." : "Local data file is now plaintext.";
+        }
+        catch (Exception ex)
+        {
+            EncryptLocalMenu.IsChecked = DataStore.EncryptLocalData;
+            MessageBox.Show(this, ex.Message, "Encrypt local data file failed", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    // ---- Recurrence: regenerate the next occurrence after each save ----
+    private void OnRepoSaved()
+    {
+        if (_reconciling || _repo == null || _safeMode) return;
+        _reconciling = true;
+        try
+        {
+            if (_repo.ReconcileRecurrences())
+                Dispatcher.BeginInvoke(new Action(() =>
+                { TasksPage.ReloadList(); ProceduresPage.ReloadList(); }), DispatcherPriority.Background);
+        }
+        finally { _reconciling = false; }
+    }
+
+    // ---- Background reminders (tray balloon + once-a-day digest) ----
+    private void InitTray()
+    {
+        try
+        {
+            _tray = new System.Windows.Forms.NotifyIcon { Visible = true, Text = "AA" };
+            try
+            {
+                var s = Application.GetResourceStream(new Uri("pack://application:,,,/AA.ico"))?.Stream;
+                if (s != null) _tray.Icon = new System.Drawing.Icon(s);
+            }
+            catch { /* balloon still works without a custom icon */ }
+            _tray.BalloonTipClicked += (_, _) => Dispatcher.BeginInvoke(new Action(OpenDueDatesWindow));
+            _tray.DoubleClick += (_, _) => Dispatcher.BeginInvoke(new Action(() => { Show(); Activate(); }));
+        }
+        catch { _tray = null; }   // tray is best-effort
+    }
+
+    /// <summary>Raise a tray balloon when there's due/overdue work. Dedups so an unchanged situation isn't
+    /// re-announced every tick; <paramref name="force"/> always shows (used by the daily digest).</summary>
+    private void CheckReminders(bool force)
+    {
+        if (_repo == null || _tray == null) return;
+        var sum = ReminderService.Compute(_repo, DateTime.Today);
+        int crew = 0; try { crew = CrewPg.ExpiringCount; } catch { }
+        if (!sum.Any && crew == 0) { _lastReminderKey = null; return; }
+
+        var key = $"{DateTime.Today:yyyy-MM-dd}|{sum.Overdue}|{sum.DueToday}|{sum.DueWeek}|{crew}";
+        if (!force && key == _lastReminderKey) return;
+        _lastReminderKey = key;
+
+        var text = sum.Headline();
+        if (crew > 0) text += $"  ·  {crew} crew contract(s) expiring";
+        try { _tray.ShowBalloonTip(8000, "AA — due soon", text, System.Windows.Forms.ToolTipIcon.Info); } catch { }
+    }
+
+    /// <summary>Once per calendar day (per PC): surface a digest of what's due — a tray balloon plus the
+    /// floating due-dates window (overdue, today, tomorrow and the next 7 days).</summary>
+    private void ShowDailyDigestIfDue()
+    {
+        if (_repo == null || _safeMode) return;
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        if (_repo.Data.Ui.LastDigestDate == today) return;
+        _repo.Data.Ui.LastDigestDate = today;
+        _repo.MarkDirty();
+
+        var sum = ReminderService.Compute(_repo, DateTime.Today);
+        int crew = 0; try { crew = CrewPg.ExpiringCount; } catch { }
+        if (!sum.Any && crew == 0) return;   // nothing to nag about today
+
+        OpenDueDatesWindow();
+        CheckReminders(force: true);
+    }
+
+    // ---- Persistent shared-save health indicator ----
+    /// <summary>Mark shared save healthy. <paramref name="synced"/> = an actual push/pull just succeeded
+    /// (clears BOTH trouble signals + refreshes the timestamp); false = a read-only reachability check
+    /// succeeded (clears only the unreachable signal — a prior push failure stays flagged until a real
+    /// push lands, so a write-locked share can't masquerade as synced).</summary>
+    private void SetSharedOnline(bool synced)
+    {
+        _sharedOffline = false;
+        if (synced) { _sharedPushFailed = false; _sharedTroubleSince = null; _sharedLastSyncOk = DateTime.Now; }
+        UpdateSharedIndicator();
+    }
+
+    private void SetSharedOffline()      // folder/bundle unreachable
+    {
+        if (!_sharedOffline && !_sharedPushFailed) _sharedTroubleSince = DateTime.Now;
+        _sharedOffline = true;
+        UpdateSharedIndicator();
+    }
+
+    private void SetSharedPushFailed()   // reachable, but our write didn't land
+    {
+        if (!_sharedOffline && !_sharedPushFailed) _sharedTroubleSince = DateTime.Now;
+        _sharedPushFailed = true;
+        UpdateSharedIndicator();
+    }
+
+    private void UpdateSharedIndicator()
+    {
+        if (string.IsNullOrWhiteSpace(DataStore.SharedSaveFile))
+        {
+            SharedStatusBlock.Visibility = Visibility.Collapsed;
+            _sharedOffline = false; _sharedPushFailed = false; _sharedTroubleSince = null;
+            return;
+        }
+        SharedStatusBlock.Visibility = Visibility.Visible;
+        if (_sharedOffline || _sharedPushFailed)
+        {
+            SharedStatusBlock.Text = _sharedOffline
+                ? $"⚠ Shared save OFFLINE since {_sharedTroubleSince:HH:mm} — retrying"
+                : $"⚠ Shared save NOT SAVING since {_sharedTroubleSince:HH:mm} — last write failed";
+            SharedStatusBlock.Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(0xD4, 0x50, 0x50));
+        }
+        else
+        {
+            SharedStatusBlock.Text = _sharedLastSyncOk.HasValue
+                ? $"🔗 Shared synced {_sharedLastSyncOk:HH:mm}" : "🔗 Shared save on";
+            SharedStatusBlock.Foreground = new System.Windows.Media.SolidColorBrush(
+                System.Windows.Media.Color.FromRgb(0x3C, 0xA0, 0x5A));
+        }
     }
 }

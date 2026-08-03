@@ -330,10 +330,11 @@ public partial class CrewPage : UserControl
     private void Delete_Click(object sender, RoutedEventArgs e)
     {
         if (_repo == null || _selected == null) return;
-        if (MessageBox.Show(Window.GetWindow(this), $"Remove {_selected.FullName} from the roster?",
+        if (MessageBox.Show(Window.GetWindow(this),
+                $"Move {_selected.FullName} to the Trash?\n\nYou can restore them from File ▸ Trash, or undo with Ctrl+Z.",
                 "Confirm", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        _repo.LogRemoved("Crew", _selected.FullName);
-        _repo.Data.Crew.Remove(_selected);
+        // Soft-delete: the roster entry goes to the Trash so a mis-click is reversible.
+        _repo.TrashCrew(_selected);
         _selected = null;
         _repo.Save();
         Refresh();

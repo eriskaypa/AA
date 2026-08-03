@@ -120,20 +120,45 @@ public partial class FloatingTasksWindow : Window
         var todayItems = Collect(today);
         var tomorrowItems = Collect(tomorrow);
 
+        // "Next 7 days" = due day+2 .. day+7, each item once, excluding anything already shown above.
+        var shownItems = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        foreach (var it in overdueItems.Concat(todayItems).Concat(tomorrowItems))
+            if (it.Item != null) shownItems.Add(it.Item);
+        var upcomingItems = CollectUpcoming(today.AddDays(2), today.AddDays(7), shownItems);
+
         HeaderSub.Text = (overdueItems.Count > 0 ? $"{overdueItems.Count} overdue  ·  " : "")
             + $"Today {today:ddd, dd MMM}  ·  Tomorrow {tomorrow:ddd, dd MMM}";
 
         if (overdueItems.Count > 0) AddSection("OVERDUE", today, overdueItems);
         AddSection("TODAY", today, todayItems);
         AddSection("TOMORROW", tomorrow, tomorrowItems);
+        if (upcomingItems.Count > 0) AddSection("NEXT 7 DAYS", today, upcomingItems);
 
-        if (overdueItems.Count == 0 && todayItems.Count == 0 && tomorrowItems.Count == 0)
+        if (overdueItems.Count == 0 && todayItems.Count == 0 && tomorrowItems.Count == 0 && upcomingItems.Count == 0)
             Host.Children.Add(new TextBlock
             {
-                Text = "Nothing overdue, or due today or tomorrow 🎉",
+                Text = "Nothing overdue, or due in the next 7 days 🎉",
                 Foreground = MutedBrush, TextAlignment = TextAlignment.Center,
                 Margin = new Thickness(0, 24, 0, 0), TextWrapping = TextWrapping.Wrap
             });
+    }
+
+    /// <summary>Everything due from <paramref name="start"/> through <paramref name="end"/> (inclusive),
+    /// each item once, excluding anything already listed in the Overdue/Today/Tomorrow sections.</summary>
+    private List<DueItem> CollectUpcoming(DateTime start, DateTime end, HashSet<object> alreadyShown)
+    {
+        var result = new List<DueItem>();
+        if (_repo == null) return result;
+        for (var d = start; d <= end; d = d.AddDays(1))
+        {
+            foreach (var it in Collect(d))
+            {
+                if (it.Item != null && !alreadyShown.Add(it.Item)) continue;   // dedupe across days + sections
+                it.Sub = $"{it.Sub} · due {d:ddd, dd MMM}";
+                result.Add(it);
+            }
+        }
+        return result;
     }
 
     private List<DueItem> Collect(DateTime day)
