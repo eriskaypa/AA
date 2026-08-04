@@ -167,6 +167,7 @@ public partial class MainWindow : Window
             TasksPage.FlushPendingEditors();
             ProceduresPage.FlushPendingEditors();
             VesselsPage.FlushPendingEditors();
+            SirePg.FlushBody();   // capture any in-progress SIRE question-body edit
         }
         catch { }
     }

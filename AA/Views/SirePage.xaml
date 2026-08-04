@@ -152,11 +152,26 @@
                 </StackPanel>
             </Border>
 
-            <!-- Full question detail -->
+            <!-- Full question detail — EDITABLE (Segoe UI, bullets, colour-coded headers). Your line breaks,
+                 re-wording and formatting are saved per question, in the AA database. -->
             <Border Grid.Row="3" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
-                    <StackPanel x:Name="DetailHost"/>
-                </ScrollViewer>
+                <DockPanel>
+                    <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" Padding="8,4"
+                            BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
+                        <DockPanel>
+                            <TextBlock VerticalAlignment="Center" Foreground="{DynamicResource Muted}" FontSize="11"
+                                       TextTrimming="CharacterEllipsis"
+                                       Text="Editable — type to add line breaks / notes (Enter = new line). Your edits are saved."/>
+                            <Button DockPanel.Dock="Right" HorizontalAlignment="Right" Content="↺ Reset" Click="ResetBody_Click"
+                                    ToolTip="Discard your edits and restore the original SIRE formatting for this question."/>
+                        </DockPanel>
+                    </Border>
+                    <RichTextBox x:Name="DetailBox" BorderThickness="0"
+                                 Background="{DynamicResource EditorBg}" Foreground="{DynamicResource EditorFg}"
+                                 FontFamily="Segoe UI" FontSize="13" Padding="12"
+                                 VerticalScrollBarVisibility="Auto"
+                                 TextChanged="DetailBox_TextChanged" LostFocus="DetailBox_LostFocus"/>
+                </DockPanel>
             </Border>
         </Grid>
 

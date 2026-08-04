@@ -1,8 +1,11 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using AA.Models;
@@ -23,6 +26,8 @@ public partial class SirePage : UserControl
     private bool _loaded;      // combos/checkboxes wired
     private bool _bankReady;   // bank loaded + list populated
     private SireQuestion? _selected;
+    private bool _loadingBody; // suppress TextChanged while (re)loading the editor
+    private bool _bodyDirty;   // the editor has unsaved edits for the current question
     private readonly List<CheckBox> _chapterBoxes = new();
     private readonly List<CheckBox> _vesselBoxes = new();
     private readonly List<CheckBox> _typeBoxes = new();
@@ -34,7 +39,9 @@ public partial class SirePage : UserControl
     public void Init(AppRepository repo, Action<HierarchyItem> navigate, Action refreshAa)
     {
         _repo = repo; _navigate = navigate; _refreshAa = refreshAa;
-        if (_bankReady) { SyncQuestionFlags(); UpdateStats(); RefreshTasks(); UpdateActionButtons(); }
+        // On a data reload/import the repo is swapped — re-point at the new session and reload the body
+        // (any in-flight edit belonged to the now-discarded repo).
+        if (_bankReady) { SyncQuestionFlags(); UpdateStats(); RefreshTasks(); UpdateActionButtons(); LoadBody(_selected); }
     }
 
     /// <summary>Deferred load — the 3.2 MB question bank is parsed only when the SIRE tab is first shown.</summary>
@@ -177,48 +184,63 @@ public partial class SirePage : UserControl
 
     private void QuestionList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        FlushBody();   // persist any edits to the previously-selected question before switching
         _selected = QuestionList.SelectedItem as SireQuestion;
         DetailRoot.IsEnabled = _selected != null;
-        RenderDetail(_selected);
+        LoadBody(_selected);
         RefreshTasks();
         UpdateActionButtons();
     }
 
-    private void RenderDetail(SireQuestion? q)
+    // ---------- Editable question body (per-question edits persisted in the AA database) ----------
+
+    /// <summary>Load the question body into the editor — the user's saved edit if there is one, otherwise
+    /// the freshly generated original (Segoe UI, bullets, colour-coded headers) so they start from that.</summary>
+    private void LoadBody(SireQuestion? q)
     {
-        DetailHost.Children.Clear();
-        if (q == null) return;
-        AddHeading($"Q {q.QuestionNumber}  —  {q.ShortQuestionText}", 16);
-        AddMeta($"{q.ChapterDisplay}   ·   {q.QuestionTypeDisplay}   ·   Vessel: {q.VesselTypesDisplay}"
-            + (string.IsNullOrWhiteSpace(q.RoviqSequence) ? "" : $"   ·   ROVIQ: {q.RoviqSequence}"));
-        AddBody(q.FullQuestionText);
-        AddSection("Data Source", q.DataSource);
-        AddSection("Objective", q.Objective);
-        AddSection("Industry Guidance", q.IndustryGuidance);
-        AddSection("Inspection Guidance", q.InspectionGuidance);
-        AddSection("Suggested Inspector Actions", q.SuggestedInspectorActions);
-        AddSection("Expected Evidence", q.ExpectedEvidence);
-        AddSection("Potential Negative Observation Grounds", q.PotentialNegativeObservationGrounds);
-        AddSection("Publications", q.Publications);
+        _loadingBody = true;
+        try
+        {
+            if (q == null || _repo == null) { DetailBox.Document = new FlowDocument(); return; }
+            if (State.QuestionBodies.TryGetValue(q.QuestionNumber, out var saved) && !string.IsNullOrEmpty(saved))
+            {
+                var doc = new FlowDocument();
+                var range = new TextRange(doc.ContentStart, doc.ContentEnd);
+                using var ms = new MemoryStream(Encoding.UTF8.GetBytes(saved));
+                try { range.Load(ms, DataFormats.Xaml); DetailBox.Document = doc; }
+                catch { DetailBox.Document = SireFlow.BuildQuestion(q, Brushes.Black); }
+            }
+            else DetailBox.Document = SireFlow.BuildQuestion(q, Brushes.Black);
+        }
+        finally { _loadingBody = false; _bodyDirty = false; }
     }
 
-    private void AddHeading(string text, double size)
-        => DetailHost.Children.Add(new TextBlock { Text = text, FontWeight = FontWeights.Bold, FontSize = size, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)FindResource("Accent"), Margin = new Thickness(0, 0, 0, 4) });
-
-    private void AddMeta(string text)
-        => DetailHost.Children.Add(new TextBlock { Text = text, FontStyle = FontStyles.Italic, TextWrapping = TextWrapping.Wrap, Foreground = (Brush)FindResource("Muted"), Margin = new Thickness(0, 0, 0, 8) });
-
-    private void AddBody(string? text)
+    /// <summary>Serialize the editor and store it as this question's edited body. Called on question switch,
+    /// on focus loss, and by the host's flush-all so line-break / re-wording edits are never lost.</summary>
+    public void FlushBody()
     {
-        if (string.IsNullOrWhiteSpace(text)) return;
-        DetailHost.Children.Add(new TextBlock { Text = text.Trim(), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 6) });
+        if (!_bodyDirty || _selected == null || _repo == null) return;
+        try
+        {
+            var range = new TextRange(DetailBox.Document.ContentStart, DetailBox.Document.ContentEnd);
+            using var ms = new MemoryStream();
+            range.Save(ms, DataFormats.Xaml);
+            State.QuestionBodies[_selected.QuestionNumber] = Encoding.UTF8.GetString(ms.ToArray());
+            _repo.MarkDirty();
+        }
+        catch { }
+        _bodyDirty = false;
     }
 
-    private void AddSection(string label, string? body)
+    private void DetailBox_TextChanged(object sender, TextChangedEventArgs e) { if (!_loadingBody) _bodyDirty = true; }
+    private void DetailBox_LostFocus(object sender, RoutedEventArgs e) => FlushBody();
+
+    private void ResetBody_Click(object sender, RoutedEventArgs e)
     {
-        if (string.IsNullOrWhiteSpace(body)) return;
-        DetailHost.Children.Add(new TextBlock { Text = label, FontWeight = FontWeights.Bold, Foreground = (Brush)FindResource("Accent"), Margin = new Thickness(0, 8, 0, 2), TextWrapping = TextWrapping.Wrap });
-        AddBody(body);
+        if (_selected == null || _repo == null) return;
+        if (State.QuestionBodies.Remove(_selected.QuestionNumber)) _repo.MarkDirty();
+        _bodyDirty = false;
+        LoadBody(_selected);
     }
 
     // ---------- Status / bookmark / for-export ----------

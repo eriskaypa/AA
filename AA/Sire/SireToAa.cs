@@ -150,91 +150,13 @@ public static class SireToAa
 
     private static string Truncate(string s, int max) => s.Length <= max ? s : s[..max].TrimEnd() + "…";
 
-    // ---------- FlowDocument XAML builders ----------
+    // ---------- Rich-text body (original SIRE styling via SireFlow) ----------
 
-    private const string FlowNs = "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+    /// <summary>Container rich-text for one question, in AA's TextRange/Section format — Segoe UI, PDF
+    /// bullets preserved, and the colour-coded section headers (amber/green/red), matching the original
+    /// SIRE Knowledge Bank. Loads verbatim in AA's container editor/viewer.</summary>
+    public static string BuildQuestionXaml(SireQuestion q) => SireFlow.ToContainerXaml(SireFlow.BuildQuestion(q));
 
-    public static string BuildQuestionXaml(SireQuestion q)
-    {
-        var sb = new StringBuilder();
-        sb.Append($"<FlowDocument xmlns=\"{FlowNs}\">");
-        Head(sb, $"SIRE 2.0 — Q {q.QuestionNumber}");
-        Head(sb, q.ShortQuestionText);
-        Body(sb, q.FullQuestionText);
-        Meta(sb, $"Chapter: {q.ChapterDisplay}   |   Vessel types: {q.VesselTypesDisplay}" +
-                 (string.IsNullOrWhiteSpace(q.RoviqSequence) ? "" : $"   |   ROVIQ: {q.RoviqSequence}"));
-        Section(sb, "Data Source", q.DataSource);
-        Section(sb, "Objective", q.Objective);
-        Section(sb, "Industry Guidance", q.IndustryGuidance);
-        Section(sb, "Inspection Guidance", q.InspectionGuidance);
-        Section(sb, "Suggested Inspector Actions", q.SuggestedInspectorActions);
-        Section(sb, "Expected Evidence", q.ExpectedEvidence);
-        Section(sb, "Potential Negative Observation Grounds", q.PotentialNegativeObservationGrounds);
-        Section(sb, "Publications", q.Publications);
-        sb.Append("</FlowDocument>");
-        return sb.ToString();
-    }
-
-    private static string BuildOverviewXaml(string title, List<SireQuestion> qs)
-    {
-        var sb = new StringBuilder();
-        sb.Append($"<FlowDocument xmlns=\"{FlowNs}\">");
-        Head(sb, title);
-        Meta(sb, $"{qs.Count} SIRE question(s). Imported from the SIRE 2.0 Knowledge Bank.");
-        foreach (var q in qs)
-            sb.Append($"<Paragraph>{Esc($"Q {q.QuestionNumber} — {q.ShortQuestionText}")}</Paragraph>");
-        sb.Append("</FlowDocument>");
-        return sb.ToString();
-    }
-
-    private static void Head(StringBuilder sb, string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return;
-        sb.Append($"<Paragraph FontSize=\"15\"><Bold>{Esc(text)}</Bold></Paragraph>");
-    }
-
-    private static void Meta(StringBuilder sb, string text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return;
-        sb.Append($"<Paragraph FontStyle=\"Italic\">{Esc(text)}</Paragraph>");
-    }
-
-    private static void Section(StringBuilder sb, string label, string? body)
-    {
-        if (string.IsNullOrWhiteSpace(body)) return;
-        sb.Append($"<Paragraph Margin=\"0,8,0,2\"><Bold>{Esc(label)}</Bold></Paragraph>");
-        Body(sb, body);
-    }
-
-    private static void Body(StringBuilder sb, string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text)) return;
-        // Preserve line breaks as <LineBreak/> inside a single paragraph.
-        var parts = text.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n');
-        sb.Append("<Paragraph>");
-        for (int i = 0; i < parts.Length; i++)
-        {
-            if (i > 0) sb.Append("<LineBreak/>");
-            sb.Append(Esc(parts[i]));
-        }
-        sb.Append("</Paragraph>");
-    }
-
-    private static string Esc(string s)
-    {
-        var sb = new StringBuilder(s.Length + 8);
-        foreach (var ch in s)
-        {
-            if (ch < 0x20 && ch != '\t' && ch != '\n' && ch != '\r') continue; // strip XML-1.0-illegal control chars
-            switch (ch)
-            {
-                case '&': sb.Append("&amp;"); break;
-                case '<': sb.Append("&lt;"); break;
-                case '>': sb.Append("&gt;"); break;
-                case '"': sb.Append("&quot;"); break;
-                default: sb.Append(ch); break;
-            }
-        }
-        return sb.ToString();
-    }
+    private static string BuildOverviewXaml(string title, List<SireQuestion> qs) =>
+        SireFlow.ToContainerXaml(SireFlow.BuildOverview(title, qs));
 }

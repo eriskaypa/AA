@@ -24,6 +24,10 @@ public class SireState
     public List<string> Bookmarks { get; set; } = new();
     public List<string> ForExport { get; set; } = new();
     public List<SireTask> Tasks { get; set; } = new();
+    /// <summary>Per-question edited body (AA rich-text / Section XAML), keyed by question number. Set when
+    /// the user edits the question body in the SIRE tab (line breaks, re-wording, formatting). Absent = show
+    /// the generated original. Persists with the database so edits are saved and synced.</summary>
+    public Dictionary<string, string> QuestionBodies { get; set; } = new();
 
     public QuestionStatus GetStatus(string q) =>
         QuestionStatuses.TryGetValue(q, out var s) && Enum.TryParse<QuestionStatus>(s, out var v) ? v : QuestionStatus.None;
