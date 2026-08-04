@@ -55,6 +55,10 @@ public static class DataStore
     /// <summary>Last base location used by the Folder Builder. Persisted.</summary>
     public static string? FolderBuilderBase { get; private set; }
 
+    /// <summary>User's Google Gemini API key for SIRE AI task suggestions. Stored in settings.json (which
+    /// lives in the data folder and is never committed) — never hardcoded. Empty = AI disabled. Persisted.</summary>
+    public static string? GeminiApiKey { get; private set; }
+
     /// <summary>Optional single "shared" save file at a user-chosen location (e.g. a network drive
     /// or a cloud-synced folder). When set, it IS the active data file: the app autosaves to it and
     /// watches it so other running copies of AA reload automatically when it changes. Persisted.</summary>
@@ -71,6 +75,7 @@ public static class DataStore
         public string? FolderBuilderBase { get; set; }
         public string? SharedSaveFile { get; set; }
         public bool EncryptLocalData { get; set; }
+        public string? GeminiApiKey { get; set; }
     }
 
     public static void LoadSettings()
@@ -86,6 +91,7 @@ public static class DataStore
             SyncOnSave = s?.SyncOnSave ?? false;
             DarkMode = s?.DarkMode ?? false;
             EncryptLocalData = s?.EncryptLocalData ?? false;
+            GeminiApiKey = s?.GeminiApiKey;
             FolderBuilderBase = s?.FolderBuilderBase;
             PasswordService.LoadFrom(s?.PasswordHash, s?.PasswordSalt);
 
@@ -127,6 +133,14 @@ public static class DataStore
     public static void SetEncryptLocalData(bool on)
     {
         EncryptLocalData = on;
+        WriteSettings();
+    }
+
+    /// <summary>Set (or clear) the Gemini API key used for SIRE AI task suggestions. Persisted to
+    /// settings.json only (never committed).</summary>
+    public static void SetGeminiApiKey(string? key)
+    {
+        GeminiApiKey = string.IsNullOrWhiteSpace(key) ? null : key.Trim();
         WriteSettings();
     }
 
@@ -187,6 +201,7 @@ public static class DataStore
                 FolderBuilderBase = FolderBuilderBase ?? existing?.FolderBuilderBase,
                 SharedSaveFile = SharedSaveFile,
                 EncryptLocalData = EncryptLocalData,
+                GeminiApiKey = GeminiApiKey ?? existing?.GeminiApiKey,
             };
             File.WriteAllText(SettingsFile, JsonSerializer.Serialize(s, Opts));
         }

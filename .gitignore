@@ -35,3 +35,6 @@ crash.log
 
 # Local scratch / review artifacts
 .scratch/
+
+# Local settings (holds the Gemini API key; lives outside the repo, ignored for defense-in-depth)
+settings.json

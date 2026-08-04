@@ -83,6 +83,11 @@
                 <MenuItem Header="Check crew contract e_xpiries" Click="MenuCheckExpiries_Click"
                           ToolTip="List crew whose contracts (sign-off dates) are due soon or overdue."/>
                 <Separator/>
+                <MenuItem Header="SIRE 2.0 e_xport..." Click="MenuSireExport_Click"
+                          ToolTip="Export SIRE inspection data (checklist, tasks, status report, and more) to a text file or the clipboard."/>
+                <MenuItem Header="Set _Gemini API key..." Click="MenuSetGemini_Click"
+                          ToolTip="Set your Google Gemini API key to enable AI task suggestions on the SIRE tab. Stored locally, never committed."/>
+                <Separator/>
                 <MenuItem Header="Set / change _password..." Click="MenuSetPassword_Click"/>
                 <MenuItem Header="_Lock now" Click="MenuLockNow_Click" ToolTip="Forget the unlocked password for this session. Any open locked container will require re-unlock."/>
             </MenuItem>
@@ -175,6 +180,9 @@
             </TabItem>
             <TabItem x:Name="TabPorts" Header="Ports">
                 <views:PortsPage x:Name="PortsPg"/>
+            </TabItem>
+            <TabItem x:Name="TabSire" Header="SIRE 2.0">
+                <views:SirePage x:Name="SirePg"/>
             </TabItem>
         </TabControl>
     </DockPanel>

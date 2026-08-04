@@ -625,6 +625,9 @@ public class AppData
     /// <summary>Soft-deleted items (Equipment/Task/Procedure/Vessel/Crew) kept so a delete can be undone
     /// or restored. Bounded + age-pruned by <see cref="AA.Services.AppRepository"/>.</summary>
     public ObservableCollection<TrashedItem> Trash { get; set; } = new();
+    /// <summary>SIRE 2.0 inspection session state (per-question status, bookmarks, tasks) for the SIRE tab.
+    /// Persists with the rest of the database so it backs up and syncs.</summary>
+    public AA.Sire.SireState Sire { get; set; } = new();
     public UiState Ui { get; set; } = new();
     /// <summary>Wall-clock time this database was last saved by the user. Stamped by
     /// <see cref="AA.Services.AppRepository.Save"/>; used to warn when an imported file is

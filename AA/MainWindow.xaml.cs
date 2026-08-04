@@ -1088,6 +1088,7 @@ public partial class MainWindow : Window
         BucketsPg.Init(_repo);
         BucketsPg.Navigate = NavigateToItem;
         PortsPg.Init(_repo);
+        SirePg.Init(_repo, NavigateToItem, RefreshHierarchyPages);
         UpdateCrewTabHeader();
         _floating?.SetRepo(_repo);    // keep the floating due-dates window pointed at the current data
         _quickWork?.SetRepo(_repo);   // and the Ctrl+N quick-work window (avoids writing to an orphaned repo)
@@ -1288,6 +1289,7 @@ public partial class MainWindow : Window
             if (ti.Content == ListsPg) ListsPg.Refresh();
             if (ti.Content == BucketsPg) BucketsPg.Refresh();
             if (ti.Content == PortsPg) PortsPg.Refresh();
+            if (ti.Content == SirePg) SirePg.EnsureLoaded();   // parse the 3.2MB bank on first open
         }
         if (!_restoringUi && _repo != null)
             _repo.Data.Ui.SelectedMainTabIndex = MainTabs.SelectedIndex;
@@ -1351,6 +1353,25 @@ public partial class MainWindow : Window
             case "Vessel": VesselsPage.ReloadList(); break;
             case "Crew": CrewPg.Refresh(); UpdateCrewTabHeader(); break;
         }
+    }
+
+    /// <summary>Rebuild the four hierarchy pages so items created elsewhere (e.g. SIRE quick-add) appear.</summary>
+    private void RefreshHierarchyPages()
+    {
+        EquipmentPage.ReloadList(); TasksPage.ReloadList(); ProceduresPage.ReloadList(); VesselsPage.ReloadList();
+    }
+
+    // ---- SIRE 2.0 ----
+    private void MenuSireExport_Click(object sender, RoutedEventArgs e) => SirePg.ShowExportDialog();
+
+    private void MenuSetGemini_Click(object sender, RoutedEventArgs e)
+    {
+        var w = new Views.PromptWindow("Gemini API key",
+            "Paste your Google Gemini API key (stored locally in settings.json, never committed):",
+            DataStore.GeminiApiKey ?? "") { Owner = this };
+        if (w.ShowDialog() != true) return;
+        DataStore.SetGeminiApiKey(w.Value);
+        StatusBlock.Text = string.IsNullOrWhiteSpace(w.Value) ? "Gemini API key cleared." : "Gemini API key saved.";
     }
 
     // ---- Trash ----

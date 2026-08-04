@@ -36,6 +36,17 @@ Application data is stored under: `%LOCALAPPDATA%\AA\` (file: `data.json`, impor
 
 ## Features implemented
 
+### SIRE 2.0 Knowledge Bank tab + quick-add to AA
+Integrated the standalone **SIRE 2.0 Knowledge Bank** (the OCIMF tanker-inspection question library) into AA as a new **SIRE 2.0** tab, and added a quick-add bridge that turns any part of it into AA work items.
+
+- **Embedded question bank** — all **410 questions across 12 chapters** ship inside the app ([`Sire/Data/sire2_question_bank.json`](AA/Sire/Data/sire2_question_bank.json), a `<Resource>`), loaded lazily on first tab open ([SireBank](AA/Sire/SireBank.cs)). Offline; no server.
+- **Browser** — filter by chapter / vessel type / question type / evidence category / session status, full-text search, and a detail view showing every section (objective, industry & inspection guidance, inspector actions, expected evidence, negative-observation grounds, publications). ([SirePage](AA/Views/SirePage.xaml.cs))
+- **Offline task engine** — ported the SIRE `TaskIdentifierService` ([AA/Sire/TaskIdentifierService.cs](AA/Sire/TaskIdentifierService.cs)) so AA regenerates the same actionable tasks the standalone app derives from each question's guidance text — no AI needed (the "check if the generated tasks are there; if not, create them smartly" requirement). ~then surfaced per question and in bulk.
+- **Inspection session in the AA database** — per-question status (In Progress / Checked / N/A), bookmarks, for-export tags and tasks are stored in `AppData.Sire` ([SireState](AA/Sire/SireState.cs)), so they **back up and sync** with everything else (no separate `.sire` file needed).
+- **Quick-add to AA** (the headline feature) — from any question, section, or chapter, create an AA **Equipment / Task / Procedure** (kind pre-selected from the question's dominant evidence category). The SIRE detail becomes the item's rich-text body; child questions become checklist steps / subtasks / components; and **each offline-identified task is spun off as its own top-level AA Task, cross-linked back to the parent** ([SireToAa](AA/Sire/SireToAa.cs)).
+- **AI task suggestions (Gemini)** — optional. Uses **your own** Google Gemini API key (Tools ▸ *Set Gemini API key…*, stored in `settings.json`, never committed). The standalone SIRE repo shipped a **hardcoded** key — AA deliberately does **not** copy it (that key should be revoked). ([GeminiService](AA/Sire/GeminiService.cs))
+- **Exports** — all 16 SIRE export modes (checklist, tasks, status report, by-chapter/ROVIQ/vessel, identified tasks, full session report, …) to a `.txt` file or the clipboard, via Tools ▸ *SIRE 2.0 export…* ([SireExport](AA/Sire/SireExport.cs)).
+
 ### Data-safety, reminders & housekeeping batch (9 improvements)
 A batch of reliability, security and workflow improvements, each verified by the headless harness (83 checks total) and an adversarial multi-agent review.
 

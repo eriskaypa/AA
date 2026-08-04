@@ -1,0 +1,169 @@
+<UserControl x:Class="AA.Views.SirePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="250"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="360"/>
+            <ColumnDefinition Width="6"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- ===== Filters ===== -->
+        <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" Padding="8,6" BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
+                    <DockPanel>
+                        <TextBlock Text="SIRE 2.0 Filters" FontWeight="Bold" FontSize="14" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                        <Button Content="Reset" DockPanel.Dock="Right" HorizontalAlignment="Right" Click="Reset_Click"/>
+                    </DockPanel>
+                </Border>
+                <TextBlock x:Name="StatsText" DockPanel.Dock="Bottom" Margin="8,6" TextWrapping="Wrap"
+                           Foreground="{DynamicResource Muted}" FontSize="11"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="8">
+                        <TextBox x:Name="SearchBox" Margin="0,0,0,8" TextChanged="Filter_Changed" Tag="Search all questions…"/>
+                        <TextBlock Text="Sort by" Foreground="{DynamicResource Muted}" FontSize="11"/>
+                        <ComboBox x:Name="SortCombo" Margin="0,2,0,8" SelectionChanged="Filter_Changed"/>
+                        <TextBlock Text="Evidence category" Foreground="{DynamicResource Muted}" FontSize="11"/>
+                        <ComboBox x:Name="EvidenceCombo" Margin="0,2,0,8" SelectionChanged="Filter_Changed"/>
+                        <TextBlock Text="Session status" Foreground="{DynamicResource Muted}" FontSize="11"/>
+                        <ComboBox x:Name="StatusFilterCombo" Margin="0,2,0,8" SelectionChanged="Filter_Changed"/>
+                        <Expander Header="Chapters" IsExpanded="True" Margin="0,2,0,4">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Margin="0,2,0,2">
+                                    <Button Content="All" Padding="6,1" Margin="0,0,4,0" Click="AllChapters_Click"/>
+                                    <Button Content="None" Padding="6,1" Click="NoChapters_Click"/>
+                                </StackPanel>
+                                <StackPanel x:Name="ChapterPanel"/>
+                            </StackPanel>
+                        </Expander>
+                        <Expander Header="Vessel types" Margin="0,2,0,4">
+                            <StackPanel x:Name="VesselPanel"/>
+                        </Expander>
+                        <Expander Header="Question type" Margin="0,2,0,4">
+                            <StackPanel x:Name="TypePanel"/>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch" Background="{DynamicResource BorderB}"/>
+
+        <!-- ===== Question list ===== -->
+        <Border Grid.Column="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+            <DockPanel>
+                <Border DockPanel.Dock="Top" Background="{DynamicResource PanelAlt}" Padding="8,6" BorderBrush="{DynamicResource BorderB}" BorderThickness="0,0,0,1">
+                    <TextBlock x:Name="ListHeader" Text="Questions" FontWeight="Bold" Foreground="{DynamicResource Accent}"/>
+                </Border>
+                <ListBox x:Name="QuestionList" BorderThickness="0" SelectionChanged="QuestionList_SelectionChanged"
+                         HorizontalContentAlignment="Stretch"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel Margin="0,2">
+                                <TextBlock DockPanel.Dock="Left" Text="{Binding QuestionNumber}" FontWeight="Bold"
+                                           Foreground="{DynamicResource Accent}" Width="52" VerticalAlignment="Top"/>
+                                <TextBlock DockPanel.Dock="Right" Text="★" Foreground="#FFF0A030" VerticalAlignment="Top" Margin="4,0,0,0"
+                                           Visibility="{Binding IsBookmarked, Converter={StaticResource BoolToVis}}"/>
+                                <StackPanel>
+                                    <TextBlock Text="{Binding ShortQuestionText}" TextWrapping="Wrap"/>
+                                    <TextBlock Text="{Binding StatusDisplay}" FontSize="10" Foreground="{DynamicResource Muted}"
+                                               Visibility="{Binding HasStatus, Converter={StaticResource BoolToVis}}"/>
+                                </StackPanel>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+        </Border>
+
+        <GridSplitter Grid.Column="3" Width="6" HorizontalAlignment="Stretch" Background="{DynamicResource BorderB}"/>
+
+        <!-- ===== Detail + actions ===== -->
+        <Grid Grid.Column="4" x:Name="DetailRoot" IsEnabled="False">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Status / bookmark / for-export -->
+            <Border Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,6">
+                <WrapPanel>
+                    <Button Content="⧗ In Progress" Margin="0,0,4,0" Click="StatusInProgress_Click"/>
+                    <Button Content="✓ Checked" Margin="0,0,4,0" Click="StatusChecked_Click"/>
+                    <Button Content="N/A" Margin="0,0,4,0" Click="StatusNa_Click"/>
+                    <Button Content="Clear" Margin="0,0,12,0" Click="StatusClear_Click"/>
+                    <ToggleButton x:Name="BookmarkBtn" Content="★ Bookmark" Margin="0,0,4,0" Click="Bookmark_Click"/>
+                    <ToggleButton x:Name="ForExportBtn" Content="EXP tag" Click="ForExport_Click"/>
+                </WrapPanel>
+            </Border>
+
+            <!-- Quick-add to AA -->
+            <Border Grid.Row="1" Background="{DynamicResource PanelAlt}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,6">
+                <WrapPanel>
+                    <TextBlock Text="➕ Add to AA:" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="{DynamicResource Accent}"/>
+                    <Button Content="This question…" Style="{StaticResource AccentButton}" Margin="0,0,4,0" Click="AddQuestion_Click"
+                            ToolTip="Create an AA Equipment / Task / Procedure from this question, plus its identified tasks as top-level Tasks."/>
+                    <Button Content="Whole section…" Margin="0,0,4,0" Click="AddSection_Click"
+                            ToolTip="Add every question in this section under one AA item, with each question as a child and its tasks spun off."/>
+                    <Button Content="Whole chapter…" Click="AddChapter_Click"
+                            ToolTip="Add every question in this chapter under one AA item (can be large)."/>
+                </WrapPanel>
+            </Border>
+
+            <!-- Tasks -->
+            <Border Grid.Row="2" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4" Padding="8" Margin="0,0,0,6">
+                <StackPanel>
+                    <DockPanel Margin="0,0,0,4">
+                        <TextBlock x:Name="TasksHeader" Text="Tasks" FontWeight="Bold" Foreground="{DynamicResource Accent}" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" DockPanel.Dock="Right">
+                            <Button Content="📋 Identified…" Margin="0,0,4,0" Click="Identified_Click"
+                                    ToolTip="Add offline-identified tasks (from the question guidance) to this question."/>
+                            <Button x:Name="AiBtn" Content="✦ AI Suggest…" Click="AiSuggest_Click"
+                                    ToolTip="Ask Google Gemini for suggested tasks (needs a Gemini API key set in Tools)."/>
+                        </StackPanel>
+                    </DockPanel>
+                    <ItemsControl x:Name="TaskList">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,1">
+                                    <CheckBox DockPanel.Dock="Left" IsChecked="{Binding IsCompleted, Mode=OneWay}"
+                                              Click="TaskDone_Click" Tag="{Binding}" VerticalAlignment="Top" Margin="0,1,6,0"/>
+                                    <Button DockPanel.Dock="Right" Content="✕" Width="20" Padding="0" Background="Transparent"
+                                            BorderThickness="0" Foreground="{DynamicResource Muted}" Click="TaskRemove_Click" Tag="{Binding}"/>
+                                    <TextBlock Text="{Binding Text}" TextWrapping="Wrap"/>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <DockPanel Margin="0,4,0,0">
+                        <Button DockPanel.Dock="Right" Content="Add" Click="AddTask_Click" Margin="4,0,0,0"/>
+                        <TextBox x:Name="NewTaskBox" KeyDown="NewTaskBox_KeyDown" Tag="Add a task and press Enter…"/>
+                    </DockPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Full question detail -->
+            <Border Grid.Row="3" Background="{DynamicResource Panel}" BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="12">
+                    <StackPanel x:Name="DetailHost"/>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+
+        <!-- Loading / error overlay -->
+        <Border x:Name="LoadingOverlay" Grid.ColumnSpan="5" Background="{DynamicResource Panel}" Visibility="Collapsed">
+            <TextBlock x:Name="LoadingText" Text="Loading SIRE 2.0 question bank…" HorizontalAlignment="Center"
+                       VerticalAlignment="Center" FontSize="15" Foreground="{DynamicResource Muted}"/>
+        </Border>
+    </Grid>
+</UserControl>
