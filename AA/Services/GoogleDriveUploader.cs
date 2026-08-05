@@ -23,6 +23,7 @@ public static class GoogleDriveUploader
     private const string SyncFolderName = "AA Sync";
     private const string SyncFileName = "AA-sync.zip";
     private const string LastModifiedProp = "aaLastModified";
+    private const string IdentityProp = "aaIdentity";
 
     /// <summary>True once a client_secret.json has been configured.</summary>
     public static bool IsConfigured => File.Exists(DataStore.GoogleClientSecretFile);
@@ -90,7 +91,11 @@ public static class GoogleDriveUploader
         using var service = await GetServiceAsync(ct);
         var folderId = await EnsureBackupFolderAsync(service, ct);
 
-        var meta = new DriveData.File { Name = Path.GetFileName(localFilePath) };
+        var meta = new DriveData.File
+        {
+            Name = Path.GetFileName(localFilePath),
+            AppProperties = new Dictionary<string, string> { [IdentityProp] = DataStore.AppIdentity }
+        };
         if (folderId != null) meta.Parents = new List<string> { folderId };
 
         await using var media = File.OpenRead(localFilePath);
@@ -168,7 +173,7 @@ public static class GoogleDriveUploader
 
     /// <summary>State of the remote sync file: its Drive id and the data's own LastModified
     /// (read cheaply from appProperties, no download).</summary>
-    public readonly record struct SyncState(string FileId, DateTime? LastModified, DateTimeOffset? DriveModified);
+    public readonly record struct SyncState(string FileId, DateTime? LastModified, DateTimeOffset? DriveModified, string? Identity);
 
     /// <summary>Read the remote sync file's metadata only (no content download). Null if none yet.</summary>
     public static async Task<SyncState?> GetSyncStateAsync(CancellationToken ct = default)
@@ -191,8 +196,11 @@ public static class GoogleDriveUploader
         if (f.AppProperties != null && f.AppProperties.TryGetValue(LastModifiedProp, out var raw) &&
             DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
             last = dt;
+        string? identity = null;
+        if (f.AppProperties != null && f.AppProperties.TryGetValue(IdentityProp, out var idRaw) && !string.IsNullOrWhiteSpace(idRaw))
+            identity = idRaw;
         DateTimeOffset? driveMod = DateTimeOffset.TryParse(f.ModifiedTimeRaw, out var dto) ? dto : null;
-        return new SyncState(f.Id, last, driveMod);
+        return new SyncState(f.Id, last, driveMod, identity);
     }
 
     /// <summary>Push the local backup to the single rolling sync file (create or overwrite),
@@ -216,7 +224,11 @@ public static class GoogleDriveUploader
             existingId = res.Files?.FirstOrDefault()?.Id;
         }
 
-        var props = new Dictionary<string, string> { [LastModifiedProp] = lastModified?.ToString("o") ?? "" };
+        var props = new Dictionary<string, string>
+        {
+            [LastModifiedProp] = lastModified?.ToString("o") ?? "",
+            [IdentityProp] = DataStore.AppIdentity
+        };
 
         string id;
         await using (var media = File.OpenRead(localZipPath))
@@ -243,7 +255,7 @@ public static class GoogleDriveUploader
                 id = req.ResponseBody?.Id ?? "";
             }
         }
-        return new SyncState(id, lastModified, null);
+        return new SyncState(id, lastModified, null, DataStore.AppIdentity);
     }
 
     /// <summary>Download the rolling sync file to a local path.</summary>

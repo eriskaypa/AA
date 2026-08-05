@@ -7,6 +7,18 @@ using AA.Models;
 
 namespace AA.Services;
 
+/// <summary>The identity/source stamp written into every exported bundle (shared save + Google Drive),
+/// recording which installation produced the save.</summary>
+public class BundleSource
+{
+    public string Identity { get; set; } = "";
+    public string Machine { get; set; } = "";
+    public DateTime WrittenUtc { get; set; }
+    public DateTime? LastModified { get; set; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public string WrittenLocal => WrittenUtc == default ? "" : WrittenUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+}
+
 public static class DataStore
 {
     public static string AppFolder { get; } = ResolveAppFolder();
@@ -59,6 +71,16 @@ public static class DataStore
     /// lives in the data folder and is never committed) — never hardcoded. Empty = AI disabled. Persisted.</summary>
     public static string? GeminiApiKey { get; private set; }
 
+    /// <summary>This installation's editable identity (e.g. a vessel or operator name). Stamped into every
+    /// exported bundle — shared saves AND Google Drive — so you can tell which machine/operator produced a
+    /// given save. Always editable; defaults to the machine name. Persisted per-machine in settings.json.</summary>
+    public static string AppIdentity { get; private set; } = DefaultIdentity();
+
+    private static string DefaultIdentity()
+    {
+        try { return Environment.MachineName; } catch { return "AA"; }
+    }
+
     /// <summary>Optional single "shared" save file at a user-chosen location (e.g. a network drive
     /// or a cloud-synced folder). When set, it IS the active data file: the app autosaves to it and
     /// watches it so other running copies of AA reload automatically when it changes. Persisted.</summary>
@@ -76,6 +98,7 @@ public static class DataStore
         public string? SharedSaveFile { get; set; }
         public bool EncryptLocalData { get; set; }
         public string? GeminiApiKey { get; set; }
+        public string? AppIdentity { get; set; }
     }
 
     public static void LoadSettings()
@@ -83,7 +106,7 @@ public static class DataStore
         try
         {
             Directory.CreateDirectory(AppFolder);
-            if (!File.Exists(SettingsFile)) { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; DarkMode = false; SharedSaveFile = null; EncryptLocalData = false; PasswordService.LoadFrom(null, null); return; }
+            if (!File.Exists(SettingsFile)) { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; DarkMode = false; SharedSaveFile = null; EncryptLocalData = false; AppIdentity = DefaultIdentity(); PasswordService.LoadFrom(null, null); return; }
             var s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(SettingsFile), Opts);
             CurrentDataFile = !string.IsNullOrWhiteSpace(s?.CurrentDataFile) && File.Exists(s!.CurrentDataFile)
                 ? s.CurrentDataFile! : DefaultDataFile;
@@ -92,6 +115,7 @@ public static class DataStore
             DarkMode = s?.DarkMode ?? false;
             EncryptLocalData = s?.EncryptLocalData ?? false;
             GeminiApiKey = s?.GeminiApiKey;
+            AppIdentity = string.IsNullOrWhiteSpace(s?.AppIdentity) ? DefaultIdentity() : s!.AppIdentity!;
             FolderBuilderBase = s?.FolderBuilderBase;
             PasswordService.LoadFrom(s?.PasswordHash, s?.PasswordSalt);
 
@@ -99,7 +123,7 @@ public static class DataStore
             // always works from its local data file and pushes to / pulls from the bundle.
             SharedSaveFile = string.IsNullOrWhiteSpace(s?.SharedSaveFile) ? null : s!.SharedSaveFile;
         }
-        catch { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; DarkMode = false; SharedSaveFile = null; EncryptLocalData = false; PasswordService.LoadFrom(null, null); }
+        catch { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; DarkMode = false; SharedSaveFile = null; EncryptLocalData = false; AppIdentity = DefaultIdentity(); PasswordService.LoadFrom(null, null); }
     }
 
     public static void SetCurrentDataFile(string path)
@@ -141,6 +165,13 @@ public static class DataStore
     public static void SetGeminiApiKey(string? key)
     {
         GeminiApiKey = string.IsNullOrWhiteSpace(key) ? null : key.Trim();
+        WriteSettings();
+    }
+
+    /// <summary>Set this installation's identity (blank resets to the machine name). Persisted.</summary>
+    public static void SetAppIdentity(string? identity)
+    {
+        AppIdentity = string.IsNullOrWhiteSpace(identity) ? DefaultIdentity() : identity.Trim();
         WriteSettings();
     }
 
@@ -202,6 +233,7 @@ public static class DataStore
                 SharedSaveFile = SharedSaveFile,
                 EncryptLocalData = EncryptLocalData,
                 GeminiApiKey = GeminiApiKey ?? existing?.GeminiApiKey,
+                AppIdentity = AppIdentity,
             };
             File.WriteAllText(SettingsFile, JsonSerializer.Serialize(s, Opts));
         }
@@ -547,6 +579,25 @@ public static class DataStore
         catch { return null; }
     }
 
+    /// <summary>Read the identity/source stamp from a bundle ZIP (shared save or Drive backup) without
+    /// extracting anything. Null when absent (older bundles) or unreadable.</summary>
+    public static BundleSource? PeekBundleSource(string zipPath)
+    {
+        try
+        {
+            using var z = ZipFile.OpenRead(zipPath);
+            var entry = z.GetEntry("source.json");
+            if (entry == null) return null;
+            using var s = entry.Open();
+            using var r = new StreamReader(s);
+            return JsonSerializer.Deserialize<BundleSource>(r.ReadToEnd(), Opts);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>Convenience: the identity that wrote a bundle (or null).</summary>
+    public static string? PeekBundleIdentity(string zipPath) => PeekBundleSource(zipPath)?.Identity;
+
     /// <summary>Deserialize the data.json inside a backup ZIP (without extracting anything),
     /// for previewing changes before an import. Returns null if unreadable.</summary>
     public static AppData? PeekZipData(string zipPath)
@@ -611,6 +662,16 @@ public static class DataStore
                 File.WriteAllText(Path.Combine(staging, "data.json"), ReadDataText(DefaultDataFile));
             if (Directory.Exists(FilesFolder))
                 CopyDirectory(FilesFolder, Path.Combine(staging, "files"));
+            // Stamp this installation's identity into the bundle so a shared save / Drive backup records
+            // which machine/operator produced it.
+            var source = new BundleSource
+            {
+                Identity = AppIdentity,
+                Machine = DefaultIdentity(),
+                WrittenUtc = DateTime.UtcNow,
+                LastModified = PeekFileLastModified(CurrentDataFile)
+            };
+            File.WriteAllText(Path.Combine(staging, "source.json"), JsonSerializer.Serialize(source, Opts));
             ZipFile.CreateFromDirectory(staging, zipPath, CompressionLevel.Optimal, includeBaseDirectory: false);
         }
         finally

@@ -32,7 +32,40 @@ public partial class SirePage : UserControl
     private readonly List<CheckBox> _vesselBoxes = new();
     private readonly List<CheckBox> _typeBoxes = new();
 
-    public SirePage() { InitializeComponent(); }
+    public SirePage()
+    {
+        InitializeComponent();
+        // Insertion-only editing: never delete the original body — only add line breaks and notes.
+        // Disable Cut, and make Paste insert at the caret instead of replacing a selection.
+        DetailBox.CommandBindings.Add(new CommandBinding(ApplicationCommands.Cut,
+            (_, e) => e.Handled = true, (_, e) => { e.CanExecute = false; e.Handled = true; }));
+        DetailBox.CommandBindings.Add(new CommandBinding(ApplicationCommands.Paste, (_, e) =>
+        {
+            if (!DetailBox.Selection.IsEmpty) DetailBox.Selection.Select(DetailBox.Selection.Start, DetailBox.Selection.Start);
+            DetailBox.Paste();
+            e.Handled = true;
+        }));
+    }
+
+    /// <summary>Keep the editor insertion-only: block deletion keys, and collapse any selection before a
+    /// content key so typing / Enter / paste can never replace (delete) the original text — only insert.</summary>
+    private void DetailBox_PreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        bool ctrl = (Keyboard.Modifiers & ModifierKeys.Control) != 0;
+        if (e.Key is Key.Back or Key.Delete) { e.Handled = true; return; }   // no deletion
+        if (ctrl && e.Key == Key.X) { e.Handled = true; return; }            // no cut
+        if (!DetailBox.Selection.IsEmpty && !IsNavOrCopyKey(e.Key, ctrl))
+            DetailBox.Selection.Select(DetailBox.Selection.Start, DetailBox.Selection.Start);
+    }
+
+    private static bool IsNavOrCopyKey(Key key, bool ctrl)
+    {
+        if (ctrl && key is Key.C or Key.A or Key.Insert) return true;   // copy / select-all
+        return key is Key.Left or Key.Right or Key.Up or Key.Down or Key.Home or Key.End
+            or Key.PageUp or Key.PageDown or Key.Tab
+            or Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl
+            or Key.LeftAlt or Key.RightAlt or Key.System or Key.CapsLock;
+    }
 
     private SireState State => _repo!.Data.Sire;
 

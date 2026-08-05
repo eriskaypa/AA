@@ -93,6 +93,7 @@ public static class SireFlow
     {
         FontFamily = Segoe,
         FontSize = 13,
+        FontWeight = FontWeights.Normal,   // force normal weight even if a host style would inherit bold
         PagePadding = new Thickness(0),
         Foreground = bodyBrush ?? Slate
     };

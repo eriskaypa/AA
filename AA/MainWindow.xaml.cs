@@ -75,6 +75,7 @@ public partial class MainWindow : Window
         SyncOnSaveMenu.IsChecked = DataStore.SyncOnSave;
         DarkModeMenu.IsChecked = DataStore.DarkMode;
         EncryptLocalMenu.IsChecked = DataStore.EncryptLocalData;
+        UpdateWindowTitle();   // show this installation's identity in the title bar
 
         // If the data file was present but unreadable, we're in read-only safe mode — tell the user
         // clearly (saving is already disabled so the real file can't be overwritten with an empty model).
@@ -352,7 +353,8 @@ public partial class MainWindow : Window
             if (!interactive && _lastSeenRemote.HasValue && remote.HasValue && remote.Value == _lastSeenRemote.Value) return;
             _lastSeenRemote = remote;
 
-            StatusBlock.Text = "Newer save on Google Drive — downloading to preview…";
+            var who = state.Value.Identity;
+            StatusBlock.Text = $"Newer save on Google Drive{(string.IsNullOrWhiteSpace(who) ? "" : $" from “{who}”")} — downloading to preview…";
             temp = Path.Combine(Path.GetTempPath(), $"aa-sync-{Guid.NewGuid():N}.zip");
             await GoogleDriveUploader.DownloadSyncAsync(state.Value.FileId, temp);
             var incoming = DataStore.PeekZipData(temp);
@@ -554,7 +556,7 @@ public partial class MainWindow : Window
             _repo.Save();   // stamps LastModified
             var backups = Path.Combine(folder, "AA Backups");
             Directory.CreateDirectory(backups);
-            var zip = Path.Combine(backups, $"aa-data-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
+            var zip = Path.Combine(backups, $"aa-data-{SafeIdentity(DataStore.AppIdentity)}-{DateTime.Now:yyyyMMdd-HHmmss}.zip");
             DataStore.ExportFolderToZip(zip);
             StatusBlock.Text = $"Saved a copy to Google Drive: {zip}";
             MessageBox.Show(this,
@@ -974,11 +976,12 @@ public partial class MainWindow : Window
                 if (choice != MessageBoxResult.Yes) { _sharedLastSeen = fileStamp; SetSharedOnline(false); return; }
             }
             // Validates + extracts to a temp folder first, so a torn/locked bundle leaves local data intact.
+            var who = DataStore.PeekBundleIdentity(path);
             DataStore.ImportSharedBundle(path);
             LoadDataAndInitUi();
             _sharedLastSeen = _repo.Data.LastModified;
             _lastSyncedStamp = _repo.Data.LastModified;   // now in sync with the bundle
-            StatusBlock.Text = $"Reloaded the shared save with attachments ({DateTime.Now:HH:mm:ss}).";
+            StatusBlock.Text = $"Reloaded the shared save{(string.IsNullOrWhiteSpace(who) ? "" : $" from “{who}”")} ({DateTime.Now:HH:mm:ss}).";
             SetSharedOnline(true);
         }
         catch (Exception ex) { StatusBlock.Text = $"Shared reload skipped (busy): {ex.Message}"; }
@@ -1373,6 +1376,27 @@ public partial class MainWindow : Window
         if (w.ShowDialog() != true) return;
         DataStore.SetGeminiApiKey(w.Value);
         StatusBlock.Text = string.IsNullOrWhiteSpace(w.Value) ? "Gemini API key cleared." : "Gemini API key saved.";
+    }
+
+    // ---- App identity (stamped into every shared save + Google Drive export) ----
+    private void MenuSetIdentity_Click(object sender, RoutedEventArgs e)
+    {
+        var w = new Views.PromptWindow("App identity",
+            "Name this installation (e.g. a vessel or operator). It is stamped into every shared save and Google Drive export so you can tell which machine/operator produced a save:",
+            DataStore.AppIdentity) { Owner = this };
+        if (w.ShowDialog() != true) return;
+        DataStore.SetAppIdentity(w.Value);
+        UpdateWindowTitle();
+        StatusBlock.Text = $"App identity set: {DataStore.AppIdentity}";
+    }
+
+    private void UpdateWindowTitle() => Title = $"AA — {DataStore.AppIdentity}";
+
+    /// <summary>A filesystem-safe form of the identity for backup filenames.</summary>
+    private static string SafeIdentity(string id)
+    {
+        var s = new string(id.Where(c => !System.IO.Path.GetInvalidFileNameChars().Contains(c) && c != ' ').ToArray()).Trim();
+        return s.Length == 0 ? "AA" : s;
     }
 
     // ---- Trash ----

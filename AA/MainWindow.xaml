@@ -36,6 +36,8 @@
                           ToolTip="Use ONE save file at a location you choose (e.g. a network drive or a synced folder). AA autosaves there every 10 minutes and auto-reloads when another copy of AA updates it — point every PC at the same file to keep them in sync."/>
                 <MenuItem Header="Stop shared save file" Click="MenuStopSharedFile_Click"
                           ToolTip="Go back to saving locally on this PC only."/>
+                <MenuItem Header="Set app _identity..." Click="MenuSetIdentity_Click"
+                          ToolTip="Name this installation (e.g. a vessel or operator). It is stamped into every shared save and Google Drive export so you can tell which machine/operator produced a save. Always editable; defaults to the PC name."/>
                 <Separator/>
                 <MenuItem Header="Open data _folder" Click="MenuOpenFolder_Click"/>
                 <MenuItem Header="_Export data folder (ZIP)..." Click="MenuExportFolder_Click"/>

@@ -168,9 +168,18 @@
                     </Border>
                     <RichTextBox x:Name="DetailBox" BorderThickness="0"
                                  Background="{DynamicResource EditorBg}" Foreground="{DynamicResource EditorFg}"
-                                 FontFamily="Segoe UI" FontSize="13" Padding="12"
-                                 VerticalScrollBarVisibility="Auto"
-                                 TextChanged="DetailBox_TextChanged" LostFocus="DetailBox_LostFocus"/>
+                                 FontFamily="Segoe UI" FontSize="13" FontWeight="Normal" Padding="12"
+                                 VerticalScrollBarVisibility="Auto" AllowDrop="False"
+                                 PreviewKeyDown="DetailBox_PreviewKeyDown"
+                                 TextChanged="DetailBox_TextChanged" LostFocus="DetailBox_LostFocus">
+                        <RichTextBox.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Command="ApplicationCommands.Copy" Header="Copy"/>
+                                <MenuItem Command="ApplicationCommands.Paste" Header="Paste (insert)"/>
+                                <MenuItem Command="ApplicationCommands.SelectAll" Header="Select all"/>
+                            </ContextMenu>
+                        </RichTextBox.ContextMenu>
+                    </RichTextBox>
                 </DockPanel>
             </Border>
         </Grid>
