@@ -42,6 +42,10 @@ Each installation has its own **editable identity** (e.g. a vessel or operator n
 - Google Drive additionally records the identity in the file's **appProperties** (rolling sync file and uploaded backups) and in the backup **filename** (`aa-data-{identity}-{timestamp}.zip`).
 - On a shared-save reload or a "newer save on Drive" prompt, AA surfaces **who wrote it** (`Reloaded the shared save from "Vessel-Alpha"`). ([DataStore](AA/Services/DataStore.cs), [GoogleDriveUploader](AA/Services/GoogleDriveUploader.cs))
 
+### Smart Google Drive import (data-only when attachments unchanged) + whole-Drive detection
+- **Detect `aa-data` anywhere in Drive** — `GoogleDriveUploader.GetBestRemoteAsync` now finds the newest AA save across the **whole Drive** (the rolling `AA-sync.zip` OR any `aa-data*` backup, in any folder), keyed by the data's own LastModified (appProperties) or, when absent, the Drive modified-time. Previously the check only looked inside the `AA Sync` folder. *(Scope note: OAuth uses the least-privilege `drive.file` scope, so this sees files AA itself created/uploaded anywhere — not files placed by Google Drive for desktop or by hand, which would need a broader permission.)*
+- **Import everything-but-attachments on a text/data-only change** — `DataStore.ImportBundleSmart` extracts + validates the bundle in a temp folder, then compares its `files/` to the local attachments; when they're **identical** (same names + sizes) it applies **only the data.json** and leaves the (potentially large) attachments untouched, otherwise it syncs attachments additively. Used by the Drive real-time "check for newer save" and by *Load backup from Google Drive*; the status line says which path ran (`… (text only — attachments unchanged)`). Settings / password / Google state are preserved (no folder wipe). ([DataStore](AA/Services/DataStore.cs))
+
 ### SIRE 2.0 Knowledge Bank tab + quick-add to AA
 Integrated the standalone **SIRE 2.0 Knowledge Bank** (the OCIMF tanker-inspection question library) into AA as a new **SIRE 2.0** tab, and added a quick-add bridge that turns any part of it into AA work items.
 

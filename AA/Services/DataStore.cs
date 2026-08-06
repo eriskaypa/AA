@@ -784,6 +784,86 @@ public static class DataStore
         finally { try { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); } catch { } }
     }
 
+    /// <summary>Result of a smart import: whether the attachments differed and had to be (re)synced, or
+    /// the incoming save was a text/data-only change so attachments were left untouched.</summary>
+    public enum ImportKind { DataOnly, WithAttachments }
+
+    /// <summary>Import a Google Drive / backup bundle safely (extract + validate into a temp folder first).
+    /// When the bundle's attachments are IDENTICAL to the local files/ (same names + sizes) — i.e. the
+    /// incoming save is a text/data-only change — only the data.json is applied and the attachments are
+    /// left untouched (fast, no re-copy of a large files/ set). Otherwise attachments are synced additively
+    /// (copy/overwrite, then drop orphans). Settings, password and Google state are preserved (no wipe).
+    /// Returns which path was taken.</summary>
+    public static ImportKind ImportBundleSmart(string zipPath)
+    {
+        Directory.CreateDirectory(AppFolder);
+        var staging = Path.Combine(Path.GetTempPath(), "AA_import_" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            ZipFile.ExtractToDirectory(zipPath, staging);   // throws on a torn/bad bundle -> local untouched
+            var dataSrc = Path.Combine(staging, "data.json");
+            if (!File.Exists(dataSrc))
+                throw new InvalidDataException("The bundle has no data.json.");
+
+            Directory.CreateDirectory(FilesFolder);
+            var filesSrc = Path.Combine(staging, "files");
+            bool attachmentsChanged = !AttachmentsMatch(filesSrc, FilesFolder);
+
+            if (attachmentsChanged)
+            {
+                // 1) Bring in the bundle's attachments FIRST (additive), so they exist before the data
+                //    index that references them is switched over.
+                var bundleNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                if (Directory.Exists(filesSrc))
+                    foreach (var f in Directory.EnumerateFiles(filesSrc))
+                    {
+                        var name = Path.GetFileName(f);
+                        bundleNames.Add(name);
+                        File.Copy(f, Path.Combine(FilesFolder, name), overwrite: true);
+                    }
+                // 2) Switch the local data index over (honoring local encryption).
+                CurrentDataFile = DefaultDataFile;
+                WriteLocalDataFile(DefaultDataFile, File.ReadAllText(dataSrc));
+                // 3) Only now remove local attachments the bundle no longer has (safe orphans).
+                foreach (var f in Directory.EnumerateFiles(FilesFolder))
+                    if (!bundleNames.Contains(Path.GetFileName(f))) { try { File.Delete(f); } catch { } }
+            }
+            else
+            {
+                // Text/data-only change — apply just the data, leave every attachment exactly as it is.
+                CurrentDataFile = DefaultDataFile;
+                WriteLocalDataFile(DefaultDataFile, File.ReadAllText(dataSrc));
+            }
+
+            var data = LoadFrom(DefaultDataFile);
+            WriteLocalDataFile(DefaultDataFile, SerializeForSave(data));   // normalize + re-encrypt if local
+            WriteSettings();   // persist CurrentDataFile; settings/password/Google preserved
+            return attachmentsChanged ? ImportKind.WithAttachments : ImportKind.DataOnly;
+        }
+        finally { try { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); } catch { } }
+    }
+
+    /// <summary>True when a bundle's files/ folder holds exactly the same attachments as the local files/
+    /// (same set of names, each the same size) — used to detect a text/data-only change.</summary>
+    private static bool AttachmentsMatch(string bundleFilesDir, string localFilesDir)
+    {
+        var bundle = DirFileSizes(bundleFilesDir);
+        var local = DirFileSizes(localFilesDir);
+        if (bundle.Count != local.Count) return false;
+        foreach (var kv in bundle)
+            if (!local.TryGetValue(kv.Key, out var size) || size != kv.Value) return false;
+        return true;
+    }
+
+    private static Dictionary<string, long> DirFileSizes(string dir)
+    {
+        var map = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
+        if (Directory.Exists(dir))
+            foreach (var f in Directory.EnumerateFiles(dir))
+                map[Path.GetFileName(f)] = new FileInfo(f).Length;
+        return map;
+    }
+
     /// <summary>Best-effort recovery: when an imported database still references
     /// the old workstation's absolute paths under "...\\AA\\files\\<file>", rewrite
     /// the trailing "files\\<file>" segment as the new relative path so attachments

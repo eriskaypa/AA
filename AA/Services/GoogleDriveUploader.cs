@@ -203,6 +203,41 @@ public static class GoogleDriveUploader
         return new SyncState(f.Id, last, driveMod, identity);
     }
 
+    /// <summary>Detect the newest AA save anywhere in the user's Drive — the rolling <c>AA-sync.zip</c> OR
+    /// any <c>aa-data*</c> backup (uploaded via OAuth or synced into Drive by Google Drive for desktop),
+    /// wherever it lives. Keyed by the data's own LastModified (from appProperties) when present, otherwise
+    /// by the Drive modifiedTime (for synced-folder backups that carry no appProperties). Null if none.</summary>
+    public static async Task<SyncState?> GetBestRemoteAsync(CancellationToken ct = default)
+    {
+        using var service = await GetServiceAsync(ct);
+        var list = service.Files.List();
+        list.Q = "trashed=false and mimeType!='application/vnd.google-apps.folder' " +
+                 "and (name='" + SyncFileName + "' or name contains 'aa-data')";
+        list.Fields = "files(id,name,appProperties,modifiedTime)";
+        list.OrderBy = "modifiedTime desc";
+        list.PageSize = 100;
+        list.Spaces = "drive";
+        var res = await list.ExecuteAsync(ct);
+        if (res.Files == null || res.Files.Count == 0) return null;
+
+        SyncState? best = null;
+        DateTime bestKey = DateTime.MinValue;
+        foreach (var f in res.Files)
+        {
+            DateTime? last = null;
+            if (f.AppProperties != null && f.AppProperties.TryGetValue(LastModifiedProp, out var raw) &&
+                DateTime.TryParse(raw, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt))
+                last = dt;
+            string? identity = null;
+            if (f.AppProperties != null && f.AppProperties.TryGetValue(IdentityProp, out var idr) && !string.IsNullOrWhiteSpace(idr))
+                identity = idr;
+            DateTimeOffset? driveMod = DateTimeOffset.TryParse(f.ModifiedTimeRaw, out var dto) ? dto : null;
+            var key = last ?? driveMod?.UtcDateTime ?? DateTime.MinValue;
+            if (key > bestKey) { bestKey = key; best = new SyncState(f.Id, last, driveMod, identity); }
+        }
+        return best;
+    }
+
     /// <summary>Push the local backup to the single rolling sync file (create or overwrite),
     /// stamping the data's LastModified into appProperties. Returns the updated state.</summary>
     public static async Task<SyncState> PushSyncAsync(string localZipPath, DateTime? lastModified, CancellationToken ct = default)

@@ -341,10 +341,20 @@ public partial class MainWindow : Window
         string? temp = null;
         try
         {
-            var state = await GoogleDriveUploader.GetSyncStateAsync();
-            if (state == null) { if (interactive) StatusBlock.Text = "No sync file on Google Drive yet."; return; }
+            // Look across the WHOLE Drive: the rolling AA-sync.zip OR any aa-data* backup, wherever it lives.
+            var best = await GoogleDriveUploader.GetBestRemoteAsync();
+            if (best == null) { if (interactive) StatusBlock.Text = "No AA save found on Google Drive yet."; return; }
 
-            var remote = state.Value.LastModified;
+            var remote = best.Value.LastModified;
+            // A synced-folder backup carries no data stamp in appProperties — download once and read the
+            // data's LastModified from the bundle itself.
+            if (remote == null)
+            {
+                temp = Path.Combine(Path.GetTempPath(), $"aa-drive-{Guid.NewGuid():N}.zip");
+                await GoogleDriveUploader.DownloadAsync(best.Value.FileId, temp);
+                remote = DataStore.PeekZipLastModified(temp);
+            }
+
             var local = _repo.Data.LastModified;
             bool newer = remote.HasValue && (!local.HasValue || remote.Value > local.Value);
             if (!newer) { StatusBlock.Text = $"Google Drive is up to date ({DateTime.Now:HH:mm:ss})."; return; }
@@ -353,19 +363,26 @@ public partial class MainWindow : Window
             if (!interactive && _lastSeenRemote.HasValue && remote.HasValue && remote.Value == _lastSeenRemote.Value) return;
             _lastSeenRemote = remote;
 
-            var who = state.Value.Identity;
+            var who = best.Value.Identity;
             StatusBlock.Text = $"Newer save on Google Drive{(string.IsNullOrWhiteSpace(who) ? "" : $" from “{who}”")} — downloading to preview…";
-            temp = Path.Combine(Path.GetTempPath(), $"aa-sync-{Guid.NewGuid():N}.zip");
-            await GoogleDriveUploader.DownloadSyncAsync(state.Value.FileId, temp);
+            if (temp == null)
+            {
+                temp = Path.Combine(Path.GetTempPath(), $"aa-drive-{Guid.NewGuid():N}.zip");
+                await GoogleDriveUploader.DownloadAsync(best.Value.FileId, temp);
+            }
             var incoming = DataStore.PeekZipData(temp);
             if (!ReviewAndConfirmImport(incoming, remote, "Google Drive (newer save)"))
             { StatusBlock.Text = "Kept local version (Drive has a newer one)."; return; }
 
-            DataStore.ImportFolderFromZip(temp);
+            // Smart import: when the incoming save's attachments are unchanged (a text/data-only change),
+            // apply just the data and leave the attachments untouched.
+            var kind = DataStore.ImportBundleSmart(temp);
             LoadDataAndInitUi();
             SyncOnSaveMenu.IsChecked = DataStore.SyncOnSave;
             _lastSeenRemote = _repo.Data.LastModified;
-            StatusBlock.Text = "Loaded newer save from Google Drive.";
+            StatusBlock.Text = kind == DataStore.ImportKind.DataOnly
+                ? "Loaded newer save from Google Drive (text only — attachments unchanged)."
+                : "Loaded newer save from Google Drive (with attachments).";
         }
         catch (Exception ex)
         {
@@ -680,9 +697,10 @@ public partial class MainWindow : Window
             if (!ReviewAndConfirmImport(incoming, incoming?.LastModified, $"Google Drive: {chosen.Name}"))
             { StatusBlock.Text = "Load from Google Drive cancelled."; return; }
 
-            DataStore.ImportFolderFromZip(temp);
+            var loadKind = DataStore.ImportBundleSmart(temp);
             LoadDataAndInitUi();
-            StatusBlock.Text = $"Loaded backup from Google Drive: {chosen.Name}";
+            StatusBlock.Text = $"Loaded backup from Google Drive: {chosen.Name}"
+                + (loadKind == DataStore.ImportKind.DataOnly ? " (text only — attachments unchanged)." : " (with attachments).");
         }
         catch (Exception ex)
         {
