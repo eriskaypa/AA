@@ -489,7 +489,7 @@ public partial class MainWindow : Window
     {
         var dlg = new SaveFileDialog
         {
-            Filter = "ZIP archive (*.zip)|*.zip|All files (*.*)|*.*",
+            Filter = "AA bundle (*.zip)|*.zip|AA bundle (*.aaz)|*.aaz|All files (*.*)|*.*",
             FileName = $"aa-data-{DateTime.Now:yyyyMMdd-HHmm}.zip"
         };
         if (dlg.ShowDialog() != true) return;
@@ -510,7 +510,7 @@ public partial class MainWindow : Window
     {
         var dlg = new OpenFileDialog
         {
-            Filter = "ZIP archive (*.zip)|*.zip|All files (*.*)|*.*"
+            Filter = "AA bundle (*.zip;*.aaz)|*.zip;*.aaz|All files (*.*)|*.*"
         };
         if (dlg.ShowDialog() != true) return;
         var incoming = DataStore.PeekZipData(dlg.FileName);
@@ -1011,7 +1011,7 @@ public partial class MainWindow : Window
         var dlg = new SaveFileDialog
         {
             Title = "Choose the single shared save file (put it on a network drive or synced folder). It bundles your data AND attachments.",
-            Filter = "AA shared save (*.zip)|*.zip|All files (*.*)|*.*",
+            Filter = "AA shared save (*.zip;*.aaz)|*.zip;*.aaz|All files (*.*)|*.*",
             FileName = "aa-shared.zip",
             OverwritePrompt = false
         };

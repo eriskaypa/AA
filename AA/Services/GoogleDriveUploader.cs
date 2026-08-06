@@ -116,9 +116,11 @@ public static class GoogleDriveUploader
         var folderId = await EnsureBackupFolderAsync(service, ct);
 
         var list = service.Files.List();
-        list.Q = folderId != null
-            ? $"'{folderId}' in parents and trashed=false and mimeType!='application/vnd.google-apps.folder'"
-            : "name contains 'aa-data' and trashed=false";
+        // The AA Backups folder contents PLUS any aa-data* / .aaz bundle anywhere in the Drive.
+        var where = folderId != null
+            ? $"('{folderId}' in parents or name contains 'aa-data' or name contains '.aaz')"
+            : "(name contains 'aa-data' or name contains '.aaz')";
+        list.Q = where + " and trashed=false and mimeType!='application/vnd.google-apps.folder'";
         list.Fields = "files(id,name,modifiedTime)";
         list.OrderBy = "modifiedTime desc";
         list.PageSize = 100;
@@ -211,8 +213,9 @@ public static class GoogleDriveUploader
     {
         using var service = await GetServiceAsync(ct);
         var list = service.Files.List();
+        // Match the rolling sync file, any aa-data* backup, OR any .aaz bundle — anywhere in the Drive.
         list.Q = "trashed=false and mimeType!='application/vnd.google-apps.folder' " +
-                 "and (name='" + SyncFileName + "' or name contains 'aa-data')";
+                 "and (name='" + SyncFileName + "' or name contains 'aa-data' or name contains '.aaz')";
         list.Fields = "files(id,name,appProperties,modifiedTime)";
         list.OrderBy = "modifiedTime desc";
         list.PageSize = 100;
