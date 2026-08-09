@@ -1,0 +1,5 @@
+# The WeChat QR detector weights are third-party model inputs that get embedded in the exe verbatim.
+# Without this, git would treat the .prototxt files as text and rewrite their line endings on checkout,
+# so a fresh clone would embed different bytes from the ones this build was tested against — a failure
+# that would appear only on the cloned machine, and only when Flash Sync's camera receiver starts.
+AA/FlashSync/Models/* -text
