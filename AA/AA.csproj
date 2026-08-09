@@ -16,6 +16,12 @@
     <Resource Include="Assets\Splash.png" />
     <!-- Embedded SIRE 2.0 question bank (OCIMF library, 410 questions) for the SIRE tab. -->
     <Resource Include="Sire\Data\sire2_question_bank.json" />
+    <!-- WeChat QR detector weights (~1 MB). OpenCV loads these BY PATH, so FlashQrDecoder extracts them
+         to the app folder on first use; embedding keeps them inside the single portable exe. -->
+    <EmbeddedResource Include="FlashSync\Models\detect.prototxt" />
+    <EmbeddedResource Include="FlashSync\Models\detect.caffemodel" />
+    <EmbeddedResource Include="FlashSync\Models\sr.prototxt" />
+    <EmbeddedResource Include="FlashSync\Models\sr.caffemodel" />
   </ItemGroup>
 
   <ItemGroup>
@@ -25,11 +31,31 @@
     <PackageReference Include="HtmlAgilityPack" Version="1.11.61" />
     <!-- Reads COMPAS crew reports (.xlsx) for the Crew feature. -->
     <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <!-- Flash Sync (QR fountain transfer with the iPhone): QR generation.
+         NOT QRCoder — its Reed-Solomon long division terminates early when a block's data begins with
+         >= eccPerBlock zero codewords, emitting all-zero ECC. Our zero-padded tail chunk hits exactly
+         that, producing a symbol no decoder can read; at K <= 8 that frame travels alone, so an ordinary
+         small edit would never complete. Net.Codecrete is Nayuki's reference algorithm. -->
+    <PackageReference Include="Net.Codecrete.QrCodeGenerator" Version="2.0.6" />
+    <!-- Flash Sync receive: the WeChat QR model reads our dense (version ~22) frames off a webcam at 95%
+         where the managed decoders manage 42% under the same blur/warp/glare. x64-only by nature. -->
+    <PackageReference Include="OpenCvSharp4" Version="4.10.0.20241108" />
+    <PackageReference Include="OpenCvSharp4.runtime.win" Version="4.10.0.20241108" />
   </ItemGroup>
 
   <ItemGroup>
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
   </ItemGroup>
+
+  <!-- OpenCV ships a 26 MB FFmpeg DLL for reading video FILES. Flash Sync only ever reads live camera
+       frames through DirectShow, so drop it from the output rather than make every user carry it. -->
+  <Target Name="TrimOpenCvFfmpeg" AfterTargets="ResolveReferences">
+    <ItemGroup>
+      <ReferenceCopyLocalPaths
+          Remove="@(ReferenceCopyLocalPaths)"
+          Condition="$([System.String]::Copy('%(Filename)').StartsWith('opencv_videoio_ffmpeg'))" />
+    </ItemGroup>
+  </Target>
 
 </Project>

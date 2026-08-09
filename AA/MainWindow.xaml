@@ -42,6 +42,8 @@
                 <MenuItem Header="Open data _folder" Click="MenuOpenFolder_Click"/>
                 <MenuItem Header="_Export data folder (ZIP)..." Click="MenuExportFolder_Click"/>
                 <MenuItem Header="I_mport data folder (ZIP)..." Click="MenuImportFolder_Click"/>
+                <MenuItem x:Name="TextOnlyExportMenu" Header="Export _text only (no attachments)" IsCheckable="True" Click="MenuTextOnlyExport_Click"
+                          ToolTip="When on, exports and Google Drive saves carry only your text, changes and formatting — not the attached files. Much smaller and far quicker over a slow link. Importing one leaves the attachments already on the other PC exactly as they are."/>
                 <Separator/>
                 <MenuItem Header="Save a copy to Google _Drive (synced folder)" Click="MenuSaveToDrive_Click"
                           ToolTip="Save a timestamped backup ZIP into your Google Drive desktop folder, which syncs it to the cloud."/>
@@ -61,6 +63,9 @@
                           ToolTip="When on, Ctrl+S also pushes your data to Google Drive (OAuth), and the app checks for a newer save pushed from other PCs."/>
                 <MenuItem Header="C_heck Google Drive for newer save" Click="MenuCheckRemote_Click"
                           ToolTip="Ask Google Drive whether a newer save state exists, and offer to load it."/>
+                <Separator/>
+                <MenuItem Header="Flash S_ync with iPhone (QR)..." Click="MenuFlashSync_Click"
+                          ToolTip="Transfer your text, changes and formatting to or from the iPhone app by flashing QR codes on screen — no network, no cable, no Wi-Fi. Attachments are not included."/>
                 <Separator/>
                 <MenuItem Header="E_xit" Click="MenuExit_Click"/>
             </MenuItem>

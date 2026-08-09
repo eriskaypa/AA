@@ -73,6 +73,7 @@ public partial class MainWindow : Window
         LoadDataAndInitUi();
         StartAutoSaveTimer();
         SyncOnSaveMenu.IsChecked = DataStore.SyncOnSave;
+        TextOnlyExportMenu.IsChecked = DataStore.TextOnlyExport;
         DarkModeMenu.IsChecked = DataStore.DarkMode;
         EncryptLocalMenu.IsChecked = DataStore.EncryptLocalData;
         UpdateWindowTitle();   // show this installation's identity in the title bar
@@ -395,6 +396,30 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MenuTextOnlyExport_Click(object sender, RoutedEventArgs e)
+    {
+        DataStore.SetTextOnlyExport(TextOnlyExportMenu.IsChecked);
+        StatusBlock.Text = TextOnlyExportMenu.IsChecked
+            ? "Exports carry text only (no attachments)"
+            : "Exports carry everything, attachments included";
+    }
+
+    private void MenuFlashSync_Click(object sender, RoutedEventArgs e)
+    {
+        // Flush pending edits first: an in-progress rich-text edit that hasn't reached the model would
+        // otherwise be absent from what we flash, and the phone would receive a stale copy.
+        try { FlushAllEditors(); } catch { }
+        if (_repo != null && _repo.IsDirty) { try { _repo.Save(); } catch { } }
+
+        var win = new AA.Views.FlashSyncWindow { Owner = this };
+        win.DataApplied += _ =>
+        {
+            LoadDataAndInitUi();
+            StatusBlock.Text = "Applied changes received from the iPhone";
+        };
+        win.ShowDialog();
+    }
+
     private void MenuSyncOnSave_Click(object sender, RoutedEventArgs e)
     {
         DataStore.SetSyncOnSave(SyncOnSaveMenu.IsChecked);
@@ -517,9 +542,14 @@ public partial class MainWindow : Window
         if (!ReviewAndConfirmImport(incoming, incoming?.LastModified, Path.GetFileName(dlg.FileName))) return;
         try
         {
-            DataStore.ImportFolderFromZip(dlg.FileName);
+            // Deliberately the SMART importer, not ImportFolderFromZip: it keeps this PC's settings,
+            // password and Google state, and — the reason it matters here — it recognises a text-only
+            // bundle instead of treating "no attachments in the bundle" as "delete all my attachments".
+            var kind = DataStore.ImportBundleSmart(dlg.FileName);
             LoadDataAndInitUi();
-            StatusBlock.Text = $"Imported data folder from {Path.GetFileName(dlg.FileName)}";
+            StatusBlock.Text = kind == DataStore.ImportKind.DataOnly
+                ? $"Imported {Path.GetFileName(dlg.FileName)} (text only — your attachments are untouched)"
+                : $"Imported {Path.GetFileName(dlg.FileName)} (with attachments)";
         }
         catch (Exception ex)
         {

@@ -15,6 +15,10 @@ public class BundleSource
     public string Machine { get; set; } = "";
     public DateTime WrittenUtc { get; set; }
     public DateTime? LastModified { get; set; }
+    /// <summary>True when the bundle deliberately carries NO attachments (a text/changes/format-only
+    /// export). Importers must treat this as "leave every local attachment alone" — never as "the sender
+    /// has zero attachments", which would sweep the receiver's files/ folder empty.</summary>
+    public bool DataOnly { get; set; }
     [System.Text.Json.Serialization.JsonIgnore]
     public string WrittenLocal => WrittenUtc == default ? "" : WrittenUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 }
@@ -54,6 +58,10 @@ public static class DataStore
     /// <summary>When true, every explicit Save (Ctrl+S) also pushes the data to Google Drive,
     /// and the app checks for a newer remote save on startup / periodically. Persisted.</summary>
     public static bool SyncOnSave { get; private set; }
+
+    /// <summary>When on, every export / Drive save carries data.json only — text, changes and formatting,
+    /// no attachments. Machine-local: it describes this PC's link, not the database.</summary>
+    public static bool TextOnlyExport { get; private set; }
 
     /// <summary>When true, the app uses the dark theme. Persisted.</summary>
     public static bool DarkMode { get; private set; }
@@ -99,6 +107,12 @@ public static class DataStore
         public bool EncryptLocalData { get; set; }
         public string? GeminiApiKey { get; set; }
         public string? AppIdentity { get; set; }
+        public bool TextOnlyExport { get; set; }
+        /// <summary>Settings members this build doesn't recognise — captured and re-written so a key
+        /// written by a NEWER build (or merged in from another device by Flash Sync) survives instead of
+        /// being silently dropped the next time this build saves. Mirrors AppData.ExtraData.</summary>
+        [System.Text.Json.Serialization.JsonExtensionData]
+        public Dictionary<string, JsonElement>? ExtraData { get; set; }
     }
 
     public static void LoadSettings()
@@ -106,12 +120,13 @@ public static class DataStore
         try
         {
             Directory.CreateDirectory(AppFolder);
-            if (!File.Exists(SettingsFile)) { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; DarkMode = false; SharedSaveFile = null; EncryptLocalData = false; AppIdentity = DefaultIdentity(); PasswordService.LoadFrom(null, null); return; }
+            if (!File.Exists(SettingsFile)) { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; TextOnlyExport = false; DarkMode = false; SharedSaveFile = null; EncryptLocalData = false; AppIdentity = DefaultIdentity(); PasswordService.LoadFrom(null, null); return; }
             var s = JsonSerializer.Deserialize<Settings>(File.ReadAllText(SettingsFile), Opts);
             CurrentDataFile = !string.IsNullOrWhiteSpace(s?.CurrentDataFile) && File.Exists(s!.CurrentDataFile)
                 ? s.CurrentDataFile! : DefaultDataFile;
             GoogleDriveFolder = s?.GoogleDriveFolder;
             SyncOnSave = s?.SyncOnSave ?? false;
+            TextOnlyExport = s?.TextOnlyExport ?? false;
             DarkMode = s?.DarkMode ?? false;
             EncryptLocalData = s?.EncryptLocalData ?? false;
             GeminiApiKey = s?.GeminiApiKey;
@@ -123,7 +138,7 @@ public static class DataStore
             // always works from its local data file and pushes to / pulls from the bundle.
             SharedSaveFile = string.IsNullOrWhiteSpace(s?.SharedSaveFile) ? null : s!.SharedSaveFile;
         }
-        catch { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; DarkMode = false; SharedSaveFile = null; EncryptLocalData = false; AppIdentity = DefaultIdentity(); PasswordService.LoadFrom(null, null); }
+        catch { CurrentDataFile = DefaultDataFile; GoogleDriveFolder = null; SyncOnSave = false; TextOnlyExport = false; DarkMode = false; SharedSaveFile = null; EncryptLocalData = false; AppIdentity = DefaultIdentity(); PasswordService.LoadFrom(null, null); }
     }
 
     public static void SetCurrentDataFile(string path)
@@ -143,6 +158,13 @@ public static class DataStore
     public static void SetSyncOnSave(bool on)
     {
         SyncOnSave = on;
+        WriteSettings();
+    }
+
+    /// <summary>When on, exports and Drive saves carry data.json only — no attachments. Persisted.</summary>
+    public static void SetTextOnlyExport(bool on)
+    {
+        TextOnlyExport = on;
         WriteSettings();
     }
 
@@ -234,6 +256,8 @@ public static class DataStore
                 EncryptLocalData = EncryptLocalData,
                 GeminiApiKey = GeminiApiKey ?? existing?.GeminiApiKey,
                 AppIdentity = AppIdentity,
+                TextOnlyExport = TextOnlyExport,
+                ExtraData = existing?.ExtraData,   // keep keys this build doesn't model
             };
             File.WriteAllText(SettingsFile, JsonSerializer.Serialize(s, Opts));
         }
@@ -638,7 +662,17 @@ public static class DataStore
         };
     }
 
-    public static void ExportFolderToZip(string zipPath)
+    /// <summary>Write a bundle, honouring the user's "export text only" preference. Every existing export
+    /// site (Ctrl+S sync, synced-folder save, OAuth upload, shared save) routes through here, so the one
+    /// toggle governs them all.</summary>
+    public static void ExportFolderToZip(string zipPath) => ExportFolderToZip(zipPath, includeAttachments: !TextOnlyExport);
+
+    /// <summary>Write a bundle. With <paramref name="includeAttachments"/> false the files/ folder is
+    /// omitted entirely and the bundle is stamped <see cref="BundleSource.DataOnly"/> — a text/changes/
+    /// format-only export (data.json + source.json), which is what Flash Sync and a light Drive sync carry.
+    /// The omission is recorded rather than implied: an importer must be able to tell "no attachments sent"
+    /// apart from "sender deleted all attachments".</summary>
+    public static void ExportFolderToZip(string zipPath, bool includeAttachments)
     {
         Directory.CreateDirectory(AppFolder);
         Directory.CreateDirectory(FilesFolder);
@@ -660,7 +694,7 @@ public static class DataStore
                 File.WriteAllText(Path.Combine(staging, "data.json"), ReadDataText(CurrentDataFile));
             else if (File.Exists(DefaultDataFile))
                 File.WriteAllText(Path.Combine(staging, "data.json"), ReadDataText(DefaultDataFile));
-            if (Directory.Exists(FilesFolder))
+            if (includeAttachments && Directory.Exists(FilesFolder))
                 CopyDirectory(FilesFolder, Path.Combine(staging, "files"));
             // Stamp this installation's identity into the bundle so a shared save / Drive backup records
             // which machine/operator produced it.
@@ -669,7 +703,8 @@ public static class DataStore
                 Identity = AppIdentity,
                 Machine = DefaultIdentity(),
                 WrittenUtc = DateTime.UtcNow,
-                LastModified = PeekFileLastModified(CurrentDataFile)
+                LastModified = PeekFileLastModified(CurrentDataFile),
+                DataOnly = !includeAttachments
             };
             File.WriteAllText(Path.Combine(staging, "source.json"), JsonSerializer.Serialize(source, Opts));
             ZipFile.CreateFromDirectory(staging, zipPath, CompressionLevel.Optimal, includeBaseDirectory: false);
@@ -773,11 +808,14 @@ public static class DataStore
             CurrentDataFile = DefaultDataFile;
             WriteLocalDataFile(DefaultDataFile, File.ReadAllText(dataSrc));
 
-            // 3) Only now remove local attachments the bundle no longer has (safe orphans).
-            foreach (var f in Directory.EnumerateFiles(FilesFolder))
-                if (!bundleNames.Contains(Path.GetFileName(f))) { try { File.Delete(f); } catch { } }
+            // 3) Only now remove local attachments the bundle no longer has (safe orphans) — but NEVER for a
+            //    data-only bundle, which carries no attachments by design and would orphan the entire folder.
+            if (!IsDataOnlyBundle(staging, filesSrc))
+                foreach (var f in Directory.EnumerateFiles(FilesFolder))
+                    if (!bundleNames.Contains(Path.GetFileName(f))) { try { File.Delete(f); } catch { } }
 
             var data = LoadFrom(DefaultDataFile);
+            MigrateLegacyAbsolutePaths(data);   // rewrite another workstation's absolute files\ paths
             WriteLocalDataFile(DefaultDataFile, SerializeForSave(data));
             WriteSettings();   // persist CurrentDataFile; settings/password/Google preserved via existing
         }
@@ -807,7 +845,11 @@ public static class DataStore
 
             Directory.CreateDirectory(FilesFolder);
             var filesSrc = Path.Combine(staging, "files");
-            bool attachmentsChanged = !AttachmentsMatch(filesSrc, FilesFolder);
+            // A data-only bundle carries no attachments BY DESIGN. Distinguish that from a bundle whose
+            // sender genuinely deleted everything: without this, AttachmentsMatch compares 0 against N,
+            // reports "changed", and the orphan sweep below deletes every local attachment permanently.
+            bool dataOnlyBundle = IsDataOnlyBundle(staging, filesSrc);
+            bool attachmentsChanged = !dataOnlyBundle && !AttachmentsMatch(filesSrc, FilesFolder);
 
             if (attachmentsChanged)
             {
@@ -836,11 +878,47 @@ public static class DataStore
             }
 
             var data = LoadFrom(DefaultDataFile);
+            MigrateLegacyAbsolutePaths(data);   // rewrite another workstation's absolute files\ paths
             WriteLocalDataFile(DefaultDataFile, SerializeForSave(data));   // normalize + re-encrypt if local
             WriteSettings();   // persist CurrentDataFile; settings/password/Google preserved
             return attachmentsChanged ? ImportKind.WithAttachments : ImportKind.DataOnly;
         }
         finally { try { if (Directory.Exists(staging)) Directory.Delete(staging, recursive: true); } catch { } }
+    }
+
+    /// <summary>True when an extracted bundle deliberately carries no attachments: either it is stamped
+    /// <see cref="BundleSource.DataOnly"/>, or it has no files/ directory at all (which is how every
+    /// data-only bundle — including ones written by older builds and by the iOS app — looks on the wire).
+    /// An EMPTY files/ directory is NOT data-only: that genuinely means "sender has no attachments".</summary>
+    private static bool IsDataOnlyBundle(string stagingDir, string filesSrc)
+    {
+        try
+        {
+            var srcJson = Path.Combine(stagingDir, "source.json");
+            if (File.Exists(srcJson) &&
+                JsonSerializer.Deserialize<BundleSource>(File.ReadAllText(srcJson), Opts)?.DataOnly == true)
+                return true;
+        }
+        catch { }
+        return !Directory.Exists(filesSrc);
+    }
+
+    /// <summary>Adopt a data tree that arrived over Flash Sync. Goes through the same local path as any
+    /// other import — local encryption policy honoured, another workstation's absolute attachment paths
+    /// migrated, unknown members preserved — and never touches files/ (Flash Sync carries no attachments,
+    /// so incoming records may reference files this machine does not have; that is expected and the
+    /// attachment simply shows as missing until a full bundle sync brings it across).
+    /// The caller must have shown the user what will change BEFORE calling this.</summary>
+    public static AppData ApplySyncedData(string json)
+    {
+        Directory.CreateDirectory(AppFolder);
+        CurrentDataFile = DefaultDataFile;
+        WriteLocalDataFile(DefaultDataFile, json);
+        var data = LoadFrom(DefaultDataFile);
+        MigrateLegacyAbsolutePaths(data);
+        WriteLocalDataFile(DefaultDataFile, SerializeForSave(data));
+        WriteSettings();
+        return data;
     }
 
     /// <summary>True when a bundle's files/ folder holds exactly the same attachments as the local files/
