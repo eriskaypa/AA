@@ -95,6 +95,13 @@ public partial class MainWindow : Window
         // On startup, if sync is on and we're already signed in, see if another PC pushed a newer save.
         if (DataStore.SyncOnSave && GoogleDriveUploader.IsConfigured && GoogleDriveUploader.HasToken)
             CheckRemoteNewer(false);
+        // AA now searches the WHOLE Drive, which needs broader consent than the old sign-in granted.
+        // Say so plainly rather than let Drive checks look silently broken until the user investigates.
+        else if (GoogleDriveUploader.IsConfigured && GoogleDriveUploader.NeedsReconsentForWholeDrive)
+            MessageBox.Show(this,
+                "AA can now find your backups anywhere in Google Drive — including files you put there by hand, that Google Drive for desktop synced in, or that the iPhone app uploaded. Previously it could only see files AA itself created.\n\n" +
+                "That needs broader permission than your existing sign-in granted, so the next Drive action will ask you to sign in to Google once more. AA asks for read access to your Drive plus write access only to its own files — it cannot change or delete anything it did not create.",
+                "Google Drive — one more sign-in needed", MessageBoxButton.OK, MessageBoxImage.Information);
 
         // Notify (once) about any crew contracts already overdue or due soon.
         Dispatcher.BeginInvoke(new Action(() => CrewPg.CheckExpiries(interactive: false)),
