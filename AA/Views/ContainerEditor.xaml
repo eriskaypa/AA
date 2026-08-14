@@ -37,6 +37,10 @@
                         <Button Style="{StaticResource ToolbarButton}" Click="Outdent_Click" ToolTip="Outdent (Shift+Tab at the start of a list item)">|←</Button>
                         <Button Style="{StaticResource ToolbarButton}" Click="InsertSavedList_Click"
                                 ToolTip="Insert a saved list here as bullets or numbers. Your existing notes are not changed.">≔</Button>
+                        <Button Style="{StaticResource ToolbarButton}" Click="MoveUp_Click"
+                                ToolTip="Move the current list item (or block) up — Ctrl+Alt+Up. Sub-items move with it.">⤒</Button>
+                        <Button Style="{StaticResource ToolbarButton}" Click="MoveDown_Click"
+                                ToolTip="Move the current list item (or block) down — Ctrl+Alt+Down. Sub-items move with it.">⤓</Button>
                         <Separator Margin="6,2"/>
                         <Button Style="{StaticResource ToolbarButton}" Click="Undo_Click" ToolTip="Undo (Ctrl+Z)">↶</Button>
                         <Button Style="{StaticResource ToolbarButton}" Click="Redo_Click" ToolTip="Redo (Ctrl+Y)">↷</Button>

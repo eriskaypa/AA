@@ -244,6 +244,71 @@ public partial class ContainerEditor : UserControl
         Rtb.Focus();
     }
 
+    private void MoveUp_Click(object sender, RoutedEventArgs e) => MoveCurrent(true);
+    private void MoveDown_Click(object sender, RoutedEventArgs e) => MoveCurrent(false);
+
+    /// <summary>Reorder what the caret is in: a list item (with everything nested under it), or the whole
+    /// block when the caret is in ordinary text. Nothing is created or deleted — items are re-anchored in
+    /// their existing collection — so a reorder can never lose content, only change its order.</summary>
+    private void MoveCurrent(bool up)
+    {
+        if (_container == null || _contentWithheld) return;
+
+        // A move rewrites the item the caret is in; refuse if any of it is locked.
+        if (_hasAnyLock)
+        {
+            var sel = Rtb.Selection;
+            bool blocked = sel.IsEmpty ? CaretInsideLocked(Rtb.CaretPosition) : RangeOverlapsLocked(sel.Start, sel.End);
+            if (blocked) { ShowLockedHint(); return; }
+        }
+
+        var caretPara = Rtb.CaretPosition?.Paragraph;
+        if (caretPara == null) return;
+        // Keep the caret where the user left it, measured inside the paragraph that is about to move.
+        int offset = caretPara.ContentStart.GetOffsetToPosition(Rtb.CaretPosition);
+
+        bool moved;
+        Rtb.BeginChange();
+        try
+        {
+            var items = SelectedListItems();
+            moved = items.Count > 0
+                ? ListFormatting.MoveItems(items, up)
+                : ListFormatting.MoveBlock(OutermostBlock(caretPara), up);
+
+            if (moved) ListFormatting.Normalise(Rtb.Document);   // markers renumber after a reorder
+        }
+        finally { Rtb.EndChange(); }
+
+        if (!moved) return;   // already at the top/bottom — nothing to say, nothing changed
+        var restored = caretPara.ContentStart.GetPositionAtOffset(offset);
+        if (restored != null) Rtb.CaretPosition = restored;
+        Rtb.Focus();
+        PersistRichText();
+    }
+
+    /// <summary>The list items the selection touches, in document order; empty when the caret is not in
+    /// a list, or when the selection spans items from different lists (where "move together" is
+    /// meaningless and moving them anyway would scatter them).</summary>
+    private List<ListItem> SelectedListItems()
+    {
+        var found = new List<ListItem>();
+        foreach (var p in SelectedParagraphs())
+            if (p.Parent is ListItem li && !found.Contains(li)) found.Add(li);
+        if (found.Count > 1 && found.Any(i => !ReferenceEquals(i.SiblingListItems, found[0].SiblingListItems)))
+            return new List<ListItem>();
+        return found;
+    }
+
+    /// <summary>Climb out of any list/table wrapper to the block that actually sits in the document, so
+    /// "move down" on a paragraph inside a list moves that structure rather than nothing.</summary>
+    private static Block OutermostBlock(Block block)
+    {
+        var b = block;
+        while (b.Parent is Block parent) b = parent;
+        return b;
+    }
+
     /// <summary>The Blocks collection of whatever can hold blocks, or null if this parent cannot.</summary>
     private static BlockCollection? BlocksOf(DependencyObject? parent) => parent switch
     {
@@ -994,6 +1059,15 @@ public partial class ContainerEditor : UserControl
         {
             e.Handled = true;
             PasteTextOnly();
+            return;
+        }
+
+        // Ctrl+Alt+Up / Ctrl+Alt+Down — Move Up / Move Down, the same gesture LibreOffice Writer uses.
+        if ((e.Key == Key.Up || e.Key == Key.Down) &&
+            Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Alt))
+        {
+            e.Handled = true;
+            MoveCurrent(e.Key == Key.Up);
             return;
         }
 

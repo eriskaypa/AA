@@ -120,6 +120,93 @@ public static class ListFormatting
         s is TextMarkerStyle.Decimal or TextMarkerStyle.LowerLatin or TextMarkerStyle.UpperLatin
           or TextMarkerStyle.LowerRoman or TextMarkerStyle.UpperRoman;
 
+    // ---------- Reordering (LibreOffice's Move Up / Move Down) ----------
+
+    /// <summary>Move a list item among its siblings. Anything nested inside it travels with it, because
+    /// a sub-list lives in the item's own Blocks — moving the item moves its children by construction,
+    /// which is what makes reordering a checklist safe rather than a way to orphan sub-steps.
+    /// Returns false at the ends of a list, where there is nowhere to go.</summary>
+    public static bool MoveItem(ListItem? item, bool up)
+    {
+        // Take the collection from the owning List, NOT from item.SiblingListItems: that property is the
+        // collection the item belongs to, and removing the item detaches the reference, after which
+        // InsertBefore/After throws "PreviousSibling does not belong to this TextElementCollection".
+        if (item?.Parent is not List owner) return false;
+        var neighbour = up ? item.PreviousListItem : item.NextListItem;
+        if (neighbour == null) return false;
+
+        var items = owner.ListItems;
+        items.Remove(item);
+        if (up) items.InsertBefore(neighbour, item);
+        else items.InsertAfter(neighbour, item);
+        return true;
+    }
+
+    /// <summary>Move a contiguous run of sibling list items as one group, keeping their relative order.</summary>
+    public static bool MoveItems(IReadOnlyList<ListItem> items, bool up)
+    {
+        if (items == null || items.Count == 0) return false;
+        if (items.Count == 1) return MoveItem(items[0], up);
+
+        // Every item must share one owning list, or "move together" has no meaning.
+        if (items[0].Parent is not List owner) return false;
+        if (items.Any(i => !ReferenceEquals(i.Parent, owner))) return false;
+
+        var siblings = owner.ListItems;
+        var ordered = OrderBySiblingPosition(items, siblings);
+        var neighbour = up ? ordered[0].PreviousListItem : ordered[^1].NextListItem;
+        if (neighbour == null) return false;
+
+        foreach (var i in ordered) siblings.Remove(i);
+        // Re-insert in order, anchoring off the neighbour we hopped over.
+        ListItem anchor = neighbour;
+        if (up)
+        {
+            foreach (var i in ordered) siblings.InsertBefore(anchor, i);
+        }
+        else
+        {
+            foreach (var i in ordered) { siblings.InsertAfter(anchor, i); anchor = i; }
+        }
+        return true;
+    }
+
+    private static List<ListItem> OrderBySiblingPosition(IReadOnlyList<ListItem> items, ListItemCollection siblings)
+    {
+        var order = new List<ListItem>();
+        for (var it = siblings.FirstListItem; it != null; it = it.NextListItem)
+            if (items.Contains(it)) order.Add(it);
+        return order;
+    }
+
+    /// <summary>Move a whole block (a paragraph, an entire list, a table) among its siblings — how a
+    /// user reorders one inserted list relative to the rest of the note.</summary>
+    public static bool MoveBlock(Block? block, bool up)
+    {
+        // Same trap as MoveItem: take the collection from the PARENT, not from block.SiblingBlocks.
+        var blocks = BlocksOf(block?.Parent);
+        if (block == null || blocks == null) return false;
+        var neighbour = up ? block.PreviousBlock : block.NextBlock;
+        if (neighbour == null) return false;
+
+        blocks.Remove(block);
+        if (up) blocks.InsertBefore(neighbour, block);
+        else blocks.InsertAfter(neighbour, block);
+        return true;
+    }
+
+    /// <summary>The Blocks collection of whatever can hold blocks, or null if this parent cannot.</summary>
+    private static BlockCollection? BlocksOf(DependencyObject? parent) => parent switch
+    {
+        FlowDocument fd => fd.Blocks,
+        ListItem li => li.Blocks,
+        TableCell tc => tc.Blocks,
+        Section s => s.Blocks,
+        Floater f => f.Blocks,
+        Figure fig => fig.Blocks,
+        _ => null
+    };
+
     /// <summary>How deep a list is nested inside the document (1 = top level).</summary>
     public static int DepthOf(List? list)
     {
