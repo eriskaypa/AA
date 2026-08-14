@@ -28,6 +28,13 @@ public partial class ContainerEditor : UserControl
     /// <summary>True only when the current document actually contains locked text — lets the
     /// per-keystroke lock filtering short-circuit entirely (0 overhead) in the common case.</summary>
     private bool _hasAnyLock;
+
+    /// <summary>True when what the editor is SHOWING is not what the container actually holds, so saving
+    /// would overwrite real content with a stand-in. Two cases: a legacy encrypted body the user has not
+    /// unlocked (shown as an empty document over live ciphertext), and a body whose XAML failed to parse
+    /// and was flattened into literal text. In both, persisting is a one-way destruction of the original —
+    /// and the rich-text box has no read-only mode, so a single keystroke is enough to trigger it.</summary>
+    private bool _contentWithheld;
     private readonly System.Windows.Threading.DispatcherTimer _rtbDebounce;
 
     /// <summary>System font list, enumerated + sorted ONCE (shared by every editor instance).</summary>
@@ -160,6 +167,95 @@ public partial class ContainerEditor : UserControl
         catch { /* clipboard unavailable — nothing to paste */ }
     }
 
+    /// <summary>Insert a saved list at the caret as a real bulleted/numbered list. Adds to the note —
+    /// never replaces it, and never touches an existing selection's content.</summary>
+    private void InsertSavedList_Click(object sender, RoutedEventArgs e)
+    {
+        if (_container == null || _repo == null) return;
+
+        // Refuse when the editor is showing a stand-in (locked legacy body, or one that failed to parse):
+        // writing here would overwrite content the user cannot currently see.
+        if (_contentWithheld)
+        {
+            MessageBox.Show(Window.GetWindow(this),
+                "This note can't be edited right now because its saved content isn't loaded — unlock it first (Tools ▸ Set / change password, then reopen).",
+                "Nothing inserted", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        // Per-run lock check, same rule as Paste / InsertPlainText.
+        if (_hasAnyLock)
+        {
+            var sel = Rtb.Selection;
+            bool blocked = sel.IsEmpty ? CaretInsideLocked(Rtb.CaretPosition) : RangeOverlapsLocked(sel.Start, sel.End);
+            if (blocked) { ShowLockedHint(); return; }
+        }
+
+        var dlg = new InsertSavedListWindow(_repo) { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() != true || dlg.Lines.Count == 0) return;
+
+        // The dialog ran a nested message loop, so re-read the caret rather than trusting a stale one,
+        // and stop the autosave timer so a half-built document can't be persisted mid-insert.
+        _rtbDebounce.Stop();
+        InsertListAtCaret(dlg.Lines, dlg.Numbered);
+        PersistRichText();
+    }
+
+    /// <summary>Put a list into the caret's own block collection, after the block the caret is in. Using
+    /// that collection rather than the document's is what makes this work inside a table cell or an
+    /// existing list item, instead of silently dumping the content at the end of the note.</summary>
+    private void InsertListAtCaret(IEnumerable<string> lines, bool numbered)
+    {
+        Rtb.BeginChange();
+        try
+        {
+            // Load() clears every block for an empty note, so there may be nothing to anchor to yet.
+            if (Rtb.Document.Blocks.Count == 0)
+            {
+                Rtb.Document.Blocks.Add(new Paragraph());
+                Rtb.CaretPosition = Rtb.Document.ContentEnd;
+            }
+            // A live selection is left completely alone; the list goes after it.
+            if (!Rtb.Selection.IsEmpty) Rtb.CaretPosition = Rtb.Selection.End;
+
+            var anchor = (Block?)Rtb.CaretPosition.Paragraph ?? Rtb.Document.Blocks.LastBlock;
+            var host = BlocksOf(anchor?.Parent);
+            while (host == null && anchor?.Parent is Block parentBlock)
+            {
+                anchor = parentBlock;
+                host = BlocksOf(anchor.Parent);
+            }
+            host ??= Rtb.Document.Blocks;
+
+            var list = ListFormatting.Build(lines, numbered);
+            if (anchor != null && host.Contains(anchor)) host.InsertAfter(anchor, list);
+            else host.Add(list);
+
+            // Leave somewhere to keep typing, so the caret isn't trapped at the end of the last bullet.
+            if (ReferenceEquals(host.LastBlock, list)) host.Add(new Paragraph());
+
+            ListFormatting.Normalise(Rtb.Document);
+            if (list.NextBlock != null) Rtb.CaretPosition = list.NextBlock.ContentStart;
+        }
+        finally
+        {
+            Rtb.EndChange();   // in finally: an exception mid-insert must not leave the undo stack open
+        }
+        Rtb.Focus();
+    }
+
+    /// <summary>The Blocks collection of whatever can hold blocks, or null if this parent cannot.</summary>
+    private static BlockCollection? BlocksOf(DependencyObject? parent) => parent switch
+    {
+        FlowDocument fd => fd.Blocks,
+        ListItem li => li.Blocks,
+        TableCell tc => tc.Blocks,
+        Section s => s.Blocks,
+        Floater f => f.Blocks,
+        Figure fig => fig.Blocks,
+        _ => null
+    };
+
     /// <summary>Insert <paramref name="text"/> at the caret with no formatting (it adopts the destination
     /// style). Respects the per-run edit lock exactly like the normal Paste command, and is a single
     /// undo unit.</summary>
@@ -232,6 +328,7 @@ public partial class ContainerEditor : UserControl
         _loading = true;
         _container = c;
         _repo = repo;
+        _contentWithheld = false;
 
         string? toShow = c.RichTextXaml;
 
@@ -249,7 +346,10 @@ public partial class ContainerEditor : UserControl
             else
             {
                 // Leave the blob in storage; render an empty document and let the user unlock later.
+                // The editor is NOT read-only, so nothing stops a keystroke here — the withheld flag is
+                // what keeps the debounce from writing this empty document over the ciphertext.
                 toShow = "";
+                _contentWithheld = true;
             }
         }
         c.IsLocked = false;
@@ -265,8 +365,12 @@ public partial class ContainerEditor : UserControl
             }
             catch
             {
+                // Show the raw markup so the content is at least visible and recoverable by hand — but
+                // saving it back would make the flattening permanent, turning a rich document into
+                // escaped text. Withhold until it loads cleanly.
                 Rtb.Document.Blocks.Clear();
                 Rtb.Document.Blocks.Add(new Paragraph(new Run(toShow)));
+                _contentWithheld = true;
             }
         }
         else
@@ -286,6 +390,9 @@ public partial class ContainerEditor : UserControl
     private void PersistRichText()
     {
         if (_container == null) return;
+        // Never write a stand-in over real content. See _contentWithheld: the alternative is that opening
+        // a still-locked legacy container and pressing one key silently destroys the encrypted note.
+        if (_contentWithheld) return;
         var range = new TextRange(Rtb.Document.ContentStart, Rtb.Document.ContentEnd);
         using var ms = new MemoryStream();
         range.Save(ms, DataFormats.Xaml);
@@ -444,10 +551,78 @@ public partial class ContainerEditor : UserControl
     private void AlignCenter_Click(object s, RoutedEventArgs e) => EditingCommands.AlignCenter.Execute(null, Rtb);
     private void AlignRight_Click(object s, RoutedEventArgs e) => EditingCommands.AlignRight.Execute(null, Rtb);
     private void AlignJustify_Click(object s, RoutedEventArgs e) => EditingCommands.AlignJustify.Execute(null, Rtb);
-    private void Bullets_Click(object s, RoutedEventArgs e) => EditingCommands.ToggleBullets.Execute(null, Rtb);
-    private void Numbers_Click(object s, RoutedEventArgs e) => EditingCommands.ToggleNumbering.Execute(null, Rtb);
-    private void Indent_Click(object s, RoutedEventArgs e) => EditingCommands.IncreaseIndentation.Execute(null, Rtb);
-    private void Outdent_Click(object s, RoutedEventArgs e) => EditingCommands.DecreaseIndentation.Execute(null, Rtb);
+    private void Bullets_Click(object s, RoutedEventArgs e) => RunListCommand(EditingCommands.ToggleBullets);
+    private void Numbers_Click(object s, RoutedEventArgs e) => RunListCommand(EditingCommands.ToggleNumbering);
+    private void Indent_Click(object s, RoutedEventArgs e) => ChangeIndent(true);
+    private void Outdent_Click(object s, RoutedEventArgs e) => ChangeIndent(false);
+
+    /// <summary>Run one of WPF's list commands, then re-apply per-level markers and spacing. The order
+    /// matters: those commands rebuild the paragraphs and discard explicit margins, so normalising first
+    /// would be undone. Both halves share one undo unit.</summary>
+    private void RunListCommand(RoutedUICommand cmd)
+    {
+        Rtb.BeginChange();
+        try
+        {
+            cmd.Execute(null, Rtb);
+            ListFormatting.Normalise(Rtb.Document);
+        }
+        finally { Rtb.EndChange(); }
+    }
+
+    /// <summary>Indent/outdent. Inside a list this is a nesting change, which WPF already handles well.
+    /// On an ordinary paragraph WPF sets TextIndent, which shifts only the FIRST line — no word processor
+    /// behaves that way — so move the whole paragraph instead, in LibreOffice-sized steps.</summary>
+    private void ChangeIndent(bool increase)
+    {
+        Rtb.BeginChange();
+        try
+        {
+            if (CaretList() != null)
+            {
+                (increase ? EditingCommands.IncreaseIndentation : EditingCommands.DecreaseIndentation).Execute(null, Rtb);
+                ListFormatting.Normalise(Rtb.Document);
+            }
+            else
+            {
+                foreach (var p in SelectedParagraphs())
+                {
+                    var m = p.Margin;
+                    double left = Math.Max(0, m.Left + (increase ? ListFormatting.IndentStep : -ListFormatting.IndentStep));
+                    p.Margin = new Thickness(left, m.Top, m.Right, m.Bottom);
+                    p.TextIndent = 0;   // clear any first-line-only indent WPF left behind
+                }
+            }
+        }
+        finally { Rtb.EndChange(); }
+    }
+
+    /// <summary>The innermost list containing the caret, or null when the caret is in ordinary text.</summary>
+    private List? CaretList()
+    {
+        DependencyObject? node = Rtb.CaretPosition?.Paragraph;
+        while (node != null)
+        {
+            if (node is List l) return l;
+            node = node is FrameworkContentElement fce ? fce.Parent : null;
+        }
+        return null;
+    }
+
+    /// <summary>Every paragraph the selection touches (the caret's own when there is no selection).</summary>
+    private List<Paragraph> SelectedParagraphs()
+    {
+        var found = new List<Paragraph>();
+        var pos = Rtb.Selection.Start;
+        var end = Rtb.Selection.End;
+        while (pos != null && pos.CompareTo(end) <= 0)
+        {
+            if (pos.Paragraph is Paragraph p && !found.Contains(p)) found.Add(p);
+            pos = pos.GetNextContextPosition(LogicalDirection.Forward);
+        }
+        if (found.Count == 0 && Rtb.CaretPosition?.Paragraph is Paragraph cp) found.Add(cp);
+        return found;
+    }
     private void Undo_Click(object s, RoutedEventArgs e) => Rtb.Undo();
     private void Redo_Click(object s, RoutedEventArgs e) => Rtb.Redo();
     private void ClearFormat_Click(object s, RoutedEventArgs e)
@@ -802,6 +977,15 @@ public partial class ContainerEditor : UserControl
             && IsLockedRun(prev.Parent) && IsLockedRun(next.Parent);
     }
 
+    /// <summary>True when the caret sits at the very start of a list item's first paragraph — the only
+    /// place Backspace should outdent rather than delete a character.</summary>
+    private bool AtListItemStart()
+    {
+        var caret = Rtb.CaretPosition;
+        if (caret?.Paragraph is not Paragraph p || p.Parent is not ListItem) return false;
+        return p.ContentStart.GetOffsetToPosition(caret) == 0;
+    }
+
     private void Rtb_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         // Ctrl+Shift+V — paste as plain text (strip formatting). Handled before the lock fast-path so it
@@ -810,6 +994,23 @@ public partial class ContainerEditor : UserControl
         {
             e.Handled = true;
             PasteTextOnly();
+            return;
+        }
+
+        // Backspace at the very start of a list item. LibreOffice outdents one level, and at the top level
+        // turns the item back into an ordinary paragraph. WPF instead merges it into the previous item as a
+        // second, marker-less paragraph — which reads as a rendering fault and is fiddly to undo by hand.
+        if (e.Key == Key.Back && Rtb.Selection.IsEmpty && AtListItemStart())
+        {
+            if (_hasAnyLock && CaretInsideLocked(Rtb.CaretPosition)) { e.Handled = true; ShowLockedHint(); return; }
+            e.Handled = true;
+            Rtb.BeginChange();
+            try
+            {
+                EditingCommands.DecreaseIndentation.Execute(null, Rtb);
+                ListFormatting.Normalise(Rtb.Document);
+            }
+            finally { Rtb.EndChange(); }
             return;
         }
 

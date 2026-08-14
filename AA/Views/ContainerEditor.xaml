@@ -33,8 +33,10 @@
                         <Separator Margin="6,2"/>
                         <Button Style="{StaticResource ToolbarButton}" Click="Bullets_Click" ToolTip="Bullets">•</Button>
                         <Button Style="{StaticResource ToolbarButton}" Click="Numbers_Click" ToolTip="Numbered">1.</Button>
-                        <Button Style="{StaticResource ToolbarButton}" Click="Indent_Click" ToolTip="Indent">→|</Button>
-                        <Button Style="{StaticResource ToolbarButton}" Click="Outdent_Click" ToolTip="Outdent">|←</Button>
+                        <Button Style="{StaticResource ToolbarButton}" Click="Indent_Click" ToolTip="Indent (Tab at the start of a list item)">→|</Button>
+                        <Button Style="{StaticResource ToolbarButton}" Click="Outdent_Click" ToolTip="Outdent (Shift+Tab at the start of a list item)">|←</Button>
+                        <Button Style="{StaticResource ToolbarButton}" Click="InsertSavedList_Click"
+                                ToolTip="Insert a saved list here as bullets or numbers. Your existing notes are not changed.">≔</Button>
                         <Separator Margin="6,2"/>
                         <Button Style="{StaticResource ToolbarButton}" Click="Undo_Click" ToolTip="Undo (Ctrl+Z)">↶</Button>
                         <Button Style="{StaticResource ToolbarButton}" Click="Redo_Click" ToolTip="Redo (Ctrl+Y)">↷</Button>
