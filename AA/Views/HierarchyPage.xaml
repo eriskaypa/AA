@@ -38,6 +38,7 @@
                 <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Margin="6" TextChanged="SearchBox_TextChanged" Tag="Search..."/>
                 <Grid>
                 <ListBox x:Name="ItemsList" SelectionChanged="ItemsList_SelectionChanged"
+                         PreviewMouseRightButtonDown="ItemsList_PreviewMouseRightButtonDown"
                          BorderThickness="0" SelectionMode="Extended"
                          HorizontalContentAlignment="Stretch"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -62,6 +63,9 @@
                             <MenuItem Header="Remove from group" Click="UngroupItem_Click"/>
                             <Separator/>
                             <MenuItem Header="New group..." Click="NewGroup_Click"/>
+                            <Separator/>
+                            <MenuItem Header="🗑 Delete selected..." Click="DeleteSelected_Click"
+                                      ToolTip="Move every selected item to the Trash. Restore from File ▸ Trash, or undo with Ctrl+Z."/>
                         </ContextMenu>
                     </ListBox.ContextMenu>
                     <ListBox.GroupStyle>

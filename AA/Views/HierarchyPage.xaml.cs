@@ -373,25 +373,41 @@ public partial class HierarchyPage : UserControl
         SelectItemById(item.Id);
     }
 
+    /// <summary>Right-clicking a row that is already part of a multi-selection must keep that selection,
+    /// or the menu would silently act on one item when the user meant all of them.</summary>
+    private void ItemsList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e) =>
+        BatchDoneMenu.RightClickSelect(ItemsList, e.OriginalSource as DependencyObject);
+
+    private void DeleteSelected_Click(object sender, RoutedEventArgs e) => DeleteSelection();
+
+    /// <summary>The toolbar Delete button. Deletes the whole selection when there is one, so it agrees
+    /// with the right-click entry instead of quietly deleting only the last-clicked item.</summary>
     private void Delete_Click(object sender, RoutedEventArgs e)
     {
-        if (_repo == null || _selected == null) return;
-        if (ItemLockService.IsGated(_selected))
+        if (_repo == null) return;
+        // Fall back to the detail pane's item when the list selection is empty (e.g. after a refresh).
+        if (SelectedHierarchyItems().Count == 0 && _selected != null)
         {
-            MessageBox.Show("Unlock this entry before deleting it.", "Locked",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            DeleteItems(new List<HierarchyItem> { _selected });
             return;
         }
-        if (MessageBox.Show($"Move '{_selected.Name}' to the Trash?\n\nYou can restore it from File ▸ Trash, or undo with Ctrl+Z.",
-                "Confirm delete", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        var name = _selected.Name;
-        // Soft-delete: the item (with its whole subtree) goes to the Trash so a mis-click is reversible.
-        _repo.TrashHierarchyItem(_selected);
-        _repo.Save();
+        DeleteSelection();
+    }
+
+    private void DeleteSelection() => DeleteItems(SelectedHierarchyItems());
+
+    private void DeleteItems(List<HierarchyItem> picks)
+    {
+        if (_repo == null) return;
+        int n = BatchDeleteMenu.Run(this, _repo, () => picks.Cast<object>(), null);
+        if (n == 0) return;   // cancelled, or everything was locked — Run() has already explained
+
         _selected = null;
         DetailsRoot.IsEnabled = false;
         RefreshList();
-        StatusText($"'{name}' moved to Trash — Ctrl+Z to undo.");
+        StatusText(n == 1
+            ? $"'{picks[0].Name}' moved to Trash — Ctrl+Z to undo."
+            : $"{n} items moved to Trash — Ctrl+Z to undo them all.");
     }
 
     /// <summary>Re-render the sidebar after data changed outside this page (e.g. an undo/restore or a

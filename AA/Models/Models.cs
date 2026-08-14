@@ -587,6 +587,10 @@ public class TrashedItem
     public string ItemType { get; set; } = "";
     /// <summary>The deleted item's own Id (so restore can skip if something with that Id already exists).</summary>
     public Guid ItemId { get; set; }
+    /// <summary>Groups the entries deleted together by one batch action, so a single Ctrl+Z brings the
+    /// whole batch back rather than one item per press. <see cref="Guid.Empty"/> for a single delete and
+    /// for entries written by older builds, which is exactly the "undo one" behaviour they expect.</summary>
+    public Guid BatchId { get; set; }
     public string Name { get; set; } = "";
     /// <summary>Human-readable kind label, e.g. "Equipment/Area", "Task", "Crew member".</summary>
     public string KindLabel { get; set; } = "";

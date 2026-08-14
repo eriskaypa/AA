@@ -1394,11 +1394,14 @@ public partial class MainWindow : Window
     private void UndoDelete()
     {
         if (_repo == null || _safeMode) return;
-        var type = _repo.UndoLastDelete();
-        if (type == null) { StatusBlock.Text = "Nothing to undo."; return; }
-        RefreshAfterRestore(type);
+        int expected = _repo.PendingUndoCount();
+        var types = _repo.UndoLastDelete();
+        if (types.Count == 0) { StatusBlock.Text = "Nothing to undo."; return; }
+        foreach (var type in types) RefreshAfterRestore(type);   // a batch can span several pages
         _repo.Save();
-        StatusBlock.Text = "Restored the last deleted item (Ctrl+Z).";
+        StatusBlock.Text = expected > 1
+            ? $"Restored {expected} deleted items (Ctrl+Z)."
+            : "Restored the last deleted item (Ctrl+Z).";
     }
 
     /// <summary>Refresh whichever page(s) a restored item belongs to.</summary>

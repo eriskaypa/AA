@@ -316,7 +316,9 @@ public class AppRepository
 
     // ---------- Trash (soft delete) + Undo ----------
 
-    private const int MaxTrashItems = 200;
+    /// <summary>Trash capacity. Public so a bulk delete can warn when it would push the oldest entries
+    /// out of undo range.</summary>
+    public const int MaxTrashItems = 200;
     private static readonly TimeSpan TrashRetention = TimeSpan.FromDays(90);
     private static readonly JsonSerializerOptions TrashOpts = new()
     {
@@ -460,10 +462,59 @@ public class AppRepository
 
     /// <summary>Restore the most recently deleted item (Ctrl+Z). Returns its ItemType or null if the
     /// Trash is empty / restore failed.</summary>
-    public string? UndoLastDelete()
+    /// <summary>Undo the most recent deletion. When that deletion was a BATCH, the whole batch comes back
+    /// on one press — undoing 40 items one Ctrl+Z at a time would be its own kind of data loss, since the
+    /// user would reasonably stop before the end and never know the rest were still gone.
+    /// Returns EVERY ItemType restored — a batch can span Equipment, Tasks and Procedures at once, and
+    /// refreshing only one of those pages would leave the others showing items that are back in the model
+    /// but missing from the list. Empty when nothing was restored.</summary>
+    public IReadOnlyList<string> UndoLastDelete()
     {
-        var ti = Data.Trash.OrderByDescending(t => t.DeletedUtc).FirstOrDefault();
-        return ti == null ? null : RestoreTrash(ti);
+        var newest = Data.Trash.OrderByDescending(t => t.DeletedUtc).FirstOrDefault();
+        if (newest == null) return Array.Empty<string>();
+
+        var batch = newest.BatchId == Guid.Empty
+            ? new List<TrashedItem> { newest }
+            : Data.Trash.Where(t => t.BatchId == newest.BatchId)
+                        .OrderByDescending(t => t.DeletedUtc).ToList();
+
+        // Keep going past a failure: one unreadable payload must not strand the rest of the batch.
+        var types = new List<string>();
+        foreach (var ti in batch)
+        {
+            var type = RestoreTrash(ti);
+            if (type != null && !types.Contains(type)) types.Add(type);
+        }
+        return types;
+    }
+
+    /// <summary>How many entries the next <see cref="UndoLastDelete"/> would bring back (0 when the Trash
+    /// is empty). Lets the UI say "Restored 7 items" instead of guessing.</summary>
+    public int PendingUndoCount()
+    {
+        var newest = Data.Trash.OrderByDescending(t => t.DeletedUtc).FirstOrDefault();
+        if (newest == null) return 0;
+        return newest.BatchId == Guid.Empty ? 1 : Data.Trash.Count(t => t.BatchId == newest.BatchId);
+    }
+
+    /// <summary>Soft-delete several top-level items as ONE undoable batch. Each still goes to the Trash
+    /// individually (so they can be restored one at a time from File ▸ Trash), but they share a BatchId so
+    /// Ctrl+Z takes the lot. Items whose kind isn't trashable are skipped. Returns how many were trashed.
+    ///
+    /// The caller is responsible for confirming with the user first — this destroys on sight.</summary>
+    public int TrashHierarchyItems(IEnumerable<HierarchyItem> items)
+    {
+        var batchId = Guid.NewGuid();
+        int n = 0;
+        // Snapshot first: TrashHierarchyItem mutates the very collections these items live in.
+        foreach (var item in items.ToList())
+        {
+            var ti = TrashHierarchyItem(item);
+            if (ti == null) continue;
+            ti.BatchId = batchId;
+            n++;
+        }
+        return n;
     }
 
     public void PurgeTrash(TrashedItem ti)
