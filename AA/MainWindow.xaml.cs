@@ -103,9 +103,9 @@ public partial class MainWindow : Window
                 "That needs broader permission than your existing sign-in granted, so the next Drive action will ask you to sign in to Google once more. AA asks for read access to your Drive plus write access only to its own files — it cannot change or delete anything it did not create.",
                 "Google Drive — one more sign-in needed", MessageBoxButton.OK, MessageBoxImage.Information);
 
-        // Notify (once) about any crew contracts already overdue or due soon.
-        Dispatcher.BeginInvoke(new Action(() => CrewPg.CheckExpiries(interactive: false)),
-            DispatcherPriority.Background);
+        // No crew-expiry popup at startup: it interrupted every launch with something that is already
+        // visible passively on the Crew tab badge, and is available on demand from
+        // Tools > "Check crew contract expiries".
 
         // If a shared save file is configured, start the 1-min push + external-update watch, and do an
         // immediate check so we adopt a newer bundle another copy wrote while this PC was closed.

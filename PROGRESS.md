@@ -36,6 +36,10 @@ Application data is stored under: `%LOCALAPPDATA%\AA\` (file: `data.json`, impor
 
 ## Features implemented
 
+### No crew-expiry popup at startup
+AA no longer interrupts every launch with a modal list of crew contracts overdue or due soon ([MainWindow](AA/MainWindow.xaml.cs), which called `CrewPg.CheckExpiries(interactive: false)` on load). The information was never lost by dismissing it, so the popup only cost a click.
+Crew expiries are still surfaced, just without blocking startup: the **Crew tab badge** shows `Crew ⚠ n` passively, **Tools ▸ Check crew contract expiries** reports on demand (and still says so when nothing is due), and a COMPAS import still reports what it found. The tray reminder balloon and the once-a-day digest continue to include a crew count alongside other due work.
+
 ### Saved-list PDF export asks bulleted or numbered, every time
 Exporting a saved list, a group, or all of them ([SavedListsPage](AA/Views/SavedListsPage.xaml.cs) — all three buttons share one path) now asks how the items should be marked, via a new [ListStylePromptWindow](AA/Views/ListStylePromptWindow.xaml). Previously `PdfExporter.ExportSavedLists` hardcoded `1.`, `2.`, `3.` — in a paragraph style named "Bullet".
 - **Always asked, never remembered, and bullets are preselected.** Numbering asserts the items run in sequence, which is a claim about the content: true of a procedure, false of a set of checks that can be done in any order. The old default quietly made that claim on every export.
