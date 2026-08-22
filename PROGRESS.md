@@ -36,6 +36,13 @@ Application data is stored under: `%LOCALAPPDATA%\AA\` (file: `data.json`, impor
 
 ## Features implemented
 
+### Saved-list PDF export asks bulleted or numbered, every time
+Exporting a saved list, a group, or all of them ([SavedListsPage](AA/Views/SavedListsPage.xaml.cs) — all three buttons share one path) now asks how the items should be marked, via a new [ListStylePromptWindow](AA/Views/ListStylePromptWindow.xaml). Previously `PdfExporter.ExportSavedLists` hardcoded `1.`, `2.`, `3.` — in a paragraph style named "Bullet".
+- **Always asked, never remembered, and bullets are preselected.** Numbering asserts the items run in sequence, which is a claim about the content: true of a procedure, false of a set of checks that can be done in any order. The old default quietly made that claim on every export.
+- The `numbered` parameter on `ExportSavedLists` deliberately has **no default value**, so no caller can inherit numbering without having asked.
+- Cancelling the prompt cancels the export before the file dialog appears.
+- Harness **2/2** — both styles produce a valid PDF, and the two files are byte-different, which is what catches the flag being accepted and then ignored. Suite **240/240**, build **0/0**.
+
 ### Insert a saved list into a note as bullets/numbers, edit and reorder it + LibreOffice-like list editing
 A **≔** button in the container editor's list group inserts any saved list into the note body as a real bulleted or numbered list. New [Services/ListFormatting.cs](AA/Services/ListFormatting.cs) (pure, testable) + [Views/InsertSavedListWindow.xaml](AA/Views/InsertSavedListWindow.xaml).
 - **Adds, never replaces.** The list goes into the caret's *own* block collection, after the block the caret sits in — so it works inside a table cell or an existing bullet instead of being dumped at the end of the note. An active selection is left completely untouched (the list lands after it), and the whole insert is one `BeginChange`/`EndChange` in a `try/finally`, so **one Ctrl+Z removes it**.

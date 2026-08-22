@@ -89,7 +89,10 @@ public static class PdfExporter
 
     /// <summary>Export saved checklists to a nice A4 PDF. <paramref name="entries"/> is an ordered list
     /// of (optional group header, saved list); a group header is printed whenever the group changes.</summary>
-    public static void ExportSavedLists(string docTitle, IReadOnlyList<(string? Group, ChecklistTemplate Template)> entries, string path)
+    /// <param name="numbered">True for 1./2./3., false for bullets. No default on purpose: numbering
+    /// asserts that the items run in sequence, which is a claim about the content, so the caller must
+    /// have asked rather than inherited it.</param>
+    public static void ExportSavedLists(string docTitle, IReadOnlyList<(string? Group, ChecklistTemplate Template)> entries, string path, bool numbered)
     {
         var doc = new Document();
         doc.Info.Title = docTitle;
@@ -149,7 +152,7 @@ public static class PdfExporter
             {
                 var par = sec.AddParagraph();
                 par.Style = "Bullet";
-                par.AddFormattedText($"{n++}. ", TextFormat.Bold);
+                par.AddFormattedText(numbered ? $"{n++}. " : "•  ", TextFormat.Bold);
                 par.AddText(it.Title ?? "");
                 var meta = new List<string>();
                 if (it.IsJob) meta.Add("schedulable");

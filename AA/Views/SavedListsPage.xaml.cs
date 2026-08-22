@@ -283,6 +283,17 @@ public partial class SavedListsPage : UserControl
     private void ExportToPdf(string title, IReadOnlyList<(string?, ChecklistTemplate)> entries)
     {
         if (entries.Count == 0) { MessageBox.Show(Window.GetWindow(this), "Nothing to export.", "Export", MessageBoxButton.OK, MessageBoxImage.Information); return; }
+
+        // Always ask, and never remember: numbering says the items run in sequence, which is true of a
+        // procedure and false of a set of checks that can be done in any order. Bullets are preselected
+        // because they claim less.
+        int listCount = entries.Count;
+        var numbered = ListStylePromptWindow.Ask(Window.GetWindow(this),
+            listCount == 1
+                ? "How should the items in this list be shown in the PDF?"
+                : $"How should the items in these {listCount} lists be shown in the PDF?");
+        if (numbered == null) return;   // cancelled
+
         var dlg = new SaveFileDialog
         {
             Title = "Export saved lists to PDF",
@@ -293,7 +304,7 @@ public partial class SavedListsPage : UserControl
         if (dlg.ShowDialog() != true) return;
         try
         {
-            PdfExporter.ExportSavedLists(title, entries, dlg.FileName);
+            PdfExporter.ExportSavedLists(title, entries, dlg.FileName, numbered.Value);
             if (MessageBox.Show(Window.GetWindow(this), $"Exported to:\n{dlg.FileName}\n\nOpen it now?",
                     "Export complete", MessageBoxButton.YesNo, MessageBoxImage.Information) == MessageBoxResult.Yes)
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.FileName) { UseShellExecute = true });
