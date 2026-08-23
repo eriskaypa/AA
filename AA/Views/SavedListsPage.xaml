@@ -27,10 +27,20 @@
                                 ToolTip="Put the selected saved list into a group (or remove it from all groups)."/>
                         <Button Content="Manage groups..." Margin="0,0,4,4" Click="ManageGroups_Click"
                                 ToolTip="Rename or delete List Groups (lists inside a deleted group become ungrouped)."/>
+                        <Separator Margin="6,2"/>
+                        <Button x:Name="UpBtn" Content="&#x2191;" MinWidth="32" Margin="0,0,4,4" Click="Up_Click"
+                                ToolTip="Move the selected saved list(s) up within its group. This is the order they export in."/>
+                        <Button x:Name="DownBtn" Content="&#x2193;" MinWidth="32" Margin="0,0,4,4" Click="Down_Click"
+                                ToolTip="Move the selected saved list(s) down within its group. This is the order they export in."/>
+                        <Button x:Name="MoveToBtn" Content="Move to position..." Margin="0,0,4,4" Click="MoveTo_Click"
+                                ToolTip="Move the selected saved list(s) to a chosen position within its group."/>
+                        <ToggleButton x:Name="SortAzBtn" Content="Sort A-Z" Margin="0,0,4,4" Click="SortAz_Click"
+                                      ToolTip="Show lists alphabetically instead of your own order. Your arranged order is kept and is what exports use when this is off."/>
                     </WrapPanel>
                 </Border>
                 <TextBlock x:Name="StatusText" DockPanel.Dock="Bottom" Margin="8,4" Foreground="{DynamicResource Muted}" TextWrapping="Wrap"/>
                 <ListBox x:Name="ListsBox" BorderThickness="0" SelectionChanged="ListsBox_SelectionChanged"
+                         SelectionMode="Extended"
                          HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemTemplate>
                         <DataTemplate>
@@ -61,6 +71,10 @@
                             <MenuItem Header="Rename" Click="Rename_Click"/>
                             <MenuItem Header="Duplicate" Click="Duplicate_Click"/>
                             <MenuItem Header="Move to group..." Click="AssignGroup_Click"/>
+                            <Separator/>
+                            <MenuItem Header="Move up" Click="Up_Click"/>
+                            <MenuItem Header="Move down" Click="Down_Click"/>
+                            <MenuItem Header="Move to position..." Click="MoveTo_Click"/>
                             <Separator/>
                             <MenuItem Header="Export this list (PDF)..." Click="ExportList_Click"/>
                             <MenuItem Header="Delete" Click="Delete_Click"/>

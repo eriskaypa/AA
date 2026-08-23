@@ -31,7 +31,8 @@ public partial class InsertSavedListWindow : Window
     {
         InitializeComponent();
         _repo = repo;
-        _all = repo.Data.ChecklistTemplates.OrderBy(t => t.Name, StringComparer.CurrentCultureIgnoreCase).ToList();
+        // Arranged order, matching the Saved Lists tab -- not alphabetical, or the two disagree.
+        _all = repo.Data.ChecklistTemplates.ToList();
 
         if (_all.Count == 0)
         {
