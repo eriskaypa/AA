@@ -49,7 +49,11 @@ Right-click an item ▸ **Open in new window** ([HierarchyPage](AA/Views/Hierarc
 
 **Every path that must reach these windows now does:** `FlushAllEditors` (so a save, sync or export includes their buffered edits, and the shared-save "changes will be lost" prompt actually sees them), the post-reload fan-out, deletion (their windows close rather than keep editing something in the Trash), and app exit (closed and flushed *before* the final save and shared-bundle push). Each window's close-flush is wrapped in try/catch — a throw there would cancel the close and trap the window open.
 
-Locked items refuse to open in a window at all, matching the main pane's gate. Suite **313/313**, build **0/0**. WPF windows cannot be exercised headlessly, so the manual check is: open an item in a window, type, Ctrl+S in the main window, restart — the text should be there.
+Locked items refuse to open in a window at all, matching the main pane's gate.
+
+**Verified rather than assumed.** WPF windows can be *constructed* on the harness's STA thread even though they cannot be clicked, which is enough to prove the part that matters: three windows (two tasks and a procedure) coexist as distinct instances, each stays bound to its own item, editing one leaves the others untouched, a registry keyed by item Id yields one window per item, re-opening an already-open item finds the existing window rather than making a second, an orphaned window stops writing, and a re-resolve after reload keeps each window on its own item. The menu → window path itself is confirmed statically: the context-menu handler, the per-page callback (all four pages), the opener, the delete notification, and all three registry reach points (flush, post-reload fan-out, app exit) are each present and connected. Suite **320/320**, build **0/0**.
+
+The one thing no test here can do is click. Manual check: open two items in windows, type in each, Ctrl+S in the main window, restart — both texts should be there.
 
 ### Crew date parser: reads any format, and works out dd/mm vs mm/dd
 New [Services/DateResolver.cs](AA/Services/DateResolver.cs) replaces the COMPAS importer's date handling. It reads ISO, year-first, compact `20260304`, month names in any position (`12 Mar 2026`, `March 4, 2026`, `12-MAR-26`, `SEPT`, ordinals like `1st`), 2-digit years, times and zone markers (dropped, never time-zone converted — that can shift the day), Excel serial numbers in both the 1900 and 1904 systems, and placeholders (`-`, `N/A`, `TBC`, `#N/A`, `00/00/0000`) as empty rather than errors.
