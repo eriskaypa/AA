@@ -17,10 +17,68 @@ public sealed partial class CrewConverter
     private readonly string _sourceFile;
     private readonly string _importedAt;
 
+    /// <summary>Every COMPAS column this converter reads as a date, with what the field means (which
+    /// decides how a 2-digit year is expanded).</summary>
+    private static readonly (string Column, DateRole Role)[] DateColumns =
+    {
+        ("Date of Birth", DateRole.PastOnly),
+        ("Joining Date", DateRole.Any),
+        ("Sign Off Date", DateRole.FutureLikely),
+        ("Passport Expiry Date", DateRole.FutureLikely),
+        ("Passport Issued Date", DateRole.PastOnly),
+        ("Seaman Book Expiry Date", DateRole.FutureLikely),
+        ("Seaman Book Issue Date", DateRole.PastOnly),
+        ("Licence Expiry Date", DateRole.FutureLikely),
+        ("Licence Issue Date", DateRole.PastOnly),
+        ("Medical Examination Expiry", DateRole.FutureLikely),
+    };
+
+    private readonly DateResolver _dates = new();
+
+    /// <summary>The day/month convention this import settled on.</summary>
+    public DateOrder DateOrder => _dates.Order;
+
+    /// <summary>How many values proved that convention.</summary>
+    public int DateEvidence => _dates.DecisiveCount;
+
+    /// <summary>Dates that could not be read at all, across the whole import.</summary>
+    public int UnreadableDates { get; private set; }
+
+    /// <summary>Dates whose meaning depended on the inferred convention, so a wrong inference is visible.</summary>
+    public int OrderDependentDates { get; private set; }
+
     public CrewConverter(string sourceFile)
     {
         _sourceFile = sourceFile;
         _importedAt = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+    }
+
+    /// <summary>Read every date in the file BEFORE converting any row, so the day/month convention is
+    /// decided from the whole sheet. One value with a day above 12 settles every ambiguous value in it.
+    /// Call once, with all rows, before <see cref="Convert"/>.
+    ///
+    /// <paramref name="fallback"/> is used only when nothing in the file settles it; pass Unknown to
+    /// leave ambiguous dates unread rather than guessing at them.</summary>
+    public void LearnDateFormat(IEnumerable<CompasRow> rows, DateOrder fallback = DateOrder.Unknown)
+    {
+        foreach (var row in rows)
+            foreach (var (col, _) in DateColumns)
+                _dates.Observe(row.Get(col));
+        _dates.Infer(fallback);
+    }
+
+    /// <summary>A one-line account of how dates were read, for the status bar and the activity log.</summary>
+    public string DateSummary()
+    {
+        var how = _dates.Order switch
+        {
+            DateOrder.DayFirst => $"day first (dd/mm), proved by {_dates.DecisiveCount} value{(_dates.DecisiveCount == 1 ? "" : "s")}",
+            DateOrder.MonthFirst => $"month first (mm/dd), proved by {_dates.DecisiveCount} value{(_dates.DecisiveCount == 1 ? "" : "s")}",
+            DateOrder.Conflicted => "inconsistently — this file writes dates BOTH ways, so ambiguous ones were left unread",
+            _ => "in unambiguous formats only; nothing in the file said whether 03/04 means 3 April or 4 March"
+        };
+        var tail = UnreadableDates > 0 ? $", {UnreadableDates} could not be read" : "";
+        return $"dates read {how}{tail}";
     }
 
     public CrewMember Convert(CompasRow row)
@@ -45,7 +103,7 @@ public sealed partial class CrewConverter
         m.Nationality = nat;
 
         // --- demographics ---
-        m.DateOfBirth = FmtDate(row.Get("Date of Birth"), "Date of birth", flags);
+        m.DateOfBirth = FmtDate(row.Get("Date of Birth"), "Date of birth", flags, DateRole.PastOnly);
         m.PlaceOfBirth = row.Get("Place of Birth");
         var g = row.Get("Gender").Trim().ToUpperInvariant();
         m.Gender = CrewMappingTables.Gender.TryGetValue(g, out var gg) ? gg : "";
@@ -81,12 +139,12 @@ public sealed partial class CrewConverter
         }
 
         // --- sign-on (mandatory) ---
-        m.SignOnDate = FmtDate(row.Get("Joining Date"), "Sign-on date", flags);
+        m.SignOnDate = FmtDate(row.Get("Joining Date"), "Sign-on date", flags, DateRole.Any);
         m.SignOnPortRaw = row.Get("Joining Port");
         m.SignOnPort = MapPort(m.SignOnPortRaw, "Sign-on port", flags);
 
         // --- sign-off (drives contract-expiry tracking) ---
-        m.SignOffDate = FmtDate(row.Get("Sign Off Date"), "Sign-off date", flags);
+        m.SignOffDate = FmtDate(row.Get("Sign Off Date"), "Sign-off date", flags, DateRole.FutureLikely);
         m.SignOffPortRaw = row.Get("SignOff Port");
         if (!string.IsNullOrWhiteSpace(m.SignOffPortRaw))
             m.SignOffPort = MapPort(m.SignOffPortRaw, "Sign-off port", flags);
@@ -96,22 +154,22 @@ public sealed partial class CrewConverter
 
         // --- passport ---
         m.PassportNumber = row.Get("Passport Number");
-        m.PassportExpiry = FmtDate(row.Get("Passport Expiry Date"), "Passport expiry", flags);
-        m.PassportIssued = FmtDate(row.Get("Passport Issued Date"), "Passport issued", flags);
+        m.PassportExpiry = FmtDate(row.Get("Passport Expiry Date"), "Passport expiry", flags, DateRole.FutureLikely);
+        m.PassportIssued = FmtDate(row.Get("Passport Issued Date"), "Passport issued", flags, DateRole.PastOnly);
 
         // --- seaman's book ---
         m.SeamansBookNumber = row.Get("Seaman Book Number");
-        m.SeamansBookExpiry = FmtDate(row.Get("Seaman Book Expiry Date"), "Seaman's book expiry", flags);
-        m.SeamansBookIssued = FmtDate(row.Get("Seaman Book Issue Date"), "Seaman's book issued", flags);
+        m.SeamansBookExpiry = FmtDate(row.Get("Seaman Book Expiry Date"), "Seaman's book expiry", flags, DateRole.FutureLikely);
+        m.SeamansBookIssued = FmtDate(row.Get("Seaman Book Issue Date"), "Seaman's book issued", flags, DateRole.PastOnly);
 
         // --- certificate of competency ---
         if (row.Has("Licence Number"))
         {
             m.CocNumber = row.Get("Licence Number");
-            m.CocExpiry = FmtDate(row.Get("Licence Expiry Date"), "CoC expiry", flags);
-            m.CocIssue = FmtDate(row.Get("Licence Issue Date"), "CoC issue", flags);
+            m.CocExpiry = FmtDate(row.Get("Licence Expiry Date"), "CoC expiry", flags, DateRole.FutureLikely);
+            m.CocIssue = FmtDate(row.Get("Licence Issue Date"), "CoC issue", flags, DateRole.PastOnly);
         }
-        m.HealthCertExpiry = FmtDate(row.Get("Medical Examination Expiry"), "Health cert. expiry", flags);
+        m.HealthCertExpiry = FmtDate(row.Get("Medical Examination Expiry"), "Health cert. expiry", flags, DateRole.FutureLikely);
 
         // --- next of kin ---
         var (nokFirst, nokLast) = SplitName(row.Get("Next of Kin - Name"));
@@ -188,20 +246,32 @@ public sealed partial class CrewConverter
         return value;
     }
 
-    private static string FmtDate(string value, string field, List<CrewReviewFlag> flags)
+    /// <summary>Read one date cell using the convention learned from the whole file.
+    ///
+    /// This previously accepted year-first values only, so a real "15/07/2026" fell through and was stored
+    /// as raw text -- which CrewMember.ParseDate then re-read with InvariantCulture, i.e. MONTH-first. An
+    /// ordinary day-first date therefore came back a month out, silently.</summary>
+    private string FmtDate(string value, string field, List<CrewReviewFlag> flags, DateRole role = DateRole.Any)
     {
-        if (string.IsNullOrWhiteSpace(value)) return "";
-        var s = value.Trim();
-        var match = DateRegex().Match(s);
-        if (match.Success)
+        var r = _dates.Resolve(value, role);
+        if (r.Value == null)
         {
-            int y = int.Parse(match.Groups[1].Value);
-            int mo = int.Parse(match.Groups[2].Value);
-            int d = int.Parse(match.Groups[3].Value);
-            return $"{y:D4}-{mo:D2}-{d:D2}";
+            if (!string.IsNullOrEmpty(r.Raw))
+            {
+                UnreadableDates++;
+                // Error, not Info: an unread date silently disables the expiry tracking that depends on it.
+                flags.Add(new CrewReviewFlag(CrewFlagSeverity.Error, field,
+                    $"{field}: {r.Note ?? $"could not read '{r.Raw}'"} — left as-is, set it by hand."));
+            }
+            return r.Raw;
         }
-        flags.Add(new CrewReviewFlag(CrewFlagSeverity.Info, field, $"Could not parse {field.ToLowerInvariant()} '{s}' — left as-is."));
-        return s;
+
+        if (r.DependedOnOrder)
+        {
+            OrderDependentDates++;
+            flags.Add(new CrewReviewFlag(CrewFlagSeverity.Warning, field, $"{field}: {r.Note}"));
+        }
+        return r.ToStorage();
     }
 
     private static string FirstNonEmpty(params string[] vals)
@@ -210,6 +280,4 @@ public sealed partial class CrewConverter
     [GeneratedRegex(@"\s+")]
     private static partial Regex WhitespaceRegex();
 
-    [GeneratedRegex(@"^(\d{4})[/\-.](\d{1,2})[/\-.](\d{1,2})$")]
-    private static partial Regex DateRegex();
 }

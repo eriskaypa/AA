@@ -248,8 +248,22 @@ public partial class CrewPage : UserControl
         try
         {
             Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
-            var rows = CompasReader.Read(dlg.FileName);
+            var rows = CompasReader.Read(dlg.FileName).ToList();
             var converter = new CrewConverter(System.IO.Path.GetFileName(dlg.FileName));
+
+            // Decide dd/mm vs mm/dd from the WHOLE file before reading any single row: one date with a day
+            // above 12 settles every ambiguous date in the sheet. Nothing is guessed -- if the file never
+            // settles it, ambiguous values are left unread and flagged rather than silently picked.
+            converter.LearnDateFormat(rows);
+            if (converter.DateOrder == DateOrder.Unknown || converter.DateOrder == DateOrder.Conflicted)
+            {
+                Mouse.OverrideCursor = null;
+                var chosen = AskDateOrder(converter.DateOrder, dlg.FileName);
+                if (chosen == null) return;                 // cancelled: import nothing rather than guess
+                converter.LearnDateFormat(rows, chosen.Value);
+                Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+            }
+
             var members = rows.Select(converter.Convert).ToList();
 
             int added = 0, updated = 0;
@@ -275,7 +289,10 @@ public partial class CrewPage : UserControl
 
             int flags = members.Sum(m => m.Flags.Count);
             RosterStatus.Text = $"Imported {members.Count} from {System.IO.Path.GetFileName(dlg.FileName)} " +
-                                $"({added} new, {updated} updated) — {flags} review note(s).";
+                                $"({added} new, {updated} updated) — {converter.DateSummary()}; {flags} review note(s).";
+            // The log is what answers "why is this relief date wrong?" months later, when the status bar
+            // has long since been overwritten.
+            _repo.LogAdded("Crew import dates", converter.DateSummary(), System.IO.Path.GetFileName(dlg.FileName));
             // Surface any contracts that are already due/overdue right after import.
             CheckExpiries(interactive: false);
         }
@@ -286,6 +303,41 @@ public partial class CrewPage : UserControl
                 "Import failed", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally { Mouse.OverrideCursor = null; }
+    }
+
+    /// <summary>Ask which way round ambiguous dates are written. Only reached when the file gives no
+    /// evidence either way, or contradicts itself -- never to override what the data already proved.</summary>
+    private DateOrder? AskDateOrder(DateOrder situation, string file)
+    {
+        var why = situation == DateOrder.Conflicted
+            ? "This file writes dates BOTH ways - some are clearly day-first and others clearly month-first, so no single reading fits all of them."
+            : "Every date in this file could be read either way (nothing has a day above 12), so AA cannot tell which convention it uses.";
+
+        var lines = new[]
+        {
+            System.IO.Path.GetFileName(file),
+            "",
+            why,
+            "",
+            "Is a date like 03/04/2026 the 3rd of April, or the 4th of March?",
+            "",
+            "Yes  =  day first (03/04 is 3 April)",
+            "No   =  month first (03/04 is 4 March)",
+            "Cancel  =  do not import",
+            "",
+            "Getting this wrong shifts contract dates by weeks, so check the file if you are unsure."
+        };
+
+        var answer = MessageBox.Show(Window.GetWindow(this), string.Join(Environment.NewLine, lines),
+            "Which way round are the dates?", MessageBoxButton.YesNoCancel, MessageBoxImage.Question,
+            MessageBoxResult.Cancel);
+
+        return answer switch
+        {
+            MessageBoxResult.Yes => DateOrder.DayFirst,
+            MessageBoxResult.No => DateOrder.MonthFirst,
+            _ => null
+        };
     }
 
     // ---- Contract-expiry tracking / notification ----
