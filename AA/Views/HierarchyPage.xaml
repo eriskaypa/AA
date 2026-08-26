@@ -59,6 +59,9 @@
                     </ListBox.ItemTemplate>
                     <ListBox.ContextMenu>
                         <ContextMenu>
+                            <MenuItem Header="Open in new window" Click="OpenInWindow_Click"
+                                      ToolTip="Open this item in its own window so you can work on several at once. Its notes and files move to that window until you close it."/>
+                            <Separator/>
                             <MenuItem Header="Move to group..." Click="AssignGroup_Click"/>
                             <MenuItem Header="Remove from group" Click="UngroupItem_Click"/>
                             <Separator/>
@@ -155,7 +158,15 @@
                         <views:PortsPanel x:Name="PortsCtrl"/>
                     </TabItem>
                     <TabItem x:Name="ContainerTab" Header="Container">
-                        <views:ContainerEditor x:Name="ContainerCtrl"/>
+                        <Grid>
+                            <views:ContainerEditor x:Name="ContainerCtrl"/>
+                            <Border x:Name="DetachedNote" Visibility="Collapsed" Background="{DynamicResource PanelAlt}"
+                                    BorderBrush="{DynamicResource BorderB}" BorderThickness="1" CornerRadius="4"
+                                    Padding="16" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock TextWrapping="Wrap" MaxWidth="360" TextAlignment="Center"
+                                           Text="This item is open in its own window. Close that window to edit it here again."/>
+                            </Border>
+                        </Grid>
                     </TabItem>
                     <TabItem Header="Relationships">
                         <Grid Margin="6">

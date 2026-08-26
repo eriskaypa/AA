@@ -396,11 +396,20 @@ public partial class HierarchyPage : UserControl
 
     private void DeleteSelection() => DeleteItems(SelectedHierarchyItems());
 
+    /// <summary>Raised with the ids just deleted, so their detached windows can be closed rather than
+    /// left editing something that is now in the Trash.</summary>
+    public Action<IEnumerable<Guid>>? ItemsDeleted;
+
     private void DeleteItems(List<HierarchyItem> picks)
     {
         if (_repo == null) return;
+        var ids = picks.Select(p => p.Id).ToList();
         int n = BatchDeleteMenu.Run(this, _repo, () => picks.Cast<object>(), null);
         if (n == 0) return;   // cancelled, or everything was locked — Run() has already explained
+
+        // Close any window still open on a deleted item BEFORE refreshing, so nothing writes to it.
+        foreach (var id in ids) _detached.Remove(id);
+        ItemsDeleted?.Invoke(ids);
 
         _selected = null;
         DetailsRoot.IsEnabled = false;
@@ -412,6 +421,64 @@ public partial class HierarchyPage : UserControl
 
     /// <summary>Re-render the sidebar after data changed outside this page (e.g. an undo/restore or a
     /// shared reload). Preserves the current selection by id where possible.</summary>
+    // ---- Opening an item in its own window ----
+
+    /// <summary>Raised when the user asks to open an item in its own window. MainWindow owns the windows
+    /// (it must close them on reload/exit), so the page only reports the request.</summary>
+    public Action<HierarchyItem>? OpenInWindow;
+
+    /// <summary>Ids currently open in their own window. While an id is here, this page must NOT bind an
+    /// editor to that item's container.</summary>
+    private readonly HashSet<Guid> _detached = new();
+
+    private void OpenInWindow_Click(object sender, RoutedEventArgs e)
+    {
+        var item = SelectedHierarchyItems().FirstOrDefault() ?? _selected;
+        if (item == null) { return; }
+        if (ItemLockService.IsGated(item))
+        {
+            MessageBox.Show(Window.GetWindow(this), "Unlock this entry before opening it in its own window.",
+                "Locked", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        OpenInWindow?.Invoke(item);
+    }
+
+    /// <summary>Hand an item over to its own window: flush anything pending, then UNBIND this page's
+    /// editor from it. Two live ContainerEditors on one container means whichever saves last silently
+    /// overwrites the other, because saving serialises the whole document with no dirty check.</summary>
+    public void DetachItem(Guid id)
+    {
+        _detached.Add(id);
+        if (_selected?.Id != id) return;
+        try { ContainerCtrl.FlushPending(); } catch { }
+        ContainerCtrl.Load(new Container(), _repo);   // park it on a throwaway container
+        DetailsRoot.IsEnabled = false;
+        DetachedNote.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Take an item back after its window closes.</summary>
+    public void ReattachItem(Guid id)
+    {
+        _detached.Remove(id);
+        DetachedNote.Visibility = Visibility.Collapsed;
+        ReloadList();                     // a rename in the window needs to reach the row
+        if (_selected?.Id == id)
+        {
+            // Re-bind the editor to the real container and hand control back to this pane.
+            ContainerCtrl.Load(_selected.Container, _repo);
+            DetailsRoot.IsEnabled = true;
+            _suppress = true;
+            NameBox.Text = _selected.Name;
+            DescBox.Text = _selected.Description;
+            TagsBox.Text = string.Join(", ", _selected.Tags);
+            _suppress = false;
+        }
+    }
+
+    /// <summary>True while this item is being edited in its own window.</summary>
+    public bool IsDetached(Guid id) => _detached.Contains(id);
+
     public void ReloadList()
     {
         var id = _selected?.Id;
@@ -446,6 +513,17 @@ public partial class HierarchyPage : UserControl
         DescBox.Text = _selected.Description;
         TagsBox.Text = string.Join(", ", _selected.Tags);
         _suppress = false;
+
+        // While this item is open in its own window, that window owns its container. Binding here too
+        // would give one container two editors, and the last one to save would silently win.
+        if (_detached.Contains(_selected.Id))
+        {
+            ContainerCtrl.Load(new Container(), _repo);
+            DetailsRoot.IsEnabled = false;
+            DetachedNote.Visibility = Visibility.Visible;
+            return;
+        }
+        DetachedNote.Visibility = Visibility.Collapsed;
         ContainerCtrl.Load(_selected.Container, _repo);
         RefreshRelList();
         BuildSpecifics();

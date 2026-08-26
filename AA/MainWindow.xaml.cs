@@ -20,6 +20,11 @@ public partial class MainWindow : Window
     private Views.FloatingTasksWindow? _floating;
     private Views.QuickWorkWindow? _quickWork;
 
+    /// <summary>Items currently open in their own window, keyed by item Id. Tracked here because these
+    /// windows must be reached on save, sync, reload, delete and exit — a window nobody knows about is a
+    /// window whose edits quietly do not get written.</summary>
+    private readonly Dictionary<Guid, Views.ItemWindow> _itemWindows = new();
+
     // Google Drive sync-on-save state.
     private DispatcherTimer? _syncDebounce;
     private bool _syncRunning, _syncQueued;
@@ -145,6 +150,14 @@ public partial class MainWindow : Window
         if (_safeMode) return;
 
         // Flush rich-text edits from whichever container is currently loaded.
+        // Close detached windows first: each flushes on close, so their edits land in the model before
+        // the save and the shared-bundle push below.
+        foreach (var itemWin in _itemWindows.Values.ToList())
+        {
+            try { itemWin.Flush(); itemWin.Close(); } catch { }
+        }
+        _itemWindows.Clear();
+
         FlushAllEditors();
         CaptureUiState();
         try { _repo.Save(); } catch { /* ignore on close */ }
@@ -168,6 +181,50 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>Wire a page's open-in-window and delete notifications. Init() can run again on a reload,
+    /// so the handlers are cleared first — otherwise one click would open the window several times.</summary>
+    private void HookItemWindows(Views.HierarchyPage page)
+    {
+        page.OpenInWindow = item => OpenItemWindow(page, item);
+        page.ItemsDeleted = CloseItemWindows;
+    }
+
+    /// <summary>Open an item in its own window, or bring its existing window forward. The owning page
+    /// unbinds its editor for the duration, so the container only ever has one editor bound to it.</summary>
+    private void OpenItemWindow(Views.HierarchyPage page, Models.HierarchyItem item)
+    {
+        if (_itemWindows.TryGetValue(item.Id, out var existing))
+        {
+            existing.Activate();
+            return;
+        }
+
+        FlushAllEditors();   // whatever the main pane had buffered belongs to the model before we hand over
+
+        var win = new Views.ItemWindow(_repo, item) { Owner = this };
+        var id = item.Id;
+        win.NameChanged += _ => { try { page.ReloadList(); } catch { } };
+        win.Closed += (_, _) =>
+        {
+            _itemWindows.Remove(id);
+            try { page.ReattachItem(id); } catch { }
+        };
+        _itemWindows[id] = win;
+        page.DetachItem(id);
+        win.Show();
+    }
+
+    /// <summary>Close the windows of items that have just been deleted, so nothing keeps editing them.</summary>
+    private void CloseItemWindows(IEnumerable<Guid> ids)
+    {
+        foreach (var id in ids.ToList())
+            if (_itemWindows.TryGetValue(id, out var w))
+            {
+                w.GoOrphaned();     // stop it writing on the way out
+                try { w.Close(); } catch { }
+            }
+    }
+
     private void FlushAllEditors()
     {
         try
@@ -177,6 +234,9 @@ public partial class MainWindow : Window
             ProceduresPage.FlushPendingEditors();
             VesselsPage.FlushPendingEditors();
             SirePg.FlushBody();   // capture any in-progress SIRE question-body edit
+            // Detached item windows hold their own editors; without this their buffered edits would be
+            // missing from the very save/sync/export that is about to run.
+            foreach (var w in _itemWindows.Values.ToList()) w.Flush();
         }
         catch { }
     }
@@ -1134,6 +1194,10 @@ public partial class MainWindow : Window
         TasksPage.Init(_repo, ItemKind.Task);
         ProceduresPage.Init(_repo, ItemKind.Procedure);
         VesselsPage.Init(_repo, ItemKind.Vessel);
+        HookItemWindows(EquipmentPage);
+        HookItemWindows(TasksPage);
+        HookItemWindows(ProceduresPage);
+        HookItemWindows(VesselsPage);
         CalendarPg.Init(_repo, NavigateToItem);
         BoardPg.Init(_repo);
         PlannerPg.Init(_repo);
@@ -1151,6 +1215,9 @@ public partial class MainWindow : Window
         UpdateCrewTabHeader();
         _floating?.SetRepo(_repo);    // keep the floating due-dates window pointed at the current data
         _quickWork?.SetRepo(_repo);   // and the Ctrl+N quick-work window (avoids writing to an orphaned repo)
+        // Detached item windows re-resolve their item by Id: a reload replaces every model object, so a
+        // window still holding the old one would write edits into an orphan that is never saved.
+        foreach (var itemWin in _itemWindows.Values.ToList()) itemWin.SetRepo(_repo);
 
         var ui = _repo.Data.Ui;
         if (ui.WindowWidth is double w && w > 200) Width = w;
