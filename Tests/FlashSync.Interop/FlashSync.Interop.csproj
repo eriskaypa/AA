@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Cross-platform conformance harness for Flash Sync.
+
+    Compiles the app's OWN protocol files (linked, not copied) into a plain
+    console app, so it runs on macOS/Linux as well as Windows and tests exactly
+    the code that ships. Only the four WPF-free files are linked: the QR
+    rendering (WPF imaging) and camera (OpenCV runtime.win) layers are
+    Windows-only and are exercised in the app itself.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>FlashSync.Interop</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="..\..\AA\FlashSync\FlashSyncCodec.cs"   Link="Linked\FlashSyncCodec.cs" />
+    <Compile Include="..\..\AA\FlashSync\FlashSyncEncoder.cs" Link="Linked\FlashSyncEncoder.cs" />
+    <Compile Include="..\..\AA\FlashSync\FlashSyncDecoder.cs" Link="Linked\FlashSyncDecoder.cs" />
+    <Compile Include="..\..\AA\FlashSync\FlashChangeSet.cs"   Link="Linked\FlashChangeSet.cs" />
+  </ItemGroup>
+</Project>

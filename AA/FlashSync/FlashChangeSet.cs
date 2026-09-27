@@ -12,12 +12,35 @@ namespace AA.FlashSync;
 /// exactly what the contract requires and what makes it testable.</summary>
 public static class FlashChangeSet
 {
-    // data.json keys that must not travel. LastModified is re-stamped by the applier. Ui is this
-    // workstation's window geometry / selected tab — syncing it would yank the receiver's layout around
-    // on every change set, and it is never what the user means by "my changes".
+    // data.json keys that never travel as a BLOCK. LastModified is re-stamped by the applier. Ui is
+    // handled key-by-key instead (see PerDeviceUiKeys) — it is excluded here only so the generic block
+    // loop never ships or applies it wholesale.
     private static readonly HashSet<string> ExcludedDataKeys = new(StringComparer.Ordinal)
     {
         "LastModified", "Ui"
+    };
+
+    // Ui keys that describe THIS WORKSTATION, not the user's preferences. They never travel, and applying
+    // anything never touches them.
+    //
+    // Ui mixes two kinds of state, and the two implementations each got one half wrong. This side
+    // excluded all of Ui, so the tab colours the user explicitly asked to sync never reached the phone.
+    // iOS sent all of it — and ApplyChangeSet applied Blocks wholesale with no exclusion check, so an
+    // iPhone change set wiped this PC's window position, size and maximised state and jumped it to the
+    // phone's tab. Both were verified by running each side's real code (Tests/FlashSync.Interop).
+    //
+    // A DENYLIST on purpose: an allowlist would silently stop any new preference from syncing. Geometry
+    // and cursor keys are a small, stable set. Keep this list identical to rSyncPerDeviceUiKeys in the
+    // iOS repo's RChangeSet.swift.
+    private static readonly HashSet<string> PerDeviceUiKeys = new(StringComparer.Ordinal)
+    {
+        "WindowLeft", "WindowTop", "WindowWidth", "WindowHeight", "WindowState",
+        "DueWindowWidth", "DueWindowHeight",
+        "SelectedMainTabIndex",
+        "SelectedEquipmentId", "SelectedTaskId", "SelectedProcedureId", "SelectedVesselId",
+        "CalendarSelectedDate", "MapFocusedItemId",
+        "GroupExpanded",     // which groups happen to be open: view state, not a choice
+        "LastDigestDate",    // per-device reminder bookkeeping
     };
 
     // settings.json keys that must never travel: secrets, machine-local absolute paths, and per-install
@@ -53,6 +76,18 @@ public static class FlashChangeSet
         var o = new JsonObject();
         foreach (var (k, v) in data)
             if (!ExcludedDataKeys.Contains(k)) o[k] = v?.DeepClone();
+        // Ui DOES travel in a snapshot — its shared preferences only. Pairing is exactly when the user
+        // expects their tab colours and order to come across.
+        if (data["Ui"] is JsonObject ui) o["Ui"] = SharedUi(ui);
+        return o;
+    }
+
+    /// <summary>The user's preferences from a Ui object, with this device's window/cursor keys removed.</summary>
+    private static JsonObject SharedUi(JsonObject ui)
+    {
+        var o = new JsonObject();
+        foreach (var (k, v) in ui)
+            if (!PerDeviceUiKeys.Contains(k)) o[k] = v?.DeepClone();
         return o;
     }
 
@@ -115,8 +150,22 @@ public static class FlashChangeSet
 
         var (settingsOut, settingsDeletes) = DiffSettings(currentSettings, baselineSettings);
 
+        // Ui, key by key over the shared preferences — merged on apply exactly like settings, so a
+        // concurrent change to a DIFFERENT preference on the other side is not reverted.
+        var uiChanges = new JsonObject();
+        var uiDeletes = new JsonArray();
+        var curUi = current["Ui"] as JsonObject;
+        var basUi = baselineData?["Ui"] as JsonObject;
+        if (curUi != null)
+            foreach (var (k, v) in curUi)
+                if (!PerDeviceUiKeys.Contains(k) && !DeepEquals(v, basUi?[k])) uiChanges[k] = v?.DeepClone();
+        if (basUi != null)
+            foreach (var (k, _) in basUi)
+                if (!PerDeviceUiKeys.Contains(k) && (curUi == null || !curUi.ContainsKey(k))) uiDeletes.Add(k);
+
         if (sets.Count == 0 && deletes.Count == 0 && blocks.Count == 0 && blockDeletes.Count == 0
-            && order.Count == 0 && settingsOut == null && settingsDeletes.Count == 0)
+            && order.Count == 0 && settingsOut == null && settingsDeletes.Count == 0
+            && uiChanges.Count == 0 && uiDeletes.Count == 0)
             return null;
 
         var cs = new JsonObject
@@ -132,6 +181,8 @@ public static class FlashChangeSet
         if (order.Count > 0) cs["Order"] = order;
         if (settingsOut != null) cs["Settings"] = settingsOut;
         if (settingsDeletes.Count > 0) cs["SettingsDeletes"] = settingsDeletes;
+        if (uiChanges.Count > 0) cs["UiChanges"] = uiChanges;
+        if (uiDeletes.Count > 0) cs["UiDeletes"] = uiDeletes;
         return cs;
     }
 
@@ -187,10 +238,33 @@ public static class FlashChangeSet
                 Reorder(target, ids.Select(n => (n?.ToString() ?? "")).ToList());
             }
 
-        // 4) Blocks wholesale
+        // 4) Blocks wholesale — but NEVER an excluded key. This loop used to apply every block, so a Ui
+        //    block from an iPhone replaced this PC's whole Ui and deleted its window geometry.
         if (changeSet["Blocks"] is JsonObject blocks)
             foreach (var (name, val) in blocks)
-                data[name] = val?.DeepClone();
+                if (!ExcludedDataKeys.Contains(name)) data[name] = val?.DeepClone();
+
+        // 4b) Ui — merge shared preferences, remove shared deletions, never touch a per-device key.
+        //     A LEGACY sender (the iOS build before this change — including the one on the user's phone)
+        //     ships the whole Ui under Blocks; fold it into the same merge rather than replacing.
+        var uiIn = new JsonObject();
+        if (changeSet["Blocks"] is JsonObject lb && lb["Ui"] is JsonObject legacyUi)
+            foreach (var (k, v) in legacyUi) uiIn[k] = v?.DeepClone();
+        if (changeSet["UiChanges"] is JsonObject uc)
+            foreach (var (k, v) in uc) uiIn[k] = v?.DeepClone();
+        var uiDel = changeSet["UiDeletes"] as JsonArray;
+        if (uiIn.Count > 0 || (uiDel?.Count ?? 0) > 0)
+        {
+            if (data["Ui"] is not JsonObject localUi) { localUi = new JsonObject(); data["Ui"] = localUi; }
+            foreach (var (k, v) in uiIn)
+                if (!PerDeviceUiKeys.Contains(k)) localUi[k] = v?.DeepClone();
+            if (uiDel != null)
+                foreach (var n in uiDel)
+                {
+                    var k = n?.ToString() ?? "";
+                    if (!PerDeviceUiKeys.Contains(k)) localUi.Remove(k);
+                }
+        }
 
         // 5) BlockDeletes
         if (changeSet["BlockDeletes"] is JsonArray bdel)
@@ -231,12 +305,18 @@ public static class FlashChangeSet
         }
         else data = (JsonObject)payload.DeepClone();   // bare data.json, no settings
 
-        // Never let a sender's excluded keys land here (a bare data.json or an older sender may still
-        // carry them), and keep this workstation's own instead.
+        // Take the sender's shared Ui preferences but keep this workstation's own window/cursor state.
+        // (This used to keep the ENTIRE local Ui, so a snapshot never carried the user's tab colours.)
+        var incomingUi = data["Ui"] as JsonObject;
         foreach (var k in ExcludedDataKeys) data.Remove(k);
+        var mergedUi = incomingUi != null ? SharedUi(incomingUi) : new JsonObject();
+        if (existingData?["Ui"] is JsonObject localUi)
+            foreach (var (k, v) in localUi)
+                if (PerDeviceUiKeys.Contains(k)) mergedUi[k] = v?.DeepClone();
+        if (incomingUi != null || existingData?["Ui"] != null) data["Ui"] = mergedUi;
         if (existingData != null)
             foreach (var k in ExcludedDataKeys)
-                if (existingData[k] is JsonNode keep) data[k] = keep.DeepClone();
+                if (k != "Ui" && existingData[k] is JsonNode keep) data[k] = keep.DeepClone();
 
         data["LastModified"] = nowLocal.ToString("yyyy-MM-ddTHH:mm:ss.fffffff");
         return data;
@@ -256,6 +336,8 @@ public static class FlashChangeSet
             if (n > 0) parts.Add($"{n} deleted");
         }
         if (changeSet["Blocks"] is JsonObject b && b.Count > 0) parts.Add(string.Join(", ", b.Select(kv => kv.Key)));
+        if (changeSet["UiChanges"] is JsonObject u && u.Count > 0 || changeSet["UiDeletes"] is JsonArray ud && ud.Count > 0)
+            parts.Add("layout");
         // Destructive operations MUST be named. ApplyChangeSet removes these whole sections, so a change
         // set carrying only BlockDeletes previously summarised as "no changes" — the review sheet would
         // promise nothing and then drop an entire section of the database.
