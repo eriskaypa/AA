@@ -1,0 +1,10 @@
+# SwiftPM / Xcode build output
+.build/
+.swiftpm/
+dist/
+DerivedData/
+*.xcuserstate
+xcuserdata/
+# Local snapshot / scratch output
+Snapshots/out/
+.scratch/
