@@ -144,3 +144,10 @@ authority for keys and menu placement.
 - Google token in the Keychain (own item, separate from the local-data key). Default AppIdentity = the Mac's
   computer name (`SCDynamicStoreCopyComputerName`). Q-3 harden EnsureFolder: **yes**. Q-16 "Result is out of
   range." message: **yes**.
+
+### Architecture review follow-ups
+- R-70 (DATA-181 conflict-copies recovery): add a registry row **File ▸ Recover Conflict Copies…** (no key
+  equivalent, `APP` scope, enabled when conflict copies exist), placed after Reload from Disk. Owner of the
+  flow: W-PERSIST; F3 wires the row like every other File item.
+- Worktrees for F2/F3 and the wave live outside the repo, under the session scratchpad
+  (`…/scratchpad/wt/<agent-id>`), on branches `stage/F2`, `stage/F3`, `wave/<agent-id>`; the lead merges them.
