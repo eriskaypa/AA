@@ -8,3 +8,10 @@ xcuserdata/
 # Local snapshot / scratch output
 Snapshots/out/
 .scratch/
+# Golden-fixture plan (01 GF.4.1) — C# oracle build output and partial runs
+Tools/*/bin/
+Tools/*/obj/
+Tools/.dotnet/
+Tools/*/.aa-build/
+**/.partial/
+Tests/AACoreTests/Fixtures/mac-out/check-report.*.json
