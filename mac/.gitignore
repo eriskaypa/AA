@@ -15,3 +15,6 @@ Tools/.dotnet/
 Tools/*/.aa-build/
 **/.partial/
 Tests/AACoreTests/Fixtures/mac-out/check-report.*.json
+
+# macOS Finder metadata
+.DS_Store
