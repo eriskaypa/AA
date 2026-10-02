@@ -280,7 +280,7 @@ private let stampText = "2026-09-29T14:05:00+03:00"
     }
 }
 
-@MainActor @Suite struct ObservationTests {
+@MainActor @Suite struct AppStoreObservationTests {
     // TV: ARCHITECTURE.md §3.9 — withObservationTracking fires for a BASE-class property changed on a SUBCLASS instance
     @Test func baseClassPropertyOnSubclass() {
         let task = TaskItem(name: "a")
