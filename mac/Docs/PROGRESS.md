@@ -9,6 +9,7 @@ Counts are feature IDs from `Docs/OWNERSHIP.md` §4 (1,583 total).
 | Architecture | architect + 3 critics + revision | done | `Docs/ARCHITECTURE.md`, `Docs/OWNERSHIP.md` |
 | F1 core data layer | F1 | done (core) | Foundation, JSON, all models, persistence, crypto, save pipeline, ZIP, XLSX writer; 202 tests / 35 suites green; deviations in `Docs/Deviations/F1.md` |
 | F1 placeholders | F1-stubs | done | 69 placeholder files for 16 owners (F2 29: Store 7, Services 15, XlsxRead 7; W-PERSIST 11; W-RICH 10; §6.8 contracts 6; ContractStatus flags 15 — W-PERSIST's and W-RICH's counted above); 306 `PLACEHOLDER(...)` markers, 0 for F1; `Scripts/check-placeholders.sh`, `Scripts/check-ownership.sh` (paths, non-Swift files, basenames, cross-owner symbols); wired `DataStore.normalizeFilePaths` → `AttachmentStore`, `CrewMember.parseDate` → `NetDateParser`, `ContractStatus.isImplemented` → per-owner flags; 209 tests / 38 suites green |
+| F1 verification | F1 (verifier) | done | clean-build gate green (229 tests / 42 suites); every in-worktree acceptance item of the F1 card mapped to a passing test; compile-time conformance tests for every public signature of ARCH §3–§6.8 (`Foundation/FoundationContractSignatureTests.swift`, `FoundationPlaceholderSignatureTests.swift`) — 0 mismatches; hand-written Windows-style data.json (`Fixtures/model/WIN.*`) round-trips byte-identically |
 | F2 domain services | F2 | pending | |
 | F3 app shell | F3 | pending | |
 | Wave (16 vertical slices) | W-* | pending | |
@@ -20,3 +21,8 @@ Counts are feature IDs from `Docs/OWNERSHIP.md` §4 (1,583 total).
 - 2026-10-02 — foundation workflow restarted (resume-aware, with retries).
 - 2026-10-02 — F1 core finished: uncommitted tests from the crashed attempt verified and fixed; crypto, persistence, settings (DATA-182), AppStore save pipeline, ZIP, XLSX writer, model-helper and fixture tests added; P2 fixes recorded (`Docs/Deviations/F1.md`).
 - 2026-10-02 — F1 placeholders finished: compiling stubs for every F2 and wave-owned AACore contract (ARCH §5.3, §6.5–§6.8, §11), one `<Area>ContractStatus.swift` per wave owner (15), `Scripts/check-placeholders.sh` + `Scripts/check-ownership.sh`; gate (build, tests, check-ownership) green; `check-placeholders.sh F1` empty. `MigrateLegacyAbsolutePaths` deliberately not run on a plain load (Windows parity — bundle import / Flash Sync apply only, W-PERSIST). Open request: `Docs/Requests/F1.md` REQ-F1-01 (owner of `Docs/PROGRESS.md`).
+- 2026-10-02 — F1 adversarial audit: gate re-run from a clean `.build`; acceptance list checked item by item (all
+  covered); every public AACore signature compiled against ARCH §3–§6.8 (F1 code and all F2/wave placeholders: no
+  mismatch); parser/date/number edge cases probed (no defect); new Windows-style fixture (every model type, three
+  date kinds, unknown members on 20+ objects, legacy `BucketId`, Trash payload) proves parse → model → write is
+  byte-identical in five time zones; element-level JSON null leniency recorded as A06e in `Docs/Deviations/F1.md`.
