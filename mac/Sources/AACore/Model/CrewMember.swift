@@ -256,20 +256,10 @@ public final class CrewMember: JSONModel, @MainActor Identifiable {
         return .ok
     }
 
-    /// The app-wide tolerant date parser (09 §3.1, §6.3). The full algorithm (.NET `DateTime.TryParse` emulation)
-    /// is F2's `NetDateParser` (ARCHITECTURE.md §6.5); this forwards to it.
+    /// The app-wide tolerant date parser (09 §3.1, §6.3): the three exact formats `yyyy-MM-dd`, `yyyy/MM/dd`,
+    /// `yyyy.MM.dd`, then the .NET `DateTime.TryParse` emulation. The algorithm is F2's `NetDateParser`
+    /// (ARCHITECTURE.md §6.5, `Services/NetDateParser.swift`); this forwards to it (current time zone, no `today`).
     public nonisolated static func parseDate(_ s: String?) -> NetDateTime? {
-        exactFormatsParse(s)
-    }
-
-    /// The three exact formats `yyyy-MM-dd`, `yyyy/MM/dd`, `yyyy.MM.dd` (4-digit year, 2-digit month/day)
-    /// after trimming; nil for blank or anything else.
-    nonisolated static func exactFormatsParse(_ s: String?) -> NetDateTime? {
-        guard let s, !NetText.isBlank(s) else { return nil }
-        let t = Array(NetText.trim(s).utf8)
-        guard t.count == 10, t[4] == t[7], t[4] == 0x2D || t[4] == 0x2F || t[4] == 0x2E,
-              let y = CivilDate.digits(t, 0, 4), let m = CivilDate.digits(t, 5, 2), let d = CivilDate.digits(t, 8, 2),
-              let date = CivilDate(year: y, month: m, day: d) else { return nil }
-        return NetDateTime.calendarDate(date)
+        NetDateParser.parse(s)
     }
 }
