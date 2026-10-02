@@ -9,20 +9,30 @@ public enum ContractOwner: String, CaseIterable, Sendable {
 // `ContractStatus` is ONE type: the crew contract-status enum of ARCHITECTURE.md §4.5 (declared in
 // Model/CrewMember.swift) also carries this registry, so `ContractStatus.isImplemented(.wRich)` and
 // `member.contractStatus(on:)` coexist (two same-named types cannot; recorded in Docs/Deviations/F1.md).
-// Each wave owner declares its flag in a one-line file INSIDE ITS OWN FOLDER, e.g.
-// `Sources/AACore/RichText/RichTextContractStatus.swift`:
+// Each wave owner's flag lives in a one-line file INSIDE ITS OWN FOLDER (created by F1 with the placeholders):
+//     Sources/AACore/RichText/RichTextContractStatus.swift:
 //     extension ContractStatus { public static let wRichImplemented = false }
-// and flips it to `true` when its contracts are real. `isImplemented` reads those flags.
+// and the owner flips it to `true` when its contracts are real. Nobody edits another owner's flag file.
 extension ContractStatus {
     /// True once `owner` has replaced its placeholders with real implementations. Tests that need another
     /// owner's real code use `@Test(.enabled(if: ContractStatus.isImplemented(.wRich)))`.
     public static func isImplemented(_ owner: ContractOwner) -> Bool {
-        // The per-owner flag files are created together with the placeholders (ARCHITECTURE.md §11); until then
-        // every wave contract counts as not implemented, which is the correct answer for a placeholder.
         switch owner {
-        case .wShell, .wPersist, .wRich, .wCont, .wFiles, .wHier, .wBuild, .wPlan, .wQuick, .wCrew, .wVessel,
-             .wPdf, .wSire, .wFlash, .wDrive:
-            return false
+        case .wShell: return wShellImplemented        // ShellSupport/ShellSupportContractStatus.swift
+        case .wPersist: return wPersistImplemented    // Bundles/BundlesContractStatus.swift
+        case .wRich: return wRichImplemented          // RichText/RichTextContractStatus.swift
+        case .wCont: return wContImplemented          // Editor/EditorContractStatus.swift
+        case .wFiles: return wFilesImplemented        // FileBank/FileBankContractStatus.swift
+        case .wHier: return wHierImplemented          // Hierarchy/HierarchyContractStatus.swift
+        case .wBuild: return wBuildImplemented        // Builders/BuildersContractStatus.swift
+        case .wPlan: return wPlanImplemented          // Calendar/CalendarContractStatus.swift
+        case .wQuick: return wQuickImplemented        // Windows/WindowsContractStatus.swift
+        case .wCrew: return wCrewImplemented          // Crew/CrewContractStatus.swift
+        case .wVessel: return wVesselImplemented      // Vessel/VesselContractStatus.swift
+        case .wPdf: return wPdfImplemented            // Export/ExportContractStatus.swift
+        case .wSire: return wSireImplemented          // Sire/SireContractStatus.swift
+        case .wFlash: return wFlashImplemented        // FlashSync/FlashSyncContractStatus.swift
+        case .wDrive: return wDriveImplemented        // GoogleDrive/GoogleDriveContractStatus.swift
         }
     }
 }
