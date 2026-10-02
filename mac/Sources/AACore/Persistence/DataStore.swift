@@ -172,10 +172,12 @@ public final class DataStore {
         try? FileManager.default.createDirectory(at: filesFolder, withIntermediateDirectories: true)
     }
 
-    /// Attachment path normalisation hook (01 §3.7). The algorithm is W-PERSIST's
-    /// `AttachmentStore.normalizeFilePaths` (ARCHITECTURE.md §6.6), called here on load and before every save.
+    /// Attachment path normalisation (01 §3.7): W-PERSIST's `AttachmentStore.normalizeFilePaths`
+    /// (ARCHITECTURE.md §6.6), called on every load (`load`, `loadInBackground`, `loadFrom`) and before every save
+    /// (`serializeForSave`), exactly where the C# `DataStore.NormalizeFilePaths` runs. `MigrateLegacyAbsolutePaths`
+    /// is NOT part of a plain load on Windows (only bundle import / ApplySyncedData), so it stays W-PERSIST's.
     func normalizeFilePaths(_ data: AppData) {
-        _ = data
+        AttachmentStore.normalizeFilePaths(self, data: data)
     }
 
     // MARK: Reading bytes (01 §3.4)
