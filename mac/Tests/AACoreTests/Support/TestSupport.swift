@@ -100,3 +100,30 @@ final class TestFlag: @unchecked Sendable {
     var isSet: Bool { lock.lock(); defer { lock.unlock() }; return value }
     func set() { lock.lock(); value = true; lock.unlock() }
 }
+
+/// Literal goldens shared by several suites.
+enum Goldens {
+    /// 01 §4.2.1 / ARCHITECTURE.md §4.10 — `AppData()` with SchemaVersion 1.
+    static let freshDB = #"{"Equipment":[],"Tasks":[],"Procedures":[],"Vessels":[],"Groups":[],"Crew":[],"Log":[],"ChecklistTemplates":[],"ListGroups":[],"QuickBuckets":[],"Ports":[],"ScheduleTemplates":[],"Trash":[],"Sire":{"QuestionStatuses":{},"Bookmarks":[],"ForExport":[],"Tasks":[],"QuestionBodies":{}},"Ui":{"SelectedMainTabIndex":0,"ShowShortcutBar":true,"QuickViewPinIds":[],"TabColors":{},"TabOrder":[],"SortAZ":{},"GroupExpanded":{},"CrewTableColumns":[],"CrewTableShownColumns":[]},"SchemaVersion":1}"#
+}
+
+/// Builds an `AppStore` over a temporary AppFolder with an in-memory Keychain (ARCHITECTURE.md §10.1).
+/// The folder lives as long as the returned `folder` reference.
+@MainActor
+enum StoreFactory {
+    struct Made {
+        let store: AppStore
+        let dataStore: DataStore
+        let folder: TempFolder
+        let secrets: InMemorySecretStore
+    }
+
+    static func make(data: AppData? = nil, clock: AppClock = SystemClock(),
+                     secrets: InMemorySecretStore? = nil) -> Made {
+        let secrets = secrets ?? InMemorySecretStore()
+        let folder = TempFolder("aa-store")
+        let ds = DataStore(appFolder: folder.url, secrets: secrets, clock: clock)
+        ds.loadSettings()
+        return Made(store: AppStore(dataStore: ds, data: data ?? AppData(), clock: clock), dataStore: ds, folder: folder, secrets: secrets)
+    }
+}

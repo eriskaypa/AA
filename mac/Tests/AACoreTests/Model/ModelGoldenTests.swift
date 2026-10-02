@@ -7,7 +7,7 @@ import Testing
 @testable import AACore
 
 @MainActor @Suite struct ModelGoldenTests {
-    static let freshDB = #"{"Equipment":[],"Tasks":[],"Procedures":[],"Vessels":[],"Groups":[],"Crew":[],"Log":[],"ChecklistTemplates":[],"ListGroups":[],"QuickBuckets":[],"Ports":[],"ScheduleTemplates":[],"Trash":[],"Sire":{"QuestionStatuses":{},"Bookmarks":[],"ForExport":[],"Tasks":[],"QuestionBodies":{}},"Ui":{"SelectedMainTabIndex":0,"ShowShortcutBar":true,"QuickViewPinIds":[],"TabColors":{},"TabOrder":[],"SortAZ":{},"GroupExpanded":{},"CrewTableColumns":[],"CrewTableShownColumns":[]},"SchemaVersion":1}"#
+    static let freshDB = Goldens.freshDB
 
     func context(_ guids: SequentialGuids = SequentialGuids(), zone: TimeZone = TZ.athens) -> JSONDecodeContext {
         JSONDecodeContext(zone: zone, clock: FixedClock(local: "2026-09-29T14:05:00", zone: zone), newGuid: { guids.next() })
