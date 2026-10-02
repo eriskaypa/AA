@@ -77,6 +77,16 @@ public final class PasswordService {
         unlockedAtGeneration = settings.reloadGeneration
     }
 
+    /// The password / lock dialogs' validation (Views/PasswordWindow.xaml.cs:40, ItemLockWindow.xaml.cs:34; 01 DATA-080,
+    /// 04 §7.8): empty → "Password cannot be empty."; fewer than 4 UTF-16 units → "Password must be at least 4
+    /// characters."; confirmation differs (ordinal) → "Passwords do not match."; nil when valid.
+    public nonisolated static func validationMessage(password: String, confirm: String) -> String? {
+        if password.isEmpty { return "Password cannot be empty." }
+        if password.utf16.count < 4 { return PasswordError.tooShort.message }
+        if !Ordinal.equals(password, confirm) { return PasswordError.mismatch.message }
+        return nil
+    }
+
     /// Decrypts a legacy `enc:` body with the session password; nil when locked, no salt, or no match (never guesses).
     public func decryptLegacyBody(_ blob: String) -> String? {
         guard isUnlocked, let pw = currentPassword, let salt = settings.values.passwordSalt else { return nil }

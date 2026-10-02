@@ -36,8 +36,11 @@ public enum AESCBC {
     }
 
     /// PKCS#7 padding.
+    /// Input that is empty or not a whole number of blocks is rejected (like .NET's CryptographicException;
+    /// CommonCrypto would otherwise return the partial block).
     public static func decrypt(_ d: Data, key: Data, iv: Data) throws -> Data {
-        try crypt(CCOperation(kCCDecrypt), d, key: key, iv: iv)
+        guard !d.isEmpty, d.count % kCCBlockSizeAES128 == 0 else { throw CryptoError.cryptorFailed(Int32(kCCAlignmentError)) }
+        return try crypt(CCOperation(kCCDecrypt), d, key: key, iv: iv)
     }
 
     private static func crypt(_ op: CCOperation, _ input: Data, key: Data, iv: Data) throws -> Data {

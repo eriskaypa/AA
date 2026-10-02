@@ -66,7 +66,16 @@ public final class SettingsStore {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { values = keep; return }
         guard let data = try? Data(contentsOf: fileURL), let root = try? JSONParser.parse(data) else { values = keep; return }
         switch root {
-        case .object(let o): values = AppSettings(json: o)
+        case .object(let o):
+            let read = AppSettings(json: o)
+            // 01 §3.1 catch branch / §7.12: an undecodable PasswordSalt makes Windows' LoadFrom throw → every value
+            // falls back to its default; FolderBuilderBase / GeminiApiKey keep the values just read.
+            if let salt = read.passwordSalt, !salt.isEmpty, NetBase64.decode(salt) == nil {
+                values = AppSettings(folderBuilderBase: read.folderBuilderBase, geminiApiKey: read.geminiApiKey,
+                                     extra: read.extra)
+            } else {
+                values = read
+            }
         default: values = keep                                  // `null` (and any non-object) → defaults
         }
     }
