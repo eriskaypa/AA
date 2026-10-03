@@ -280,6 +280,79 @@ struct XamlWriterEmitter {
         } else {
             out += "</Section>"
         }
+        let ns = Self.namespaceNeeds(doc, metadata: metadata)
+        if ns.check { out = Self.declaringMissingPrefixes(out, known: ns.known) }
+        return out
+    }
+
+    // MARK: - Namespace safety net (§4.3.7 rules 10–11: the output must stay loadable)
+
+    /// Whether the document re-emits prefixed attributes or raw XML (opaque slices, property elements), and every
+    /// prefix → URI binding known for them (root declarations, carried attributes, the scope around opaque slices).
+    static func namespaceNeeds(_ doc: RichDoc, metadata: RichTextMetadata) -> (check: Bool, known: [String: String]) {
+        var check = false
+        var known: [String: String] = [:]
+        func note(_ attrs: [XamlRawAttribute]) {
+            for a in attrs {
+                if a.qualifiedName == "#pe" { check = true; continue }
+                guard let colon = a.qualifiedName.firstIndex(of: ":") else { continue }
+                let prefix = String(a.qualifiedName[..<colon])
+                if prefix == "xmlns" {
+                    let p = String(a.qualifiedName[a.qualifiedName.index(after: colon)...])
+                    if known[p] == nil { known[p] = a.value }
+                } else if prefix != "xml" {
+                    check = true
+                    if let uri = a.namespaceURI, known[prefix] == nil { known[prefix] = uri }
+                }
+            }
+        }
+        note(metadata.rootAttributes)
+        for attrs in metadata.elementAttributes.values { note(attrs) }
+        for attrs in metadata.hyperlinkAttributes.values { note(attrs) }
+        func walk(_ nodes: [RichNode]) {
+            for n in nodes {
+                switch n {
+                case .container(let c):
+                    note(c.info.carried)
+                    note(RichColumnCoding.decodeAll(c.info.model))
+                    walk(c.children)
+                case .para(let p):
+                    note(p.carried)
+                    if p.model.keys.contains(where: { $0.hasSuffix(".xml") }) { check = true }
+                    let r = NSRange(location: 0, length: p.content.length)
+                    p.content.enumerateAttributes(in: r) { a, _, _ in
+                        if a[.aaPreservedXaml] != nil || a[.aaForegroundBrushXml] != nil || a[.aaBackgroundBrushXml] != nil {
+                            check = true
+                        }
+                        note(RichAttributeCoding.decode(a[.aaExtraAttributes]))
+                        note(RichAttributeCoding.decode(a[.richHyperlinkAttributes]))
+                        for row in (a[.richPreservedNamespaces] as? [[String]]) ?? [] where row.count == 2 {
+                            let q = row[0]
+                            let p = q == "xmlns" ? "" : String(q.dropFirst(6))
+                            if !p.isEmpty, known[p] == nil { known[p] = row[1] }
+                        }
+                    }
+                }
+            }
+        }
+        walk(doc.blocks)
+        return (check, known)
+    }
+
+    /// Declares, on the root, every prefix the output uses without a declaration in scope (a prefix declared on a
+    /// flattened Span, or around an opaque slice whose ancestors were not re-emitted). Unknown prefixes stay as they
+    /// are (they cannot occur: every prefix the reader accepted was declared somewhere).
+    static func declaringMissingPrefixes(_ xml: String, known: [String: String]) -> String {
+        var out = xml
+        var added = Set<String>()
+        for _ in 0..<16 {
+            guard case .failure(.malformedXML(let message)) = XamlXMLScanner.scan(out),
+                  let m = message.firstMatch(of: #/'([^']+)' is an undeclared prefix/#) else { return out }
+            let prefix = String(m.output.1)
+            guard let uri = known[prefix], !added.contains(prefix), let r = out.range(of: "<Section") else { return out }
+            added.insert(prefix)
+            out.insert(contentsOf: " xmlns:" + prefix + "=\"" + escapeAttribute(uri) + "\"", at: r.upperBound)
+        }
         return out
     }
 

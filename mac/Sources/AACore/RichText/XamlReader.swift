@@ -170,7 +170,11 @@ struct XamlReaderBuilder {
     private func carried(_ id: XamlNodeID, excluding excluded: Set<String>,
                          excludingProperties: Set<String> = []) -> [XamlRawAttribute] {
         let n = doc[id]
-        var out = n.rawAttributes.filter { a in
+        // The element's own namespace declarations travel with its carried attributes, so a prefixed attribute
+        // (`x:Name`, `x:Uid`) or opaque content using that prefix is still declared when the element is re-emitted.
+        // (A default declaration of the presentation namespace is always in scope from the written root.)
+        let decls = n.namespaceDeclarations.filter { !($0.qualifiedName == "xmlns" && $0.value == XamlXMLNamespaces.presentation) }
+        var out = decls + n.rawAttributes.filter { a in
             if a.namespaceURI == nil && excluded.contains(a.qualifiedName) { return false }
             return !XamlAttributeTable.isInvalid(a, on: n.kind)
         }
@@ -456,6 +460,15 @@ struct XamlReaderBuilder {
         let a = XamlPreservedAttachment(xml: xml, isBlock: block)
         attrs[.attachment] = a
         attrs[.aaPreservedXaml] = xml
+        // The namespace declarations in scope around the slice (nearest first wins), so the writer can declare a
+        // prefix the byte-for-byte slice uses but does not declare itself.
+        var scope: [String: String] = [:]
+        var cur = doc[id].parent
+        while let p = cur {
+            for d in doc[p].namespaceDeclarations where scope[d.qualifiedName] == nil { scope[d.qualifiedName] = d.value }
+            cur = doc[p].parent
+        }
+        if !scope.isEmpty { attrs[.richPreservedNamespaces] = scope.keys.sorted().map { [$0, scope[$0]!] } }
         return NSAttributedString(string: "\u{FFFC}", attributes: attrs)
     }
 
@@ -625,6 +638,11 @@ enum RichColumnCoding {
     static func encode(_ attrs: [XamlRawAttribute]) -> String {
         attrs.map { [$0.qualifiedName, $0.namespaceURI ?? "", $0.value].joined(separator: "\u{1E}") }
             .joined(separator: "\u{1F}")
+    }
+
+    /// Every TableColumn's carried attributes of a table model (`Col<k>` entries).
+    static func decodeAll(_ model: [String: String]) -> [XamlRawAttribute] {
+        model.keys.sorted().filter { $0.hasPrefix("Col") && !$0.contains(".") }.flatMap { decode(model[$0]) }
     }
 
     static func decode(_ s: String?) -> [XamlRawAttribute] {

@@ -60,6 +60,8 @@ public extension NSAttributedString.Key {
     static let richHyperlinkAttributes = NSAttributedString.Key("aa.rich.hyperlinkAttributes")
     /// String `#AARRGGBB` — the colour shown when `.aaForegroundBrushXml` was read (writer consistency check).
     static let richForegroundBrushDisplay = NSAttributedString.Key("aa.rich.foregroundBrushDisplay")
+    /// `[[String]]` (`xmlns:p` or `xmlns`, URI) — namespace declarations in scope around an opaque slice.
+    static let richPreservedNamespaces = NSAttributedString.Key("aa.rich.preservedNamespaces")
     /// String `#AARRGGBB` or `none` — the highlight shown when `.aaBackgroundBrushXml` was read.
     static let richBackgroundBrushDisplay = NSAttributedString.Key("aa.rich.backgroundBrushDisplay")
 }

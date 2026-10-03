@@ -283,7 +283,8 @@ import Testing
         let k = RichTest.attrs(s, at: "k")
         #expect(k[.aaInheritedExtras] as? [String: String] == ["FontStretch": "Condensed", "Typography.Kerning": "False"])
         let e = RichTest.attrs(s, at: "e")
-        #expect(RichAttributeCoding.decode(e[.aaExtraAttributes]).map(\.qualifiedName) == ["Tag", "Foo", "x:Uid"])
+        // The Run's own namespace declaration travels with its extras (the prefix stays declared when re-emitted).
+        #expect(RichAttributeCoding.decode(e[.aaExtraAttributes]).map(\.qualifiedName) == ["xmlns:x", "Tag", "Foo", "x:Uid"])
         let r = RichTest.attrs(s, at: "r")
         #expect((r[.writingDirection] as? [NSNumber])?.first?.intValue == NSWritingDirection.rightToLeft.rawValue)
         #expect(o[.writingDirection] == nil)

@@ -318,3 +318,44 @@ import Testing
         #expect(RichTest.semanticallyEqual(RichTest.body(out).isEmpty ? out : out, out))
     }
 }
+
+/// §4.3.7 rules 10–11: every prefix the output uses stays declared, wherever the source declared it (on a carried
+/// element, on a flattened Span, around an opaque slice, on a replaced content root) — an undeclared prefix would make
+/// the note unloadable on both platforms.
+@MainActor
+@Suite struct XamlWriterNamespaceTests {
+    static let X = "http://schemas.microsoft.com/winfx/2006/xaml"
+
+    static func loads(_ xaml: String) -> Bool {
+        if case .success = XamlDOM.parse(xaml) { return true }
+        return false
+    }
+
+    @Test func declarationOnACarriedElementTravelsWithIt() {
+        let src = RichTest.doc(##"<Paragraph KeepTogether="True" xmlns:x="\##(Self.X)" x:Name="p1"><Run x:Uid="r">a</Run></Paragraph>"##)
+        let out = RichTest.roundTrip(src)
+        #expect(Self.loads(out))
+        #expect(RichTest.body(out) == ##"<Paragraph xmlns:x="\##(Self.X)" KeepTogether="True" x:Name="p1"><Run x:Uid="r">a</Run></Paragraph>"##)
+        #expect(RichTest.roundTrip(out) == out)
+    }
+
+    @Test func declarationOnAFlattenedSpanMovesToTheRoot() {
+        let src = RichTest.doc(##"<Paragraph><Span xmlns:x="\##(Self.X)" xmlns:l="clr-namespace:Foo"><Run x:Uid="r">a</Run><InlineUIContainer><l:Gauge Value="3"/></InlineUIContainer></Span></Paragraph>"##)
+        let out = RichTest.roundTrip(src)
+        #expect(Self.loads(out))
+        #expect(out.hasPrefix(##"<Section xmlns:l="clr-namespace:Foo" xmlns:x="\##(Self.X)" xmlns="##))
+        #expect(RichTest.body(out) == ##"<Paragraph><Run x:Uid="r">a</Run><InlineUIContainer><l:Gauge Value="3"/></InlineUIContainer></Paragraph>"##)
+    }
+
+    @Test func declarationOnAReplacedContentRootIsKept() {
+        let src = ##"<Paragraph xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:l="clr-namespace:Foo"><Run>a</Run><l:Thing/></Paragraph>"##
+        let out = RichTest.roundTrip(src)
+        #expect(Self.loads(out))
+        #expect(RichTest.body(out) == ##"<Paragraph xmlns:l="clr-namespace:Foo"><Run>a</Run><l:Thing/></Paragraph>"##)
+    }
+
+    @Test func plainDocumentsAreNotRescanned() {
+        let (s, m) = RichTest.read(RichTest.doc("<Paragraph><Run>a</Run></Paragraph>"))
+        #expect(!XamlWriterEmitter.namespaceNeeds(RichDoc.build(from: s), metadata: m).check)
+    }
+}
