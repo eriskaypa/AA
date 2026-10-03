@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>AA</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.eriskay.aa</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>AA</string>
+	<key>CFBundleDisplayName</key>
+	<string>AA</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleShortVersionString</key>
+	<string>@VERSION@</string>
+	<key>CFBundleVersion</key>
+	<string>@BUILD@</string>
+	<key>AABuildDate</key>
+	<string>@BUILDDATE@</string>
+	<key>AAGitCommit</key>
+	<string>@GITCOMMIT@</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array><string>MacOSX</string></array>
+	<key>LSMinimumSystemVersion</key>
+	<string>26.0</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.productivity</string>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSSupportsAutomaticTermination</key>
+	<false/>
+	<key>NSSupportsSuddenTermination</key>
+	<false/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Created by B.E.P. Avida - May 2026</string>
+	<key>NSCameraUsageDescription</key>
+	<string>AA uses the camera only during Flash Sync ▸ Receive, to read the QR codes your iPhone shows on its screen. Video is never recorded, saved or sent anywhere.</string>
+	<key>NSCameraUseContinuityCameraDeviceType</key>
+	<true/>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>AA opens files you linked in place from your Desktop, and reads or saves the imports, exports and backups you choose there.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>AA opens files you linked in place from your Documents folder, and reads or saves the imports, exports and backups you choose there.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>AA opens files you linked in place from your Downloads folder, and reads or saves the imports, exports and backups you choose there.</string>
+	<key>NSRemovableVolumesUsageDescription</key>
+	<string>AA opens files you linked in place on external drives, and can keep its data folder or a shared save file on an external drive.</string>
+	<key>NSNetworkVolumesUsageDescription</key>
+	<string>AA opens files you linked in place on network drives, and keeps a shared save file on a network drive in sync with other copies of AA.</string>
+	<key>NSFileProviderDomainUsageDescription</key>
+	<string>AA saves backup copies into your Google Drive folder and reads them back when you ask.</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>AA bundle</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSItemContentTypes</key>
+			<array><string>com.eriskay.aa.bundle</string></array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>ZIP archive (AA bundle)</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array><string>public.zip-archive</string></array>
+		</dict>
+	</array>
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.eriskay.aa.bundle</string>
+			<key>UTTypeDescription</key>
+			<string>AA bundle</string>
+			<key>UTTypeConformsTo</key>
+			<array><string>public.zip-archive</string></array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array><string>aaz</string></array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.eriskay.aa.schedule</string>
+			<key>UTTypeDescription</key>
+			<string>AA schedule</string>
+			<key>UTTypeConformsTo</key>
+			<array><string>public.json</string></array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array><string>aasched.json</string></array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.eriskay.aa.xaml</string>
+			<key>UTTypeDescription</key>
+			<string>AA rich text</string>
+			<key>UTTypeConformsTo</key>
+			<array><string>public.data</string></array>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.eriskay.aa.task-ref</string>
+			<key>UTTypeDescription</key>
+			<string>AA task reference</string>
+			<key>UTTypeConformsTo</key>
+			<array><string>public.data</string></array>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.eriskay.aa.job-ref</string>
+			<key>UTTypeDescription</key>
+			<string>AA planner job reference</string>
+			<key>UTTypeConformsTo</key>
+			<array><string>public.data</string></array>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.eriskay.aa.item-ref</string>
+			<key>UTTypeDescription</key>
+			<string>AA item reference</string>
+			<key>UTTypeConformsTo</key>
+			<array><string>public.data</string></array>
+		</dict>
+	</array>
+</dict>
+</plist>
