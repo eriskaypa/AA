@@ -70,7 +70,7 @@ mac/dist/AA-<version>-<build>-macOS.zip   AA/AA.app + AA/Install.txt (+ the port
 mac/dist/SHA256SUMS
 ```
 
-Useful switches: `SKIP_TESTS=1`, `ARCHS=arm64`, `PACKAGE=dmg`, `PORTABLE_LAUNCHER=1`,
+Useful switches: `SKIP_TESTS=1`, `ARCHS=arm64`, `PACKAGE=dmg` (also writes `AA-<version>-<build>-macOS.dmg`: AA.app, Install.txt and an Applications shortcut to drag it onto, with the app icon as the volume icon; verified by mounting it), `PORTABLE_LAUNCHER=1`,
 `SIGN_IDENTITY="AA Local Signing"` (a self-signed identity keeps camera / Keychain grants across rebuilds) or a
 Developer ID identity with `NOTARY_PROFILE=<profile>` for notarisation. `dist/` is git-ignored.
 

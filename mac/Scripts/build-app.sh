@@ -213,9 +213,13 @@ cp "$MAC_DIR/Sources/AA/Resources/MenuBarIconTemplate@2x.png" "$RES/MenuBarIconT
 bundles=0
 for b in "$FIRST_BIN_DIR"/*.bundle; do
     [ -d "$b" ] || continue
+    # Only the app's own resource bundles ship. The build folder can also hold AA_AACoreTests.bundle (test
+    # fixtures, left by any `swift test -c release`), which must never end up inside AA.app.
+    case "$(basename "$b")" in AA_AA.bundle|AA_AACore.bundle) ;; *) continue ;; esac
     ditto "$b" "$RES/$(basename "$b")"
     bundles=$((bundles + 1))
 done
+[ "$bundles" -eq 2 ] || fail "expected the 2 SwiftPM resource bundles (AA_AA, AA_AACore), found $bundles"
 ok "flat resources + $bundles SwiftPM resource bundle(s)"
 
 # Icon (BD.3.10): the 1024-px re-draw when present, else the 256-px ICO frame upscaled.
@@ -390,8 +394,39 @@ package() {
         || { cat "$T/unzip-verify.log" >&2; fail "signature invalid after a plain unzip of $(basename "$ZIP")"; }
     rm -rf "$T/unzip-check"
     if [ "$PACKAGE" = "dmg" ]; then
+        # Daily-use installer image: AA.app + Install.txt (+ portable launcher) next to an Applications shortcut
+        # to drag it onto, the app icon as the volume icon, compressed read-only (UDZO).
         DMG="$DIST/AA-$VERSION-$BUILD_NUMBER-macOS.dmg"
-        hdiutil create -volname AA -srcfolder "$T/pkg/AA" -ov -format UDZO "$DMG" >/dev/null
+        rm -rf "$T/dmg" "$T/dmg-mnt" "$T/rw.dmg"
+        mkdir -p "$T/dmg" "$T/dmg-mnt"
+        ditto "$T/pkg/AA" "$T/dmg"
+        ln -s /Applications "$T/dmg/Applications"
+        hdiutil create -volname AA -srcfolder "$T/dmg" -fs HFS+ -format UDRW -ov "$T/rw.dmg" >/dev/null \
+            || fail "hdiutil create (read-write image) failed"
+        hdiutil attach -readwrite -nobrowse -noautoopen -mountpoint "$T/dmg-mnt" "$T/rw.dmg" >/dev/null \
+            || fail "could not mount the read-write image"
+        cp "$APP/Contents/Resources/AppIcon.icns" "$T/dmg-mnt/.VolumeIcon.icns"
+        if xcrun -f SetFile >/dev/null 2>&1; then
+            xcrun SetFile -a C "$T/dmg-mnt"          # "has custom icon" flag on the volume root
+        else
+            echo "  ! SetFile not found: the disk image keeps the generic volume icon"
+        fi
+        hdiutil detach -quiet "$T/dmg-mnt" || hdiutil detach -force -quiet "$T/dmg-mnt" \
+            || fail "could not unmount the read-write image"
+        rm -f "$DMG"
+        hdiutil convert "$T/rw.dmg" -format UDZO -imagekey zlib-level=9 -o "$DMG" >/dev/null \
+            || fail "hdiutil convert (UDZO) failed"
+        rm -f "$T/rw.dmg"
+        hdiutil verify -quiet "$DMG" || fail "hdiutil verify failed for $(basename "$DMG")"
+        # What the user will actually run: the app straight from the mounted image must keep a valid seal.
+        hdiutil attach -readonly -nobrowse -noautoopen -mountpoint "$T/dmg-mnt" "$DMG" >/dev/null \
+            || fail "could not mount $(basename "$DMG")"
+        dmg_ok=1
+        codesign --verify --deep --strict "$T/dmg-mnt/AA.app" 2> "$T/dmg-verify.log" || dmg_ok=0
+        [ -L "$T/dmg-mnt/Applications" ] || dmg_ok=0
+        [ -f "$T/dmg-mnt/Install.txt" ] || dmg_ok=0
+        hdiutil detach -quiet "$T/dmg-mnt" || hdiutil detach -force -quiet "$T/dmg-mnt" || true
+        [ "$dmg_ok" -eq 1 ] || { cat "$T/dmg-verify.log" >&2; fail "$(basename "$DMG") contents failed verification"; }
     fi
     ( cd "$DIST" && shasum -a 256 "$(basename "$ZIP")" ${DMG:+"$(basename "$DMG")"} > SHA256SUMS )
 }
