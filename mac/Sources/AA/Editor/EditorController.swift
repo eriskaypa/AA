@@ -381,6 +381,7 @@ final class EditorController: NSObject {
         loading = true
         storage.setAttributedString(text)
         loading = false
+        undoManager.removeAllActions()                         // a new document never undoes into the old one (D-2)
         hasContainer = true
         self.withheld = withheld
         hasAnyLock = EditorLocking.hasAnyLock(text)
@@ -801,30 +802,15 @@ final class EditorController: NSObject {
 
     private func changeIndent(increase: Bool) {
         let tv = textView
-        let sel = tv.selectedRange()
-        if storage.length > 0, EditorFormatting.isInList(storage, at: sel.location) {
+        if storage.length > 0 {
+            // Lists and ordinary paragraphs both go through the block model, so the indent is persisted (CONT-043).
             structural(increase ? "Indent" : "Outdent") { s, r in
-                let out = increase ? RichListFormatter.indent(s, selection: r) : RichListFormatter.outdent(s, selection: r)
-                RichListFormatter.normalise(s)
-                return out
+                EditorFormatting.changeIndent(s, selection: r, increase: increase)
             }
             return
         }
-        if storage.length == 0 {
-            tv.typingAttributes = EditorFormatting.paragraphStyle(tv.typingAttributes) { p in
-                let cur = p.headIndent.isFinite ? p.headIndent : 0
-                let next = max(0, cur + (increase ? EditorFormatting.indentStep : -EditorFormatting.indentStep))
-                guard next != cur else { return false }
-                p.headIndent = next
-                p.firstLineHeadIndent = next
-                return true
-            }
-            return
-        }
-        let paras = EditorBlocks.paragraphRanges(storage, touching: sel).filter { $0.length > 0 }
-        applyAttributes(paras, actionName: increase ? "Indent" : "Outdent") { s in
-            EditorFormatting.indentParagraphs(in: s, range: sel, increase: increase)
-        }
+        // Empty document: the indent goes into the typing attributes (CONT-043).
+        tv.typingAttributes = EditorFormatting.indentTypingAttributes(tv.typingAttributes, increase: increase)
     }
 
     // MARK: Lists (CONT-040…046, §6.5)

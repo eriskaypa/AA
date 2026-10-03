@@ -62,42 +62,55 @@ public enum EditorTablePlan {
     public static let borderWidth: CGFloat = 0.6
     /// Left, top, right, bottom (WPF `Padding="3,1,3,1"`).
     public static let cellPadding: (left: CGFloat, top: CGFloat, right: CGFloat, bottom: CGFloat) = (3, 1, 3, 1)
+    /// Top / bottom table margin (WPF `Margin="0,4,0,4"`).
     public static let tableMarginVertical: CGFloat = 4
 
+    /// WPF `Table.Margin` (`0,4,0,4`).
+    public static let tableMargin = "0,4,0,4"
+
     /// The table's cells: one empty paragraph per cell, row-major; every cell paragraph ends with "\n".
+    /// Built as the W-RICH block tree (Table CellSpacing 0 / Margin 0,4,0,4 → TableRowGroup → TableRow → TableCell
+    /// with BorderBrush, BorderThickness, Padding, and `FontWeight="Bold"` on the row-0 cells) and rendered by the
+    /// same renderer the reader uses, so the table is written exactly in the 05 S-4 shape and looks as it will after
+    /// a reload (V-05: an AppKit-only table lost its Margin and put the header bold on the paragraphs).
     public static func makeTable(rows: Int, columns: Int, base: [NSAttributedString.Key: Any]) -> NSAttributedString {
         let rows = max(1, rows), columns = max(1, columns)
-        let table = NSTextTable()
-        table.numberOfColumns = columns
-        table.collapsesBorders = true                 // CellSpacing 0
-        table.hidesEmptyCells = false
-        table.layoutAlgorithm = .fixedLayoutAlgorithm // equal columns across the paper, like WPF's star columns
-        table.setContentWidth(100, type: .percentageValueType)
-        table.setWidth(tableMarginVertical, type: .absoluteValueType, for: .margin, edge: .minY)
-        table.setWidth(tableMarginVertical, type: .absoluteValueType, for: .margin, edge: .maxY)
-
-        let out = NSMutableAttributedString()
+        var plain = base
+        for k in RichParagraphKeys.all { plain[k] = nil }
+        plain[.paragraphStyle] = nil
         let baseStyle = (base[.paragraphStyle] as? NSParagraphStyle) ?? NSParagraphStyle.default
+        let table = RichContainer(RichContainerInfo(kind: .table, id: RichIDs.fresh(),
+                                                    model: ["Columns": String(columns), "CellSpacing": "0",
+                                                            "Margin": tableMargin]))
+        let group = RichContainer(RichContainerInfo(kind: .rowGroup, id: RichIDs.fresh()))
+        table.children = [.container(group)]
+        let border = XamlValues.formatThickness(XamlThickness(left: Double(borderWidth), top: Double(borderWidth),
+                                                              right: Double(borderWidth), bottom: Double(borderWidth)))
+        let padding = XamlValues.formatThickness(XamlThickness(left: Double(cellPadding.left),
+                                                               top: Double(cellPadding.top),
+                                                               right: Double(cellPadding.right),
+                                                               bottom: Double(cellPadding.bottom)))
+        let brush = XamlValues.formatColor(RichColor.argb(borderColor))
         for r in 0..<rows {
-            for c in 0..<columns {
-                let block = NSTextTableBlock(table: table, startingRow: r, rowSpan: 1, startingColumn: c, columnSpan: 1)
-                block.setBorderColor(borderColor)
-                block.setWidth(borderWidth, type: .absoluteValueType, for: .border)
-                block.setWidth(cellPadding.left, type: .absoluteValueType, for: .padding, edge: .minX)
-                block.setWidth(cellPadding.top, type: .absoluteValueType, for: .padding, edge: .minY)
-                block.setWidth(cellPadding.right, type: .absoluteValueType, for: .padding, edge: .maxX)
-                block.setWidth(cellPadding.bottom, type: .absoluteValueType, for: .padding, edge: .maxY)
-                let style = NSMutableParagraphStyle()
-                style.alignment = .left
-                style.baseWritingDirection = baseStyle.baseWritingDirection
-                style.textBlocks = [block]
-                var attrs = base
-                attrs[.paragraphStyle] = style
-                if r == 0 { attrs[.font] = EditorFormatting.font(attrs[.font] as? NSFont, bold: true) }   // header row
-                out.append(NSAttributedString(string: "\n", attributes: attrs))
+            let row = RichContainer(RichContainerInfo(kind: .row, id: RichIDs.fresh()))
+            for _ in 0..<columns {
+                var attrs = plain
+                var carried: [XamlRawAttribute] = []
+                if r == 0 {                                                    // header row (cell FontWeight)
+                    attrs[.font] = EditorFormatting.font(attrs[.font] as? NSFont, bold: true)
+                    carried.append(XamlRawAttribute(qualifiedName: "FontWeight", namespaceURI: nil, value: "Bold"))
+                }
+                let cell = RichContainer(RichContainerInfo(kind: .cell, id: RichIDs.fresh(), carried: carried,
+                                                           model: ["BorderBrush": brush, "BorderThickness": border,
+                                                                   "Padding": padding]))
+                let para = RichPara(content: NSMutableAttributedString(), terminator: attrs, alignment: .left,
+                                    direction: baseStyle.baseWritingDirection, carried: [], model: [:])
+                cell.children = [.para(para)]
+                row.children.append(.container(cell))
             }
+            group.children.append(.container(row))
         }
-        return out
+        return RichRenderer.render(RichDoc(blocks: [.container(table)]))
     }
 
     /// K-15 placement: after the block the caret is in (the whole list when the caret is in a list, the whole table

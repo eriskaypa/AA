@@ -164,11 +164,11 @@ struct EditorSelfTestView: View {
             EditorPane(controller: controller, title: "Self-test")
                 .frame(width: 560, height: 520)
             VStack(alignment: .leading, spacing: 4) {
-                Text("Editor self-test").font(.system(size: AAType.body, weight: .bold))
+                Text("Editor self-test").font(.aaMono(AAType.body, weight: .semibold))
                 ForEach(Array(results.enumerated()), id: \.offset) { _, r in
                     Label(r.0, systemImage: r.1 ? "checkmark.circle.fill" : "xmark.octagon.fill")
                         .foregroundStyle(r.1 ? AAColor.Status.ok : AAColor.Status.danger)
-                        .font(.system(size: AAType.small))
+                        .font(.aaMono(AAType.small))
                 }
                 Spacer()
             }
@@ -220,6 +220,17 @@ struct EditorSelfTestView: View {
         check("Align right on the caret paragraph", align == .right)
         check("format bar reflects alignment", c.summary.alignment == .right)
 
+        // CONT-043: Indent on an ordinary paragraph is written to the XAML (Margin.Left 24), and Undo takes it back.
+        func written() -> String {
+            XamlWriter.write(storage, metadata: RichTextMetadata(context: .containerEditor), context: .containerEditor)
+        }
+        c.perform(.indent)
+        check("Indent moves the paragraph 24 pt",
+              (storage.attribute(.paragraphStyle, at: 12, effectiveRange: nil) as? NSParagraphStyle)?.headIndent == 24)
+        check("Indent is persisted (Margin 24)", written().contains("Margin=\"24,"))
+        c.perform(.outdent)
+        check("Outdent is persisted (back to 0)", !written().contains("Margin=\"24,"))
+
         let lenBefore = storage.length
         c.insertTable(rows: 2, columns: 3)
         let tableParas = (0..<storage.length).filter {
@@ -268,6 +279,18 @@ struct EditorSelfTestView: View {
         tv.insertText("Z", replacementRange: tv.selectedRange())
         check("typing after a list marker is item text", storage.attribute(.aaListMarker, at: 3, effectiveRange: nil) == nil
               && storage.string.hasPrefix("\t•\tZCheck"))
+
+        // CONT-043 on a paragraph read from XAML (it carries the writer's paragraph model, V-05).
+        let fragment = ##"<Section xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"><Paragraph Margin="0,1,0,1"><Run>Permit to work signed</Run></Paragraph><Paragraph><Run>x</Run></Paragraph></Section>"##
+        let stored = XamlReader.readFragment(fragment, destinationContext: .containerEditor)
+        check("stored paragraph read", stored != nil)
+        if let stored {
+            c.showPreview(stored, selection: NSRange(location: 2, length: 0))
+            c.perform(.indent)
+            check("Indent on a stored paragraph is persisted", written().contains(##"Margin="24,1,0,1""##))
+            c.undo()
+            check("Undo takes the stored indent back", written().contains(##"Margin="0,1,0,1""##))
+        }
         return out
     }
 }

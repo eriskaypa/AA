@@ -169,26 +169,78 @@ import Testing
         #expect(align(9) != .center)
     }
 
-    // TV: 05 §7.2 item 10 — 0 → 24 → 48; outdent from 10 → 0; NaN treated as 0
-    @Test func paragraphIndent() {
-        let s = EditorFx.text("para")
-        let r = NSRange(location: 0, length: 0)
-        func head() -> CGFloat { (s.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.headIndent ?? -1 }
-        func first() -> CGFloat { (s.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.firstLineHeadIndent ?? -1 }
-        EditorFormatting.indentParagraphs(in: s, range: r, increase: true)
-        #expect(head() == 24 && first() == 24)
-        EditorFormatting.indentParagraphs(in: s, range: r, increase: true)
-        #expect(head() == 48)
-        let p = NSMutableParagraphStyle()
-        p.headIndent = 10
-        s.addAttribute(.paragraphStyle, value: p, range: NSRange(location: 0, length: 4))
-        EditorFormatting.indentParagraphs(in: s, range: r, increase: false)
-        #expect(head() == 0 && first() == 0)
-        let nan = NSMutableParagraphStyle()
-        nan.headIndent = .nan
-        s.addAttribute(.paragraphStyle, value: nan, range: NSRange(location: 0, length: 4))
-        EditorFormatting.indentParagraphs(in: s, range: r, increase: true)
-        #expect(head() == 24)
+    // TV: 05 §7.2 item 10 — 0 → 24 → 48; outdent from 10 → 0; Auto treated as 0; the indent is PERSISTED (V-05:
+    //     an AppKit-only indent on a modelled paragraph was dropped by the writer)
+    @Test func paragraphIndentPersists() {
+        func doc(_ body: String) -> (NSTextStorage, RichTextMetadata) {
+            let (a, m) = RichTest.read(RichTest.doc(body))
+            return (NSTextStorage(attributedString: a), m)
+        }
+        func written(_ s: NSTextStorage, _ m: RichTextMetadata) -> String {
+            RichTest.body(XamlWriter.write(s, metadata: m, context: .containerEditor))
+        }
+        func head(_ s: NSTextStorage, _ i: Int = 0) -> CGFloat {
+            (s.attribute(.paragraphStyle, at: i, effectiveRange: nil) as? NSParagraphStyle)?.headIndent ?? -1
+        }
+        let caret = NSRange(location: 1, length: 0)
+        let (s, m) = doc("<Paragraph><Run>Warning: check</Run></Paragraph>")
+        EditorFormatting.changeIndent(s, selection: caret, increase: true)
+        #expect(head(s) == 24)
+        #expect(written(s, m) == ##"<Paragraph Margin="24,Auto,Auto,Auto"><Run>Warning: check</Run></Paragraph>"##)
+        EditorFormatting.changeIndent(s, selection: caret, increase: true)
+        #expect(head(s) == 48)
+        #expect(written(s, m).hasPrefix(##"<Paragraph Margin="48,"##))
+        // Reload: the indent comes back.
+        let (r, rm) = doc(written(s, m))
+        #expect(head(r) == 48)
+        #expect(written(r, rm).hasPrefix(##"<Paragraph Margin="48,"##))
+        // Top / bottom margin kept; outdent clamps at 0 and clears TextIndent.
+        let (k, km) = doc(##"<Paragraph Margin="0,1,0,1"><Run>Permit to work signed</Run></Paragraph>"##)
+        EditorFormatting.changeIndent(k, selection: caret, increase: true)
+        #expect(written(k, km) == ##"<Paragraph Margin="24,1,0,1"><Run>Permit to work signed</Run></Paragraph>"##)
+        let (o, om) = doc(##"<Paragraph Margin="10,0,0,0" TextIndent="20"><Run>p</Run></Paragraph>"##)
+        EditorFormatting.changeIndent(o, selection: NSRange(location: 0, length: 0), increase: false)
+        #expect(written(o, om) == ##"<Paragraph Margin="0,0,0,0"><Run>p</Run></Paragraph>"##)
+        #expect(head(o) == 0)
+        // A stored 24 outdents to 0 and stays 0 after a reload.
+        let (d, dm) = doc(##"<Paragraph Margin="24,0,0,0"><Run>p</Run></Paragraph>"##)
+        EditorFormatting.changeIndent(d, selection: NSRange(location: 0, length: 0), increase: false)
+        let (d2, _) = doc(written(d, dm))
+        #expect(head(d2) == 0)
+        // Every touched paragraph moves.
+        let (t, tm) = doc("<Paragraph><Run>one</Run></Paragraph><Paragraph><Run>two</Run></Paragraph>")
+        EditorFormatting.changeIndent(t, selection: NSRange(location: 1, length: 5), increase: true)
+        #expect(written(t, tm).components(separatedBy: "Margin=\"24,").count == 3)
+        // A paragraph typed by the user (no model) indents and persists too.
+        let (u, um) = doc("<Paragraph><Run>x</Run></Paragraph>")
+        u.append(NSAttributedString(string: "new", attributes: EditorFormatting.defaultTypingAttributes()))
+        EditorFormatting.changeIndent(u, selection: NSRange(location: 3, length: 0), increase: true)
+        #expect(written(u, um).contains(##"<Paragraph Margin="24,Auto,Auto,Auto"><Run>new</Run></Paragraph>"##))
+    }
+
+    // TV: 05 CONT-043 — in a list the caret nests the item (IncreaseIndentation), not the paragraph margin
+    @Test func indentInListNests() {
+        let (a, m) = RichTest.read(RichTest.doc(##"<List MarkerStyle="Disc"><ListItem><Paragraph><Run>a</Run></Paragraph></ListItem><ListItem><Paragraph><Run>b</Run></Paragraph></ListItem></List>"##))
+        let s = NSTextStorage(attributedString: a)
+        let b = (s.string as NSString).range(of: "b")
+        EditorFormatting.changeIndent(s, selection: NSRange(location: b.location, length: 0), increase: true)
+        let x = XamlWriter.write(s, metadata: m, context: .containerEditor)
+        #expect(x.components(separatedBy: "<List ").count == 3)                 // b nested in a list inside a
+        #expect(!x.contains("Margin=\"24,Auto"))
+    }
+
+    // TV: 05 CONT-043 — empty document: the typing attributes move (and a carried model with them)
+    @Test func indentTypingAttributes() {
+        var a = EditorFormatting.defaultTypingAttributes()
+        a[.richParagraphModel] = ["Margin": "0,1,0,1", "TextIndent": "10"]
+        a = EditorFormatting.indentTypingAttributes(a, increase: true)
+        #expect((a[.paragraphStyle] as? NSParagraphStyle)?.headIndent == 24)
+        #expect((a[.paragraphStyle] as? NSParagraphStyle)?.firstLineHeadIndent == 24)
+        #expect((a[.richParagraphModel] as? [String: String]) == ["Margin": "24,1,0,1"])
+        a = EditorFormatting.indentTypingAttributes(a, increase: false)
+        a = EditorFormatting.indentTypingAttributes(a, increase: false)
+        #expect((a[.paragraphStyle] as? NSParagraphStyle)?.headIndent == 0)
+        #expect((a[.richParagraphModel] as? [String: String])?["Margin"] == "0,1,0,1")
     }
 
     // TV: 05 CONT-022 — the summary reflects family and size (and B/I/U/S on the Mac)
@@ -416,6 +468,30 @@ import Testing
         #expect(EditorFormatting.isBold(t.attribute(.font, at: 0, effectiveRange: nil) as? NSFont))   // header
         #expect(!EditorFormatting.isBold(t.attribute(.font, at: 3, effectiveRange: nil) as? NSFont))
         #expect(Set(b.map { ObjectIdentifier($0.table) }).count == 1)
+    }
+
+    // TV: 05 CONT-032 / S-4 — the written table: CellSpacing 0, Margin 0,4,0,4, header FontWeight on the cells (V-05)
+    @Test func tableWritesS4Shape() {
+        let (a, m) = RichTest.read(RichTest.doc("<Paragraph><Run>x</Run></Paragraph>"))
+        let s = NSTextStorage(attributedString: a)
+        let base = s.attributes(at: 0, effectiveRange: nil)
+        let e = EditorTableBuilder.insertion(rows: 2, columns: 2, in: s, selection: NSRange(location: 1, length: 0),
+                                             base: base)
+        s.replaceCharacters(in: e.range, with: e.replacement)
+        let body = RichTest.body(XamlWriter.write(s, metadata: m, context: .containerEditor))
+        let cell = ##"BorderBrush="#FF9AA0A6" BorderThickness="0.6,0.6,0.6,0.6" Padding="3,1,3,1""##
+        let s4 = ##"<Table CellSpacing="0" Margin="0,4,0,4"><Table.Columns><TableColumn /><TableColumn /></Table.Columns><TableRowGroup><TableRow>"##
+            + "<TableCell \(cell) FontWeight=\"Bold\"><Paragraph /></TableCell>" + "<TableCell \(cell) FontWeight=\"Bold\"><Paragraph /></TableCell>"
+            + "</TableRow><TableRow>" + "<TableCell \(cell)><Paragraph /></TableCell>" + "<TableCell \(cell)><Paragraph /></TableCell>"
+            + "</TableRow></TableRowGroup></Table>"
+        #expect(body.contains(s4), "\(body)")
+        #expect(!body.contains(##"<Paragraph FontWeight="Bold""##))
+        // Reload: the same table comes back (2×2, collapsed borders, 4-pt margins, bold header).
+        let (r, rm) = RichTest.read(RichTest.doc(body))
+        #expect(RichTest.body(XamlWriter.write(r, metadata: rm, context: .containerEditor)) == body)
+        let t = (r.attribute(.paragraphStyle, at: 2, effectiveRange: nil) as? NSParagraphStyle)?.textBlocks.first as? NSTextTableBlock
+        #expect(t?.table.numberOfColumns == 2 && t?.table.collapsesBorders == true)
+        #expect(t?.table.width(for: .margin, edge: .minY) == 4 && t?.table.width(for: .margin, edge: .maxY) == 4)
     }
 
     // TV: 05 K-15 — after the caret's paragraph, trailing paragraph when nothing follows, caret in the first cell

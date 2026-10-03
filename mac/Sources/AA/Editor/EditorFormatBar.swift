@@ -7,62 +7,100 @@ import AppKit
 import SwiftUI
 import AACore
 
-/// The format bar above the paper.
+/// The format bar above the paper. It never wraps a lone group onto a second row: as the pane narrows, alignment and
+/// lists fold into pop-up menus, then the less frequent groups move into a trailing overflow menu (05 §6.3 "wrapping
+/// into an overflow Menu when narrow"); only a pane too narrow even for that wraps. Every command keeps its tooltip
+/// and stays reachable under its Format-menu name (V-DESIGN rule 4).
 struct EditorFormatBar: View {
     let controller: EditorController
 
     private var s: EditorSelectionSummary { controller.summary }
     private var editable: Bool { controller.isEditable }
 
+    /// How much of the bar is folded away (each step keeps everything the previous one showed reachable).
+    enum Density: Int, Comparable {
+        /// Every group inline (Windows toolbar order).
+        case full
+        /// Alignment and lists become pop-up menus.
+        case compact
+        /// + insert saved list / move, lock / unlock, find / zoom go into the trailing overflow menu.
+        case overflow
+        /// + undo / redo and link / table / clear go into the overflow menu too.
+        case minimal
+
+        static func < (a: Density, b: Density) -> Bool { a.rawValue < b.rawValue }
+    }
+
     var body: some View {
-        EditorFlowLayout(spacing: 6, lineSpacing: 5) {
-            EditorBarGroup {
-                EditorFontFamilyMenu(family: s.family, showFonts: { controller.perform(.showFonts) }) {
-                    controller.applyFontFamily($0)
-                }
-                    .equatable()
-                    .help("Font")
-                EditorFontSizeCombo(controller: controller, size: s.size)
-                    .frame(width: 66)
-                    .help("Font size (⌘+ / ⌘− step it)")
-            }
-            .disabled(!editable)
+        ViewThatFits(in: .horizontal) {
+            row(.full)
+            row(.compact)
+            row(.overflow)
+            row(.minimal)
+            EditorFlowLayout(spacing: 6, lineSpacing: 5) { groups(.minimal) }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AAColor.panelAlt)
+        .overlay(alignment: .bottom) { Rectangle().fill(AAColor.border).frame(height: 1) }
+    }
 
-            EditorBarGroup {
-                bar("bold", "Bold (⌘B)", on: s.bold, .bold)
-                bar("italic", "Italic (⌘I)", on: s.italic, .italic)
-                bar("underline", "Underline (⌘U)", on: s.underline, .underline)
-                bar("strikethrough", "Strikethrough (⇧⌘X)", on: s.strikethrough, .strikethrough)
-            }
+    private func row(_ d: Density) -> some View {
+        HStack(spacing: 6) { groups(d) }.fixedSize()
+    }
 
-            EditorBarGroup {
-                EditorColorButton(controller: controller, kind: .text, current: s.foreground)
-                EditorColorButton(controller: controller, kind: .highlight, current: s.highlight)
+    @ViewBuilder private func groups(_ d: Density) -> some View {
+        EditorBarGroup {
+            EditorFontFamilyMenu(family: s.family, showFonts: { controller.perform(.showFonts) }) {
+                controller.applyFontFamily($0)
             }
-            .disabled(!editable)
+                .equatable()
+                .help("Font")
+            EditorFontSizeCombo(controller: controller, size: s.size)
+                .frame(width: 66)
+                .help("Font size (⌘+ / ⌘− step it)")
+        }
+        .disabled(!editable)
 
+        EditorBarGroup {
+            bar("bold", "Bold (⌘B)", on: s.bold, .bold)
+            bar("italic", "Italic (⌘I)", on: s.italic, .italic)
+            bar("underline", "Underline (⌘U)", on: s.underline, .underline)
+            bar("strikethrough", "Strikethrough (⇧⌘X)", on: s.strikethrough, .strikethrough)
+        }
+
+        EditorBarGroup {
+            EditorColorButton(controller: controller, kind: .text, current: s.foreground)
+            EditorColorButton(controller: controller, kind: .highlight, current: s.highlight)
+        }
+        .disabled(!editable)
+
+        if d == .full {
             EditorBarGroup {
-                bar("text.alignleft", "Align left (⌘{)", on: s.alignment == .left || s.alignment == .natural, .alignLeft)
-                bar("text.aligncenter", "Align center (⌘|)", on: s.alignment == .center, .center)
-                bar("text.alignright", "Align right (⌘})", on: s.alignment == .right, .alignRight)
-                bar("text.justify", "Justify", on: s.alignment == .justified, .justify)
+                ForEach(Self.alignments, id: \.title) { a in bar(a.symbol, a.help, on: a.isOn(s.alignment), a.command) }
             }
+        } else {
+            EditorBarGroup { alignmentMenu }
+        }
 
-            // Windows toolbar order (ContainerEditor.xaml:21-55): lists and indent, saved list + move, undo/redo,
-            // link / table / clear, lock / unlock.
+        // Windows toolbar order (ContainerEditor.xaml:21-55): lists and indent, saved list + move, undo/redo,
+        // link / table / clear, lock / unlock.
+        if d == .full {
             EditorBarGroup {
-                bar("list.bullet", "Bullets (⇧⌘7)", on: s.list == .bullets, .bulletedList)
-                bar("list.number", "Numbered (⇧⌘9)", on: s.list == .numbered, .numberedList)
-                bar("increase.indent", "Indent — ⌘] (Tab at the start of a list item)", .indent)
-                bar("decrease.indent", "Outdent — ⌘[ (⇧Tab at the start of a list item)", .outdent)
+                ForEach(Self.listCommands, id: \.title) { c in bar(c.symbol, c.help, on: c.isOn(s.list), c.command) }
             }
+        } else {
+            EditorBarGroup { listMenu }
+        }
 
+        if d < .overflow {
             EditorBarGroup {
-                bar("text.badge.plus", EditorSavedListInsert.buttonHelp + " (⌥⌘L)", .insertSavedList)
-                bar("arrow.up.to.line", "Move the current list item (or block) up — ⌃⌘↑. Sub-items move with it.", .moveItemUp)
-                bar("arrow.down.to.line", "Move the current list item (or block) down — ⌃⌘↓. Sub-items move with it.", .moveItemDown)
+                ForEach(Self.blockCommands, id: \.title) { c in bar(c.symbol, c.help, c.command) }
             }
+        }
 
+        if d < .minimal {
             EditorBarGroup {
                 EditorBarButton(symbol: "arrow.uturn.backward", help: "Undo (⌘Z)", enabled: controller.canUndo && editable) {
                     controller.undo()
@@ -77,27 +115,160 @@ struct EditorFormatBar: View {
                 EditorTablePickerButton(controller: controller)
                 bar("eraser", "Clear formatting", .clearFormatting)
             }
+        }
 
+        if d < .overflow {
             EditorBarGroup {
-                bar("lock", "Lock the highlighted text (password-protected; still visible everywhere, just can't be edited).",
-                    .lockSelection)
-                bar("lock.open", "Unlock the highlighted text (requires app password).", .unlockSelection)
+                ForEach(Self.lockCommands, id: \.title) { c in bar(c.symbol, c.help, c.command) }
             }
 
             EditorBarGroup {
                 bar("magnifyingglass", "Find in this note (⌘F)", .showFind)
                 EditorZoomMenu(controller: controller)
             }
+        } else {
+            EditorBarGroup { overflowMenu(d) }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 5)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(AAColor.panelAlt)
-        .overlay(alignment: .bottom) { Rectangle().fill(AAColor.border).frame(height: 1) }
     }
 
     private func bar(_ symbol: String, _ help: String, on: Bool = false, _ c: FormatCommand) -> EditorBarButton {
         EditorBarButton(symbol: symbol, help: help, isOn: on, enabled: controller.validate(c)) { controller.perform(c) }
+    }
+
+    // MARK: Command tables (one source for the buttons and the folded menus)
+
+    struct BarCommand {
+        let title: String                 // the Format-menu name (03 §6.5.1 / ShortcutRegistry)
+        let symbol: String
+        let help: String                  // the format-bar tooltip (05 §6.3)
+        let command: FormatCommand
+        var alignment: [NSTextAlignment] = []
+        var list: EditorSelectionSummary.ListKind?
+
+        func isOn(_ a: NSTextAlignment?) -> Bool { a.map(alignment.contains) ?? false }
+        func isOn(_ l: EditorSelectionSummary.ListKind) -> Bool { list != nil && l == list }
+    }
+
+    static let alignments: [BarCommand] = [
+        BarCommand(title: "Align Left", symbol: "text.alignleft", help: "Align left (⌘{)", command: .alignLeft,
+                   alignment: [.left, .natural]),
+        BarCommand(title: "Center", symbol: "text.aligncenter", help: "Align center (⌘|)", command: .center,
+                   alignment: [.center]),
+        BarCommand(title: "Align Right", symbol: "text.alignright", help: "Align right (⌘})", command: .alignRight,
+                   alignment: [.right]),
+        BarCommand(title: "Justify", symbol: "text.justify", help: "Justify", command: .justify, alignment: [.justified]),
+    ]
+
+    static let listCommands: [BarCommand] = [
+        BarCommand(title: "Bulleted List", symbol: "list.bullet", help: "Bullets (⇧⌘7)", command: .bulletedList,
+                   list: .bullets),
+        BarCommand(title: "Numbered List", symbol: "list.number", help: "Numbered (⇧⌘9)", command: .numberedList,
+                   list: .numbered),
+        BarCommand(title: "Indent", symbol: "increase.indent", help: "Indent — ⌘] (Tab at the start of a list item)",
+                   command: .indent),
+        BarCommand(title: "Outdent", symbol: "decrease.indent", help: "Outdent — ⌘[ (⇧Tab at the start of a list item)",
+                   command: .outdent),
+    ]
+
+    static let blockCommands: [BarCommand] = [
+        BarCommand(title: "Saved List…", symbol: "text.badge.plus", help: EditorSavedListInsert.buttonHelp + " (⌥⌘L)",
+                   command: .insertSavedList),
+        BarCommand(title: "Move Up", symbol: "arrow.up.to.line",
+                   help: "Move the current list item (or block) up — ⌃⌘↑. Sub-items move with it.", command: .moveItemUp),
+        BarCommand(title: "Move Down", symbol: "arrow.down.to.line",
+                   help: "Move the current list item (or block) down — ⌃⌘↓. Sub-items move with it.",
+                   command: .moveItemDown),
+    ]
+
+    static let lockCommands: [BarCommand] = [
+        BarCommand(title: "Lock Highlighted Text…", symbol: "lock",
+                   help: "Lock the highlighted text (password-protected; still visible everywhere, just can't be edited).",
+                   command: .lockSelection),
+        BarCommand(title: "Unlock Highlighted Text…", symbol: "lock.open",
+                   help: "Unlock the highlighted text (requires app password).", command: .unlockSelection),
+    ]
+
+    // MARK: Folded menus
+
+    private func menuItem(_ c: BarCommand, on: Bool = false) -> some View {
+        Button { controller.perform(c.command) } label: {
+            Label(c.title, systemImage: on ? "checkmark" : c.symbol)
+        }
+        .disabled(!controller.validate(c.command))
+        .help(c.help)
+    }
+
+    private var alignmentMenu: some View {
+        let current = Self.alignments.first { $0.isOn(s.alignment) } ?? Self.alignments[0]
+        return EditorBarMenu(symbol: current.symbol, help: "Alignment — " + current.help, label: "Alignment") {
+            ForEach(Self.alignments, id: \.title) { a in menuItem(a, on: a.isOn(s.alignment)) }
+        }
+    }
+
+    private var listMenu: some View {
+        let current = Self.listCommands.first { $0.isOn(s.list) }
+        return EditorBarMenu(symbol: current?.symbol ?? "list.bullet", isOn: current != nil,
+                             help: "Lists — bullets, numbering, indent and outdent", label: "Lists") {
+            ForEach(Self.listCommands.prefix(2), id: \.title) { c in menuItem(c, on: c.isOn(s.list)) }
+            Divider()
+            ForEach(Self.listCommands.suffix(2), id: \.title) { c in menuItem(c) }
+        }
+    }
+
+    private func overflowMenu(_ d: Density) -> some View {
+        EditorBarMenu(symbol: "ellipsis.circle", help: "More formatting commands", label: "More") {
+            if d >= .minimal {
+                Button { controller.undo() } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
+                    .disabled(!(controller.canUndo && editable))
+                Button { controller.redo() } label: { Label("Redo", systemImage: "arrow.uturn.forward") }
+                    .disabled(!(controller.canRedo && editable))
+                Divider()
+                menuItem(BarCommand(title: "Link…", symbol: "link", help: "Insert hyperlink (⌘K)", command: .insertLink))
+                menuItem(BarCommand(title: "Table…", symbol: "tablecells",
+                                    help: "Insert a table. You can also paste tables directly from Excel, Word or the web.",
+                                    command: .insertTable))
+                menuItem(BarCommand(title: "Clear Formatting", symbol: "eraser", help: "Clear formatting",
+                                    command: .clearFormatting))
+                Divider()
+            }
+            ForEach(Self.blockCommands, id: \.title) { c in menuItem(c) }
+            Divider()
+            ForEach(Self.lockCommands, id: \.title) { c in menuItem(c) }
+            Divider()
+            menuItem(BarCommand(title: "Find in Note…", symbol: "magnifyingglass", help: "Find in this note (⌘F)",
+                                command: .showFind))
+            Menu {
+                EditorZoomMenu.items(controller)
+            } label: {
+                Label("Zoom (\(Int((controller.zoom * 100).rounded()))%)", systemImage: "plus.magnifyingglass")
+            }
+        }
+    }
+}
+
+/// A folded group: a borderless pop-up with an SF Symbol label (same size and states as `EditorBarButton`).
+struct EditorBarMenu<Content: View>: View {
+    let symbol: String
+    var isOn = false
+    let help: String
+    let label: String
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        Menu { content() } label: {
+            Image(systemName: symbol)
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(isOn ? AAColor.tint : AAColor.fg)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.visible)
+        .tint(AAColor.fg)
+        .fixedSize()
+        .frame(height: 22)
+        .padding(.horizontal, 4)
+        .focusable(false)
+        .help(help)
+        .accessibilityLabel(label)
     }
 }
 
@@ -127,7 +298,8 @@ struct EditorBarButton: View {
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: 12, weight: isOn ? .semibold : .regular))
+                .font(.system(size: AAType.small, weight: .regular))
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(isOn ? AAColor.tint : AAColor.fg)
                 .frame(width: 25, height: 22)
                 .background(fill, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
@@ -202,7 +374,8 @@ struct EditorColorButton: View {
         Button { open.toggle() } label: {
             VStack(spacing: 1) {
                 Image(systemName: kind == .text ? "character" : "highlighter")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: AAType.caption, weight: .regular))
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(AAColor.fg)
                 RoundedRectangle(cornerRadius: 1)
                     .fill(barColor)
@@ -261,12 +434,12 @@ struct EditorColorPalette: View {
                         .fill(kind == .text ? Color(nsColor: EditorFormatting.editorInk) : Color.clear)
                         .overlay {
                             if kind == .highlight {
-                                Image(systemName: "nosign").font(.system(size: 10)).foregroundStyle(AAColor.muted)
+                                Image(systemName: "nosign").font(.caption2).foregroundStyle(AAColor.muted)
                             }
                         }
                         .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(AAColor.border, lineWidth: 1))
                         .frame(width: 18, height: 18)
-                    Text(kind == .text ? "Automatic" : "No Highlight").font(.system(size: AAType.small))
+                    Text(kind == .text ? "Automatic" : "No Highlight").font(.callout)
                     Spacer()
                 }
                 .contentShape(Rectangle())
@@ -281,7 +454,7 @@ struct EditorColorPalette: View {
 
             Divider()
             Button { choose(.other) } label: {
-                Label("More Colors…", systemImage: "paintpalette").font(.system(size: AAType.small))
+                Label("More Colors…", systemImage: "paintpalette").font(.callout)
             }
             .buttonStyle(.plain)
         }
@@ -335,7 +508,8 @@ struct EditorTablePickerButton: View {
     var body: some View {
         Button { open.toggle() } label: {
             Image(systemName: "tablecells")
-                .font(.system(size: 12))
+                .font(.system(size: AAType.small, weight: .regular))
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(AAColor.fg)
                 .frame(width: 25, height: 22)
                 .background(hovering || open ? AAColor.hover : .clear, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
@@ -369,7 +543,7 @@ struct EditorTableGrid: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(hover.map { "\($0.r + 1) × \($0.c + 1) table" } ?? "Insert table")
-                .font(.system(size: AAType.small, weight: .semibold))
+                .font(.aaMono(AAType.small, weight: .semibold).monospacedDigit())
                 .foregroundStyle(AAColor.fg)
             VStack(spacing: 3) {
                 ForEach(0..<Self.rows, id: \.self) { r in
@@ -391,11 +565,11 @@ struct EditorTableGrid: View {
             .onHover { inside in if !inside { hover = nil } }
             Divider()
             Button { custom() } label: {
-                Label("Custom Size…", systemImage: "square.grid.3x3").font(.system(size: AAType.small))
+                Label("Custom Size…", systemImage: "square.grid.3x3").font(.callout)
             }
             .buttonStyle(.plain)
             Text("The first row is a bold header row.")
-                .font(.system(size: AAType.caption))
+                .font(.aaMono(AAType.caption))
                 .foregroundStyle(AAColor.muted)
         }
         .padding(12)
@@ -407,22 +581,27 @@ struct EditorTableGrid: View {
 struct EditorZoomMenu: View {
     let controller: EditorController
 
-    var body: some View {
-        Menu {
-            ForEach(EditorController.zoomLevels, id: \.self) { z in
-                Button { controller.setZoom(z) } label: {
-                    if abs(controller.zoom - z) < 0.001 {
-                        Label("\(Int((z * 100).rounded()))%", systemImage: "checkmark")
-                    } else {
-                        Text("\(Int((z * 100).rounded()))%")
-                    }
+    /// The zoom levels plus Actual Size (shared with the format bar's overflow menu).
+    @ViewBuilder static func items(_ controller: EditorController) -> some View {
+        ForEach(EditorController.zoomLevels, id: \.self) { z in
+            Button { controller.setZoom(z) } label: {
+                if abs(controller.zoom - z) < 0.001 {
+                    Label("\(Int((z * 100).rounded()))%", systemImage: "checkmark")
+                } else {
+                    Text("\(Int((z * 100).rounded()))%")
                 }
             }
-            Divider()
-            Button("Actual Size") { controller.setZoom(1) }
+        }
+        Divider()
+        Button("Actual Size") { controller.setZoom(1) }
+    }
+
+    var body: some View {
+        Menu {
+            Self.items(controller)
         } label: {
             Text("\(Int((controller.zoom * 100).rounded()))%")
-                .font(.system(size: AAType.caption, weight: .medium).monospacedDigit())
+                .font(.aaMono(AAType.caption, weight: .medium).monospacedDigit())
                 .foregroundStyle(AAColor.fg)
         }
         .menuStyle(.borderlessButton)
@@ -459,7 +638,7 @@ struct EditorFontFamilyMenu: View, Equatable {
             }
         } label: {
             Text(family ?? "—")
-                .font(.system(size: AAType.caption))
+                .font(.subheadline)
                 .foregroundStyle(AAColor.fg)
                 .lineLimit(1)
                 .truncationMode(.tail)

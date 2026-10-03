@@ -59,29 +59,28 @@ struct EditorInsertSavedListSheet: View {
     }
 
     var body: some View {
+        // Complex editor layout (V-DESIGN rule 7): BuilderSheetHeader, content, footer bar (Divider + 44 pt: the
+        // help note leading, Cancel / Insert trailing).
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 4) {
-                Label(EditorSavedListInsert.header, systemImage: "list.bullet.indent")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(AAColor.accent)
-                Text(EditorSavedListInsert.subText)
-                    .font(.system(size: AAType.small))
-                    .foregroundStyle(AAColor.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .padding(.bottom, 10)
+            BuilderSheetHeader(title: EditorSavedListInsert.header, subtitle: EditorSavedListInsert.subText,
+                               symbol: "list.bullet.indent")
+                .padding([.horizontal, .top], AASpacing.l)
+                .padding(.bottom, AASpacing.m)
 
-            HStack(alignment: .top, spacing: 12) {
+            HStack(alignment: .top, spacing: AASpacing.m) {
                 listColumn.frame(width: 290)
                 previewColumn.frame(maxWidth: .infinity)
             }
             .frame(maxHeight: .infinity)
+            .padding(.horizontal, AASpacing.l)
+            .padding(.bottom, AASpacing.m)
 
-            HStack(alignment: .center, spacing: 12) {
+            Divider()
+            HStack(alignment: .center, spacing: AASpacing.m) {
                 Text(footer)
-                    .font(.system(size: AAType.small))
+                    .font(.aaMono(AAType.caption))
                     .foregroundStyle(AAColor.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Button("Cancel") { complete(nil) }.keyboardShortcut(.cancelAction)
                 Button("Insert") { insert() }
@@ -89,9 +88,9 @@ struct EditorInsertSavedListSheet: View {
                     .disabled(!hasAnyList || lines.isEmpty)
                     .aaProminent()
             }
-            .padding(.top, 10)
+            .padding(.horizontal, AASpacing.l)
+            .frame(height: 44)
         }
-        .padding(12)
         .frame(width: 760, height: 560)
         .onChange(of: query) { _, _ in selection = groups.first?.rows.first?.id }  // first match selected
         .onDisappear { complete(nil) }
@@ -99,7 +98,7 @@ struct EditorInsertSavedListSheet: View {
     }
 
     private var listColumn: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: AASpacing.s) {
             AASearchField(text: $query, prompt: EditorSavedListInsert.searchPlaceholder)
                 .disabled(!hasAnyList)
             List(selection: $selection) {
@@ -107,28 +106,36 @@ struct EditorInsertSavedListSheet: View {
                     Section {
                         ForEach(g.rows) { row in
                             Text(row.display)
-                                .font(.system(size: AAType.body))
+                                .font(.aaMono(AAType.body))
                                 .lineLimit(2)
+                                .padding(.vertical, AASpacing.xs / 2)
+                                .frame(minHeight: 22, alignment: .leading)
                                 .tag(row.id as UUID?)
                         }
                     } header: {
-                        Text(g.name).font(.system(size: AAType.small, weight: .bold)).foregroundStyle(AAColor.muted)
+                        HStack(spacing: AASpacing.xs) {
+                            Text(g.name).font(.aaMono(AAType.small, weight: .bold)).foregroundStyle(AAColor.fg)
+                            Text("(\(g.rows.count))").font(.aaMono(AAType.caption).monospacedDigit())
+                                .foregroundStyle(AAColor.muted)
+                        }
                     }
                 }
             }
             .listStyle(.bordered(alternatesRowBackgrounds: false))
             .overlay {
                 if hasAnyList && groups.isEmpty {
-                    Text("No saved list matches.").font(.system(size: AAType.small)).foregroundStyle(AAColor.muted)
+                    AAEmptyState(title: "No saved list matches.", symbol: "magnifyingglass",
+                                 message: "Change or clear the search to see your saved lists.")
                 } else if !hasAnyList {
-                    AAEmptyState(title: "No saved lists", symbol: "list.bullet.clipboard")
+                    AAEmptyState(title: "No saved lists", symbol: "list.bullet.clipboard",
+                                 message: "Build one in the Saved Lists tab first.")
                 }
             }
         }
     }
 
     private var previewColumn: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: AASpacing.s) {
             Picker("", selection: $numbered) {
                 Text(EditorSavedListInsert.bulletsTitle).tag(false)
                 Text(EditorSavedListInsert.numberedTitle).tag(true)
@@ -136,26 +143,26 @@ struct EditorInsertSavedListSheet: View {
             .pickerStyle(.radioGroup)
             .horizontalRadioGroupLayout()
             .labelsHidden()
-            .font(.system(size: AAType.body))                  // native controls stay system (ARCH §8.3)
+            .font(.body)                                       // native controls stay system (ARCH §8.3)
             .disabled(!hasAnyList)
             Toggle(EditorSavedListInsert.durationTitle, isOn: $withDuration)
-                .font(.system(size: AAType.body))
+                .font(.body)
                 .help(EditorSavedListInsert.durationHelp)
                 .disabled(!hasAnyList)
             Text(EditorSavedListInsert.previewTitle)
-                .font(.system(size: AAType.small, weight: .bold))
-                .foregroundStyle(AAColor.muted)
-                .padding(.top, 4)
+                .font(.aaMono(AAType.body, weight: .semibold))
+                .foregroundStyle(AAColor.fg)
+                .padding(.top, AASpacing.xs)
             ScrollView {
                 Text(previewText)
                     .font(.aaMono(AAType.small))
                     .foregroundStyle(selected == nil ? AAColor.muted : AAColor.fg)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
-                    .padding(10)
+                    .padding(AASpacing.m)
             }
-            .background(AAColor.panelAlt, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(AAColor.border, lineWidth: 1))
+            .background(AAColor.panelAlt, in: RoundedRectangle(cornerRadius: AARadius.control, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: AARadius.control, style: .continuous).strokeBorder(AAColor.border, lineWidth: 1))
         }
     }
 
