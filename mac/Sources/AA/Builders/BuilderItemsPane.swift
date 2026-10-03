@@ -121,33 +121,60 @@ struct BuilderItemsPane<Item: AnyObject>: View {
     // MARK: Saved lists strip (BUILD-002 top, BUILD-041)
 
     private var savedListsStrip: some View {
-        HStack(spacing: AASpacing.s) {
-            Label("Saved lists:", systemImage: "list.bullet.rectangle")
-                .font(.aaMono(AAType.small, weight: .bold))
-                .foregroundStyle(AAColor.accent)
-            BuilderBarButton(title: "Save as list…", symbol: "square.and.arrow.down", help: strings.saveHelp) {
+        // The full strip when it fits; in a narrow host the three commands collapse into one "Saved lists" menu.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: AASpacing.s) {
+                Label("Saved lists:", systemImage: "list.bullet.rectangle")
+                    .font(.aaMono(AAType.small, weight: .bold))
+                    .foregroundStyle(AAColor.accent)
+                ForEach(savedListCommands.indices, id: \.self) { i in
+                    BuilderIconButton(command: savedListCommands[i], showsTitle: true)
+                }
+            }
+            .fixedSize()
+            Menu {
+                ForEach(savedListCommands.indices, id: \.self) { i in
+                    let c = savedListCommands[i]
+                    Button(c.title, systemImage: c.symbol, action: c.action).help(c.help)
+                }
+            } label: {
+                Label("Saved lists", systemImage: "list.bullet.rectangle")
+            }
+            .menuStyle(.button)
+            .buttonStyle(.accessoryBar)
+            .fixedSize()
+            .help("Save as list…, Load a saved list…\(strings.manageHelp == nil ? "" : ", Manage saved lists…")")
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, AASpacing.m)
+        .padding(.vertical, AASpacing.xs)
+        .frame(minHeight: 36)
+        .background(AAColor.panelAlt)
+        .overlay(alignment: .bottom) { Rectangle().fill(AAColor.border).frame(height: 1) }
+    }
+
+    /// BUILD-002 / BUILD-041 strip commands ("Manage saved lists…" only for step hosts).
+    private var savedListCommands: [BuilderBarCommand] {
+        var out = [
+            BuilderBarCommand(title: "Save as list…", symbol: "square.and.arrow.down", help: strings.saveHelp) {
                 run { await BuilderTemplateFlows.saveAsList(engine, env: env, dialogs: dialogs,
                                                             emptyMessage: strings.emptySaveMessage) }
-            }
-            BuilderBarButton(title: "Load a saved list…", symbol: "list.clipboard", help: strings.loadHelp) {
+            },
+            BuilderBarCommand(title: "Load a saved list…", symbol: "list.clipboard", help: strings.loadHelp) {
                 run {
                     let ids = engine.ids
                     if await BuilderTemplateFlows.load(engine, env: env, dialogs: dialogs, subtasks: strings.subtasks) {
                         selection = selection.filter { ids.contains($0) && engine.ids.contains($0) }
                     }
                 }
-            }
-            if let manageHelp = strings.manageHelp {
-                BuilderBarButton(title: "Manage saved lists…", symbol: "folder.badge.gearshape", help: manageHelp) {
-                    run { await BuilderTemplateFlows.manage(env: env, dialogs: dialogs) }
-                }
-            }
-            Spacer(minLength: 0)
+            },
+        ]
+        if let manageHelp = strings.manageHelp {
+            out.append(BuilderBarCommand(title: "Manage saved lists…", symbol: "folder.badge.gearshape", help: manageHelp) {
+                run { await BuilderTemplateFlows.manage(env: env, dialogs: dialogs) }
+            })
         }
-        .padding(.horizontal, AASpacing.m)
-        .padding(.vertical, 7)
-        .background(AAColor.panelAlt)
-        .overlay(alignment: .bottom) { Rectangle().fill(AAColor.border).frame(height: 1) }
+        return out
     }
 
     // MARK: Bulk entry (BUILD-004/005)
@@ -155,26 +182,15 @@ struct BuilderItemsPane<Item: AnyObject>: View {
     private var bulkPane: some View {
         VStack(alignment: .leading, spacing: AASpacing.s) {
             Text(strings.bulkHeader).font(.aaMono(AAType.small, weight: .bold)).foregroundStyle(AAColor.fg)
-            HStack(spacing: AASpacing.s) {
-                Button {
-                    addAll()
-                } label: {
-                    Label("Add all", systemImage: "text.badge.plus")
+            // One row when it fits, else "Replace existing" drops below the buttons — never wrapped mid-label.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: AASpacing.s) { addAllButton; clearButton; replaceToggle }
+                VStack(alignment: .leading, spacing: AASpacing.xs) {
+                    HStack(spacing: AASpacing.s) { addAllButton; clearButton }
+                    replaceToggle
                 }
-                .aaProminent()
-                .controlSize(.small)
-                .keyboardShortcut(.return, modifiers: .command)
-                .help("Add every line as a new \(strings.noun) (⌘↩).")
-                Button("Clear") { bulkText = "" }
-                    .controlSize(.small)
-                    .help("Clear the text box.")
-                Toggle("Replace existing", isOn: $replaceExisting)
-                    .toggleStyle(.checkbox)
-                    .font(.aaMono(AAType.small))
-                    .controlSize(.small)
-                    .help(strings.replaceHelp)
-                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             BuilderBulkTextView(text: $bulkText)
                 .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(AAColor.border, lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -185,6 +201,34 @@ struct BuilderItemsPane<Item: AnyObject>: View {
                 .contentTransition(.numericText())
         }
         .padding(AASpacing.m)
+    }
+
+    private var addAllButton: some View {
+        Button {
+            addAll()
+        } label: {
+            Label("Add all", systemImage: "text.badge.plus")
+        }
+        .aaProminent()
+        .controlSize(.small)
+        .keyboardShortcut(.return, modifiers: .command)
+        .help("Add every line as a new \(strings.noun) (⌘↩).")
+        .fixedSize()
+    }
+
+    private var clearButton: some View {
+        Button("Clear") { bulkText = "" }
+            .controlSize(.small)
+            .help("Clear the text box.")
+            .fixedSize()
+    }
+
+    private var replaceToggle: some View {
+        Toggle("Replace existing", isOn: $replaceExisting)
+            .toggleStyle(.checkbox)
+            .controlSize(.small)
+            .help(strings.replaceHelp)
+            .fixedSize()
     }
 
     private func addAll() {
@@ -211,30 +255,28 @@ struct BuilderItemsPane<Item: AnyObject>: View {
                     Text("\(selection.count) selected").font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
                 }
             }
-            BuilderFlowLayout(spacing: 6, lineSpacing: 6) {
-                BuilderBarButton(title: strings.addTitle, symbol: "plus", help: strings.addHelp) {
+            BuilderCommandBar(groups: [
+                [BuilderBarCommand(title: strings.addTitle, symbol: "plus", help: strings.addHelp) {
                     run { await add(at: engine.items.count) }
-                }
-                BuilderBarButton(title: "Insert before", symbol: "arrow.up.to.line.compact", help: strings.insertBeforeHelp) {
+                 },
+                 BuilderBarCommand(title: "Insert before", symbol: "arrow.up.to.line.compact", help: strings.insertBeforeHelp) {
                     run { await add(at: engine.insertIndex(before: true, selection: selection)) }
-                }
-                BuilderBarButton(title: "Insert after", symbol: "arrow.down.to.line.compact", help: strings.insertAfterHelp) {
+                 },
+                 BuilderBarCommand(title: "Insert after", symbol: "arrow.down.to.line.compact", help: strings.insertAfterHelp) {
                     run { await add(at: engine.insertIndex(before: false, selection: selection)) }
-                }
-                BuilderBarButton(title: "Edit…", symbol: "pencil", help: strings.editHelp, disabled: selection.isEmpty) {
+                 },
+                 BuilderBarCommand(title: "Edit…", symbol: "pencil", help: strings.editHelp, disabled: selection.isEmpty) {
                     editPrimary(selection)
-                }
-                HStack(spacing: 2) {
-                    BuilderBarButton(title: "Move up", symbol: "chevron.up", help: strings.upHelp, iconOnly: true,
-                                     disabled: !engine.canMoveUp(selection)) { moveUp() }
-                    BuilderBarButton(title: "Move down", symbol: "chevron.down", help: strings.downHelp, iconOnly: true,
-                                     disabled: !engine.canMoveDown(selection)) { moveDown() }
-                }
-                BuilderBarButton(title: "Move to…", symbol: "arrow.up.and.down.text.horizontal", help: strings.moveToHelp,
-                                 disabled: selection.isEmpty) { run { await moveTo() } }
-                BuilderBarButton(title: "Delete", symbol: "trash", help: "Delete the selected \(strings.noun)s.",
-                                 disabled: selection.isEmpty) { run { await delete(selection) } }
-            }
+                 }],
+                [BuilderBarCommand(title: "Move up", symbol: "chevron.up", help: strings.upHelp,
+                                   disabled: !engine.canMoveUp(selection), iconOnly: true) { moveUp() },
+                 BuilderBarCommand(title: "Move down", symbol: "chevron.down", help: strings.downHelp,
+                                   disabled: !engine.canMoveDown(selection), iconOnly: true) { moveDown() },
+                 BuilderBarCommand(title: "Move to…", symbol: "arrow.up.and.down.text.horizontal", help: strings.moveToHelp,
+                                   disabled: selection.isEmpty) { run { await moveTo() } }],
+                [BuilderBarCommand(title: "Delete", symbol: "trash", help: "Delete the selected \(strings.noun)s.",
+                                   disabled: selection.isEmpty) { run { await delete(selection) } }],
+            ])
             ScrollViewReader { proxy in
                 List(selection: $selection) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in

@@ -119,6 +119,84 @@ import Testing
         #expect(BuilderSavedLists.dropTarget(sectionRowIDs: rowIDs, destination: 3, data: d) == 3)
     }
 
+    @Test func danglingGroupArrangesInsideUngrouped() {
+        // D1 + REPO-132…134: a list whose GroupId names a deleted group is shown under "Ungrouped" and is arranged
+        // there too; its stored GroupId is never changed (pure permutation, Windows-compatible).
+        let d = AppData()
+        let g = ListGroup(name: "g1"); d.listGroups = [g]
+        let gone = UUID()
+        d.checklistTemplates = ["U1", "G1", "D", "U2", "G2"].map { ChecklistTemplate(name: $0) }
+        let by = Dictionary(uniqueKeysWithValues: d.checklistTemplates.map { ($0.name, $0) })
+        by["G1"]!.groupId = g.id; by["G2"]!.groupId = g.id; by["D"]!.groupId = gone
+        let names = { d.checklistTemplates.map(\.name).joined(separator: " ") }
+        #expect(BuilderSavedLists.arrangeSpan(d, groupID: nil) == [0, 2, 3])
+        #expect(BuilderSavedLists.arrangeSpan(d, groupID: g.id) == SavedListOrder.groupSpan(d.checklistTemplates, groupID: g.id))
+        // The dangling list alone is in a group of three, not one.
+        guard case .ok = BuilderSavedLists.checkReorder(d, ids: [by["D"]!.id]) else { Issue.record("dangling alone"); return }
+        // Together with a genuinely ungrouped list it is the same group, not "different groups".
+        guard case .ok(let picks) = BuilderSavedLists.checkReorder(d, ids: [by["D"]!.id, by["U2"]!.id]) else {
+            Issue.record("dangling + ungrouped"); return
+        }
+        #expect(picks.map(\.name) == ["D", "U2"])
+        let avail = BuilderSavedLists.reorderAvailability(d, picks: [by["D"]!])
+        #expect(avail.up && avail.down)
+        // ↑ moves it above U1 inside Ungrouped; the named group's slots are untouched.
+        #expect(BuilderSavedLists.nudge(d, picks: [by["D"]!], up: true))
+        #expect(names() == "D U1 G1 U2 G2")
+        #expect(by["D"]!.groupId == gone)
+        // Move to position offers the dangling list as a "Before:" target of an ungrouped list.
+        let o = BuilderSavedLists.moveToPositionOptions(d, picks: [by["U2"]!])
+        #expect(o.map(\.display) == ["(Move to top of group)", "Before: D", "Before: U1", "(Move to bottom of group)"])
+        #expect(BuilderSavedLists.moveTo(d, picks: [by["U2"]!], targetInGroup: 0))
+        #expect(names() == "U2 D G1 U1 G2")                             // MoveTo re-anchoring (REPO-133)
+        // A drag inside the "Ungrouped" section resolves the dangling row's position too.
+        let rows = BuilderSavedLists.sections(d, sortAZ: false).first { $0.groupID == nil }!.rows.map(\.id)
+        #expect(rows == [by["U2"]!.id, by["D"]!.id, by["U1"]!.id])
+        #expect(BuilderSavedLists.dropTarget(sectionRowIDs: rows, destination: 1, data: d) == 1)
+        #expect(BuilderSavedLists.dropTarget(sectionRowIDs: rows, destination: 3, data: d) == 3)
+        #expect(BuilderSavedLists.moveTo(d, picks: [by["U2"]!], targetInGroup: 3))
+        #expect(names() == "D U1 G1 U2 G2")
+        // Mixed named + dangling is still refused.
+        guard case .mixedGroups = BuilderSavedLists.checkReorder(d, ids: [by["D"]!.id, by["G1"]!.id]) else {
+            Issue.record("mixed"); return
+        }
+    }
+
+    @Test func resolvedArrangeMatchesSavedListOrderWithoutDanglingIDs() {
+        // With no dangling ids the resolved operations are F2's SavedListOrder (06 §7.4 byte-identical order).
+        var rng = SystemRandomNumberGenerator()
+        for _ in 0..<300 {
+            let groups = [ListGroup(name: "a"), ListGroup(name: "b")]
+            let n = Int.random(in: 2...7, using: &rng)
+            let spec: [UUID?] = (0..<n).map { _ in [nil, groups[0].id, groups[1].id].randomElement(using: &rng)! }
+            let build = { () -> AppData in
+                let d = AppData(); d.listGroups = groups
+                d.checklistTemplates = spec.enumerated().map { ChecklistTemplate(name: "L\($0.offset)", groupId: $0.element) }
+                return d
+            }
+            let gid = spec.randomElement(using: &rng)!
+            let span = SavedListOrder.groupSpan(build().checklistTemplates, groupID: gid)
+            let pickPositions = span.indices.filter { _ in Bool.random(using: &rng) }
+            let up = Bool.random(using: &rng)
+            let target = Int.random(in: 0...span.count, using: &rng)
+            // nudge
+            let d1 = build(); var ref1 = build().checklistTemplates
+            let refPicks1 = pickPositions.map { ref1[span[$0]] }
+            let r1 = SavedListOrder.nudge(&ref1, picks: refPicks1, up: up)
+            let m1 = BuilderSavedLists.nudge(d1, picks: pickPositions.map { d1.checklistTemplates[span[$0]] }, up: up)
+            #expect(r1 == m1)
+            #expect(d1.checklistTemplates.map(\.name) == ref1.map(\.name))
+            // moveTo
+            let d2 = build(); var ref2 = build().checklistTemplates
+            let refPicks2 = pickPositions.map { ref2[span[$0]] }
+            let r2 = SavedListOrder.moveTo(&ref2, picks: refPicks2, targetInGroup: target)
+            let m2 = BuilderSavedLists.moveTo(d2, picks: pickPositions.map { d2.checklistTemplates[span[$0]] },
+                                              targetInGroup: target)
+            #expect(r2 == m2)
+            #expect(d2.checklistTemplates.map(\.name) == ref2.map(\.name))
+        }
+    }
+
     @Test func listAndGroupOperations() {
         // BUILD-077…083 (+ BUILD-135 log rows), Addendum TV-PR-47
         let made = StoreFactory.make(); let store = made.store

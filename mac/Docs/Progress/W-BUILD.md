@@ -29,6 +29,29 @@ Owner of: builders, editors, procedure checklist area, Saved Lists tab (OWNERSHI
 - Visual: every W-BUILD surface now uses the app's monospaced identity (ARCH §8.3; previously mixed system / mono),
   lists use thin row separators without alternating fills (03 SHELL-155). Snapshots re-checked light + dark.
 
+## Verification fixes (FIX-W-BUILD, 2026-10-03) — 8 / 8 fixed, 0 remaining
+- REPO-132/133/134 (V-02): a list whose `GroupId` names a deleted group is arranged inside "Ungrouped", where D1
+  shows it — ↑ / ↓, Move to position… (incl. its "Before:" rows) and drag all work on the resolved group
+  (`BuilderSavedLists.arrangeGroupID` / `arrangeSpan` / `nudge` / `moveTo` / `reorderAvailability`). Same algorithm
+  and same flat result as F2's `SavedListOrder` whenever no id dangles (randomised equivalence test, 300 cases);
+  the stored `GroupId` is never touched (pure permutation). Tests: `danglingGroupArrangesInsideUngrouped`,
+  `resolvedArrangeMatchesSavedListOrderWithoutDanglingIDs`.
+- HIER-091 / PDF-010 (V-04, V-11): the procedure Checklist tab has 16-pt side margins of its own; the builder banner
+  never truncates — the two exports dock right of it when the row fits, else move under it (ViewThatFits); the step
+  bar is one row (labels when they fit, icons otherwise).
+- BUILD-050 (V-06): the task / subtask editor sheet is 980×700 minimum (ideal 1060×780) and the container editor pane
+  640 minimum, so the format bar, File Bank toolbar and footer are not clipped next to the nested Subtasks pane.
+- BUILD-042 (V-06) + V-DESIGN: builder item bars (Current items / Current subtasks, nested Subtasks, procedure steps)
+  are a single non-wrapping row (`BuilderCommandBar`: labelled accessory-bar buttons when they fit, else 24-pt icons;
+  help = Windows tooltip, accessibility label = spec button text). The bulk bar drops "Replace existing" under the
+  buttons instead of wrapping it; the "Saved lists:" strip collapses into one "Saved lists" menu when narrow.
+- PDF-022 / DEV-10 (V-11): "Export ALL (PDF)…" stays enabled with zero lists (the flow answers "No saved lists to
+  export."), and is also in the Saved Lists overflow menu (§6.5), with every other list command by its spec name.
+- V-DESIGN: Saved Lists rows are regular weight (headers alone are bold), header = title (16 bold accent) + muted
+  count, one icon bar (+ List/Group menu, Delete, Sort A-Z toggle, ↑, ↓, overflow `ellipsis.circle`).
+- Snapshots (light + dark): `scratchpad/snapshots/fix1-W-BUILD/` — task-editor, lists, proc-1400, proc-1100,
+  subtask-builder, crew-embedded, checklist-builder.
+
 ## Not done / post-merge (Stage V)
 - Editors show the real rich-text + file-bank pane once W-CONT's `ContainerEditorView` lands (placeholder in this
   worktree).
