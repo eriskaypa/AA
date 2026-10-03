@@ -144,4 +144,32 @@ import Testing
         let open = QuickSwitcherScoring.rows(store: store, isGated: { _ in false })
         #expect(QuickSwitcherScoring.rank(open, query: "tanker").map(\.name) == ["Aurora"])
     }
+
+    // MARK: Key vectors (03 T-KB-55…57; the key bindings themselves live in the sheet / panel views)
+
+    @Test func trashKeyVectors() throws {
+        // TV: 03 T-KB-55 (⌘⌫ Put Back on two selected rows), T-KB-56 (⇧⌘⌫ Empty Trash confirmation text)
+        let made = StoreFactory.make(); let store = made.store
+        let a = TaskItem(name: "a"), b = TaskItem(name: "b"), c = TaskItem(name: "c")
+        store.data.tasks = [a, b, c]
+        let ea = try #require(store.trash(a)), eb = try #require(store.trash(b))
+        _ = store.trash(c)
+        #expect(store.data.trash.count == 3)
+        #expect(TrashActions.restore(entryIDs: [ea.id, eb.id], store: store) == [.task])
+        #expect(store.data.trash.count == 1 && store.data.tasks.map(\.name) == ["a", "b"])
+        #expect(TrashText.emptyMessage(store.data.trash.count)
+                == "Permanently remove all 1 item(s) in the Trash? This cannot be undone.")
+    }
+
+    @Test func switcherKeyVector() {
+        // TV: 03 T-KB-57 (↓ ↓ ↩ opens the 3rd result; index clamped)
+        let made = StoreFactory.make(); let store = made.store
+        store.data.tasks = ["Alpha", "Bravo", "Charlie"].map { TaskItem(name: $0) }
+        let ranked = QuickSwitcherScoring.rank(QuickSwitcherScoring.rows(store: store, isGated: { _ in false }), query: "")
+        var i: Int? = ranked.isEmpty ? nil : 0
+        i = SwitcherText.move(selected: i, delta: 1, count: ranked.count)
+        i = SwitcherText.move(selected: i, delta: 1, count: ranked.count)
+        #expect(i == 2 && ranked[i ?? 0].name == "Charlie")
+        #expect(SwitcherText.move(selected: i, delta: 1, count: ranked.count) == 2)
+    }
 }
