@@ -171,8 +171,9 @@ public enum PdfItemBuilder {
         return b
     }
 
-    /// `min(depth, 4) × 0.6` cm (PDF-039).
-    public static func subtaskIndent(depth: Int) -> Double { Double(min(depth, 4)) * 0.6 }
+    /// `min(depth, 4) × 0.6` cm (PDF-039), rounded to 2 decimals as Windows formats it (`"{x:0.##}cm"`), so
+    /// depth 3 is exactly 1.8 cm (not 1.7999…).
+    public static func subtaskIndent(depth: Int) -> Double { (Double(min(max(depth, 0), 4)) * 0.6 * 100).rounded() / 100 }
 
     static func subtaskDetailed(_ t: PdfTaskSnapshot, depth: Int) -> [PdfBlock] {
         let indent = subtaskIndent(depth: depth)

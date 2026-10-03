@@ -41,6 +41,25 @@
 * Snapshot hook (both appearances): `w-pdf.list-style`, `w-pdf.list-style-many`, `w-pdf.busy`, `w-pdf.preview` (the
   in-app pipeline: fixture `Fixtures/ui/w-pdf/sample-data.json` → snapshot → DOM → layout → PDF page image).
 
+## Independent audit (2026-10-02)
+
+All 82 assigned IDs (PDF-001…007, 010…012, 020…027, 030…045, 050…055, 060…077, 080…084, 090…094, 100…105;
+BUILD-091…096; HIER-092; CONT-049) and the 5 algorithm ids were re-checked against spec 11 / 06 / 04 / 05 and the C#
+(`PdfExporter.cs`, `ChecklistExporter.cs`, `HierarchyPage.xaml.cs`, `ListStylePromptWindow.xaml`). Clean rebuild
+(`rm -rf .build`) and the full suite green. Fixes made by the audit:
+
+* PDF-100 / §7.16 #6: a KeepWithNext chain now reserves the lines the next paragraph's orphan control needs, so a
+  heading can no longer be stranded at a page bottom when only one line of its paragraph would fit (new paginator
+  vectors in `keepWithNextChain`).
+* BUILD-A17 / PDF-052: group headings compare group names ordinally (UTF-16), like .NET `==`; Swift `==` merged
+  canonically equivalent spellings.
+* PDF-039: subtask indents are the Windows `"{x:0.##}cm"` values (1.8, not 1.7999…).
+* PDF-004 / 011 / 024: the save-panel sheet shows the Windows dialog title as its message.
+* CONT-049 sheet: both radio captions wrap at one measure.
+
+Snapshots re-rendered in both appearances (`--snapshot TabLists --sheet w-pdf.<id>`): `list-style`,
+`list-style-many`, `busy`, `preview`; the dumped PDFs (`AA_PDF_DUMP_DIR`) re-inspected page by page.
+
 ## Not done / post-merge
 
 * None of the assigned IDs is open. Post-merge (Stage V): the `.wRich`-gated rich-text vectors; cross-agent UI checks

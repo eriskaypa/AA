@@ -18,7 +18,8 @@ enum SavedListsExportScope { case list(UUID), group(ofList: UUID), all }
     static func exportItem(itemID: UUID, env: AppEnvironment, dialogs: DialogPresenter) async {
         guard let item = env.store.item(id: itemID) else { return }
         guard await prepareItemExport(item, env: env, dialogs: dialogs) else { return }
-        let config = SavePanelConfig(title: PdfExport.itemSaveTitle,
+        // A sheet panel shows no title bar, so the Windows dialog title is also its message (visible text).
+        let config = SavePanelConfig(title: PdfExport.itemSaveTitle, message: PdfExport.itemSaveTitle,
                                      defaultName: PdfExport.itemFileName(kind: item.kind, name: item.name),
                                      allowedTypes: [.pdf])
         guard let url = await dialogs.savePanel(config) else { return }                 // cancel → silent
@@ -95,7 +96,8 @@ enum SavedListsExportScope { case list(UUID), group(ofList: UUID), all }
         guard let p = env.store.item(id: procedureID) as? Procedure else { return }
         guard await flushIfDirty(env: env) else { return }                                 // PDF-011 (no editor flush)
         let xlsx = UTType(filenameExtension: "xlsx") ?? UTType(importedAs: "org.openxmlformats.spreadsheetml.sheet")
-        let config = SavePanelConfig(title: excel ? PdfExport.checklistXlsxSaveTitle : PdfExport.checklistPdfSaveTitle,
+        let panelTitle = excel ? PdfExport.checklistXlsxSaveTitle : PdfExport.checklistPdfSaveTitle
+        let config = SavePanelConfig(title: panelTitle, message: panelTitle,
                                      defaultName: PdfExport.checklistFileName(procedureName: p.name, excel: excel),
                                      allowedTypes: [excel ? xlsx : .pdf])
         guard let url = await dialogs.savePanel(config) else { return }
@@ -140,7 +142,7 @@ enum SavedListsExportScope { case list(UUID), group(ofList: UUID), all }
             return
         }
         guard let numbered = await askListStyle(entryCount: entries.count, dialogs: dialogs) else { return }
-        let config = SavePanelConfig(title: PdfExport.savedListsSaveTitle,
+        let config = SavePanelConfig(title: PdfExport.savedListsSaveTitle, message: PdfExport.savedListsSaveTitle,
                                      defaultName: PdfExport.savedListsFileName(title: title), allowedTypes: [.pdf])
         guard let url = await dialogs.savePanel(config) else { return }
         let stamp = PdfScaffold.stamp(env.clock.now())

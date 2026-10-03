@@ -145,5 +145,8 @@ struct PdfHelperTests {
         #expect(PdfItemBuilder.subtaskIndent(depth: 1) == 0.6)
         #expect(abs(PdfItemBuilder.subtaskIndent(depth: 3) - 1.8) < 1e-9)
         #expect(abs(PdfItemBuilder.subtaskIndent(depth: 7) - 2.4) < 1e-9)
+        // Windows formats the indent "{x:0.##}cm": the stored value is the rounded one.
+        #expect(PdfItemBuilder.subtaskIndent(depth: 2) == 1.2 && PdfItemBuilder.subtaskIndent(depth: 3) == 1.8)
+        #expect(PdfItemBuilder.subtaskIndent(depth: 4) == 2.4)
     }
 }

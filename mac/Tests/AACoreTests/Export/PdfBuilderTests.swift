@@ -99,6 +99,11 @@ struct PdfBuilderTests {
             "H1:x", "H2:e   (0 items)", "H1:Ungrouped", "H2:f   (0 items)", "H2:g   (0 items)"])
         let unnamed = PdfSavedListsBuilder.build(title: "T", entries: [e(nil, " ")], numbered: true, stamp: stamp)
         #expect(texts(unnamed).last == "(unnamed list)   (0 items)")
+        // Ordinal equality: a precomposed and a decomposed "Pont" + é are two groups on Windows (no merge).
+        let accents = PdfSavedListsBuilder.build(title: "T", entries: [e("Pont\u{00E9}", "a"), e("Ponte\u{0301}", "b")],
+                                                 numbered: false, stamp: stamp)
+        #expect(styled(accents).dropFirst(2).filter { $0.0 == .h1 }.count == 2)
+        #expect(PdfSavedListsBuilder.ordinalEqual(nil, nil) && !PdfSavedListsBuilder.ordinalEqual("a", nil))
     }
 
     // TV: PDF-055 item notes at 0.6 cm and the file list

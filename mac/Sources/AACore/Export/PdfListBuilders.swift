@@ -18,7 +18,7 @@ public enum PdfSavedListsBuilder {
         var started = false
         for e in entries {
             let g: String? = NetText.isBlank(e.group) ? nil : e.group
-            if !started || g != lastGroup {                                 // ordinal compare (PDF-052)
+            if !started || !ordinalEqual(g, lastGroup) {                    // ordinal compare (PDF-052)
                 if let g { b.append(.paragraph(PdfParagraph(g, style: .h1))) }
                 else if started { b.append(.paragraph(PdfParagraph("Ungrouped", style: .h1))) }
                 lastGroup = g
@@ -45,6 +45,16 @@ public enum PdfSavedListsBuilder {
         }
         doc.body = b
         return doc
+    }
+
+    /// .NET `string ==` (ordinal, UTF-16 unit by unit): unlike Swift `==`, canonically equivalent spellings
+    /// (precomposed vs. decomposed accents) are different groups, as on Windows (BUILD-A17 "exact string equality").
+    static func ordinalEqual(_ a: String?, _ b: String?) -> Bool {
+        switch (a, b) {
+        case (nil, nil): return true
+        case let (x?, y?): return x.utf16.elementsEqual(y.utf16)
+        default: return false
+        }
     }
 }
 

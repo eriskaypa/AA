@@ -189,6 +189,16 @@ struct PdfRenderTests {
         let pages = PdfPaginator(height: 100).paginate([para(1, lines: 9), para(2, lines: 1, kwn: true), para(3, lines: 4)])
         #expect(positions(pages, 2).first?.page == 1)
         #expect(positions(pages, 3).first?.page == 1)
+        // Orphan control of the next paragraph: one free line after the heading is not enough (its first two
+        // lines must fit), so the heading moves with it instead of being left alone at the page bottom.
+        let orphan = PdfPaginator(height: 100).paginate([para(6, lines: 8), para(7, lines: 1, kwn: true), para(8, lines: 4)])
+        #expect(positions(orphan, 7).first?.page == 1)
+        #expect(positions(orphan, 8).map(\.page) == [1, 1, 1, 1])
+        // A 3-line paragraph after the heading needs all three lines (a 2 + 1 split is a widow).
+        let three = PdfPaginator(height: 100).paginate([para(9, lines: 7), para(10, lines: 1, kwn: true), para(11, lines: 3)])
+        #expect(positions(three, 10).first?.page == 1)
+        #expect(PdfPaginator.minimumFirstChunk(PdfParaLayout(spaceBefore: 0, spaceAfter: 0, keepWithNext: false,
+                                                             widowControl: false, lines: [.spacer(5), .spacer(5)])) == 1)
         // At a page top the chain is placed even if it cannot fit.
         let tall = PdfPaginator(height: 100).paginate([para(4, lines: 1, kwn: true), para(5, lines: 12)])
         #expect(positions(tall, 4).first?.page == 0)

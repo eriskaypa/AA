@@ -659,7 +659,7 @@ struct PdfPaginator {
             case .para(let p):
                 h += max(after, p.spaceBefore)
                 if p.keepWithNext { h += p.height; after = p.spaceAfter; j += 1; continue }
-                h += p.lines.first?.height ?? 0
+                h += p.lines.prefix(Self.minimumFirstChunk(p)).reduce(0) { $0 + $1.height }
                 return h
             case .table(let t):
                 h += after
@@ -668,6 +668,16 @@ struct PdfPaginator {
             }
         }
         return h
+    }
+
+    /// The fewest lines of `p` that can end a page under widow/orphan control: 1 without it; otherwise 2, or the
+    /// whole paragraph when it has 3 lines or fewer (a 3-line split would leave a widow or an orphan). A KeepWithNext
+    /// chain must make room for this many lines, or the heading would be left alone at the page bottom while the
+    /// paragraph moves on (§3.2 rule 7, 11 §7.16 #6).
+    static func minimumFirstChunk(_ p: PdfParaLayout) -> Int {
+        let n = p.lines.count
+        guard p.widowControl else { return min(1, n) }
+        return n <= 3 ? n : 2
     }
 
     private func placeParagraph(_ p: PdfParaLayout, index: Int, items: [PdfFlowItem], _ st: inout State) {

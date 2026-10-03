@@ -67,6 +67,8 @@ struct PdfListStyleSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+        // Both captions wrap at the same measure (the radio group otherwise sizes each label to its own ideal width).
+        .frame(width: 350, alignment: .leading)
         .padding(.vertical, 3)
         .accessibilityElement(children: .combine)
     }
