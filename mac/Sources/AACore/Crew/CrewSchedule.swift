@@ -243,6 +243,17 @@ public enum CrewScheduleText {
         return try ScheduleService.exportJSON(t)
     }
 
+    /// BUILD-123: writes the export to the file the user chose (UTF-8, no BOM, atomic).
+    public static func export(_ crew: CrewMember, to url: URL, store: AppStore) throws {
+        try AtomicWrite.write(try exportData(crew, store: store), to: url)
+    }
+
+    /// BUILD-124: reads a schedule file the user chose and keeps it as a saved schedule.
+    @discardableResult
+    public static func importTemplate(contentsOf url: URL, store: AppStore) throws -> ScheduleTemplate {
+        try importTemplate(try Data(contentsOf: url), store: store)
+    }
+
     /// BUILD-111: `(none)` then every vessel in data order (`(unnamed)` for blank names).
     public static func vesselChoices(_ data: AppData) -> [(id: UUID?, name: String)] {
         [(nil, CrewScheduleText.noVessel)] + data.vessels.map { (Optional($0.id), NetText.isBlank($0.name) ? CrewRoster.unnamed : $0.name) }
