@@ -32,9 +32,7 @@ final class ReminderCenter {
     @ObservationIgnored private var subscriptions: [EventSubscription] = []
     @ObservationIgnored private var translocationShown = false
     @ObservationIgnored private let digestStore = ShellXDeviceDigestStore()
-    @ObservationIgnored private let menuBarGuard = ShellXMenuBarGuardStore()
-    /// Bumped by `stop()` so a pending menu-bar observation from an earlier run never records anything.
-    @ObservationIgnored private var menuBarWatchGeneration = 0
+    @ObservationIgnored private let menuBarRepair = ShellXMenuBarGuardStore()
 
     /// The 30-minute reminder cadence (03 §3.13).
     static let interval: Duration = .seconds(30 * 60)
@@ -77,13 +75,12 @@ final class ReminderCenter {
         // The badge and headline follow the data between passes (no notifications from these).
         subscriptions.append(env.store.saved.subscribe { [weak self] in self?.refreshSurfaces() })
         subscriptions.append(env.store.dataReplaced.subscribe { [weak self] _ in self?.refreshSurfaces() })
-        if !smoke, !LaunchCoordinator.shared.snapshotMode { startMenuBarGuard() }
+        if !smoke, !LaunchCoordinator.shared.snapshotMode { repairMenuBarPreferenceOnce() }
 
         runDigest(reason: .launch)
     }
 
     func stop() {
-        menuBarWatchGeneration += 1
         timerTask?.cancel()
         timerTask = nil
         for o in observers { NotificationCenter.default.removeObserver(o) }
@@ -146,32 +143,19 @@ final class ReminderCenter {
         NSApp.dockTile.badgeLabel = actions.dockBadge
     }
 
-    // MARK: MenuBarExtra preference guard (REQ-W-SHELL-02 workaround, DECISIONS 03 Q-4)
+    // MARK: MenuBarExtra preference repair (DECISIONS 03 Q-4, REQ-W-SHELL-02)
 
-    /// The scene's `isInserted` binding writes `aa.menuBarExtra = false` whenever SwiftUI pushes "not inserted" back
-    /// while the item is meant to be hidden (splash, login). Main phase: restore it unless the user hid the item on
-    /// purpose, then record every later change (Settings toggle, ⌘-drag out of the menu bar) as the user's choice.
-    private func startMenuBarGuard() {
+    /// F3's scene binding no longer persists a spurious "off" (REQ-W-SHELL-02). Builds before that fix could leave
+    /// `aa.menuBarExtra = false` on this Mac without the user hiding the item: turn it back on once, unless the
+    /// earlier guard recorded a deliberate hide.
+    private func repairMenuBarPreferenceOnce() {
+        guard !menuBarRepair.repaired else { return }
         let coordinator = LaunchCoordinator.shared
         if ShellXMenuBarPolicy.shouldRestore(enabled: coordinator.menuBarExtraEnabled,
-                                             userHidden: menuBarGuard.userHidden) {
+                                             userHidden: menuBarRepair.userHidden) {
             coordinator.setMenuBarExtra(true)
         }
-        observeMenuBarPreference(generation: menuBarWatchGeneration)
-    }
-
-    private func observeMenuBarPreference(generation: Int) {
-        let coordinator = LaunchCoordinator.shared
-        withObservationTracking {
-            _ = coordinator.menuBarExtraEnabled
-        } onChange: { [weak self] in
-            Task { @MainActor [weak self] in
-                guard let self, self.isRunning, generation == self.menuBarWatchGeneration,
-                      coordinator.phase == .main else { return }
-                self.menuBarGuard.record(enabled: coordinator.menuBarExtraEnabled)
-                self.observeMenuBarPreference(generation: generation)
-            }
-        }
+        menuBarRepair.markRepaired()
     }
 
     // MARK: SHELL-196 guard

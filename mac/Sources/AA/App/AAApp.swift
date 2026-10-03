@@ -131,7 +131,13 @@ struct AAApp: App {
 
         Settings { SettingsView().aaWindowRoot(.settings) }
 
-        MenuBarExtra(isInserted: Binding(get: { coordinator.menuBarExtraVisible }, set: { coordinator.setMenuBarExtra($0) })) {
+        // DECISIONS 03 Q-4 (REQ-W-SHELL-02): only a removal while the item is meant to be shown (⌘-drag out of the menu
+        // bar) is the user's choice; SwiftUI pushing "not inserted" back during splash, login, snapshot or smoke runs
+        // must not persist "off".
+        MenuBarExtra(isInserted: Binding(get: { coordinator.menuBarExtraVisible },
+                                         set: { on in
+                                             if coordinator.menuBarExtraVisible || on { coordinator.setMenuBarExtra(on) }
+                                         })) {
             MenuBarExtraContent().aaWindowRoot(.other)
         } label: {
             ShellMenuBarIcon()

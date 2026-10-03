@@ -1,4 +1,5 @@
-// Spec: 03 §6.8, DECISIONS 03 Q-4 / 02 Q-13 (MenuBarExtra on by default, Settings toggle), REQ-W-SHELL-02 workaround.
+// Spec: 03 §6.8, DECISIONS 03 Q-4 / 02 Q-13 (MenuBarExtra on by default, Settings toggle), REQ-W-SHELL-02 (one-time
+//       repair of a preference written by builds before the scene-binding fix).
 import Foundation
 import Testing
 @testable import AACore
@@ -14,17 +15,17 @@ import Testing
         #expect(!ShellXMenuBarPolicy.shouldRestore(enabled: true, userHidden: true))
     }
 
-    @Test func storeRecordsMainPhaseChanges() {
+    @Test func repairRunsOnce() {
         let suite = "aa.tests.shellx.menubar.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         let store = ShellXMenuBarGuardStore(prefs: MacPreferences(defaults: defaults))
-        #expect(!store.userHidden)                                   // default: never hidden by the user
-        store.record(enabled: false)
+        #expect(!store.userHidden && !store.repaired)                // defaults
+        defaults.set(true, forKey: "aa.shellx.menuBarUserHidden")
         #expect(store.userHidden)
-        #expect(defaults.bool(forKey: "aa.shellx.menuBarUserHidden"))
-        store.record(enabled: true)                                  // turned back on in Settings
-        #expect(!store.userHidden)
-        #expect(ShellXMenuBarPolicy.userHiddenKey.rawValue.hasPrefix("aa.shellx."))
+        store.markRepaired()
+        #expect(store.repaired)
+        #expect(defaults.bool(forKey: "aa.shellx.menuBarRepaired"))
+        #expect(ShellXMenuBarPolicy.repairedKey.rawValue.hasPrefix("aa.shellx."))
     }
 }
