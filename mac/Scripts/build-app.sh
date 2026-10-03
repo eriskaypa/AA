@@ -97,7 +97,7 @@ step 1 "preconditions"
 xcrun --find swift >/dev/null || fail "swift not found (install Xcode)"
 DEV_DIR="$(xcode-select -p)"
 case "$DEV_DIR" in *.app/Contents/Developer) ;; *) fail "select a full Xcode (xcode-select -p = $DEV_DIR)" ;; esac
-for tool in iconutil sips codesign lipo plutil ditto shasum xattr; do
+for tool in iconutil sips codesign lipo plutil ditto shasum xattr unzip; do
     command -v "$tool" >/dev/null || fail "missing tool: $tool"
 done
 for tool in vtool otool dsymutil strip; do
@@ -186,7 +186,11 @@ fi
 step 7 "Info.plist"
 BUILD_DATE="$(date -u +%F)"
 GIT_COMMIT="$(git -C "$MAC_DIR" rev-parse --short=7 HEAD 2>/dev/null || echo unknown)"
-if [ -n "$(git -C "$MAC_DIR" status --porcelain 2>/dev/null || true)" ]; then GIT_COMMIT="$GIT_COMMIT-dirty"; fi
+# "-dirty" = the mac/ tree differs from HEAD: tracked changes under mac/ and untracked mac/ files, but never files
+# outside mac/ (rule zero: the port is built from mac/ only) and never Finder metadata (.DS_Store, ._*).
+DIRTY="$(git -C "$MAC_DIR" status --porcelain -- . 2>/dev/null \
+    | grep -v -E '(^|/)(\.DS_Store|\._[^/]*)"?$' || true)"
+if [ -n "$DIRTY" ]; then GIT_COMMIT="$GIT_COMMIT-dirty"; fi
 sed -e "s/@VERSION@/$VERSION/g" -e "s/@BUILD@/$BUILD_NUMBER/g" -e "s/@BUILDDATE@/$BUILD_DATE/g" \
     -e "s/@GITCOMMIT@/$GIT_COMMIT/g" "$MAC_DIR/Packaging/Info.plist" > "$CONTENTS/Info.plist"
 if [ -n "${AA_BAKE_DATA_DIR:-}" ]; then
@@ -229,10 +233,18 @@ for spec in "icon_16x16:16" "icon_16x16@2x:32" "icon_32x32:32" "icon_32x32@2x:64
 done
 iconutil -c icns "$ICONSET" -o "$RES/AppIcon.icns"
 if [ -d "$MAC_DIR/Resources/AppIcon.icon" ]; then
-    xcrun actool "$MAC_DIR/Resources/AppIcon.icon" --compile "$RES" --platform macosx \
-        --minimum-deployment-target 26.0 --app-icon AppIcon --output-partial-info-plist "$T/icon.plist" >/dev/null
+    # SHELL-184: the Icon Composer asset (layers made by Packaging/make-app-icon.swift --layers) → Assets.car, the
+    # macOS 26 layered icon (no grey plate). actool also writes its own flattened AppIcon.icns: compile into a temp
+    # folder and keep only Assets.car, so the AppIcon.icns above stays the round SHELL-184 / BD.3.10 art.
+    mkdir -p "$T/actool"
+    xcrun actool "$MAC_DIR/Resources/AppIcon.icon" --compile "$T/actool" --platform macosx \
+        --minimum-deployment-target 26.0 --app-icon AppIcon --output-partial-info-plist "$T/icon.plist" \
+        > "$T/actool.log" 2>&1 || { cat "$T/actool.log" >&2; fail "actool (Resources/AppIcon.icon)"; }
+    if grep -q -E "(warning|error):" "$T/actool.log"; then cat "$T/actool.log" >&2; fail "actool reported problems"; fi
+    [ -s "$T/actool/Assets.car" ] || fail "actool wrote no Assets.car"
+    cp "$T/actool/Assets.car" "$RES/Assets.car"
     plutil -replace CFBundleIconName -string AppIcon "$CONTENTS/Info.plist"
-    ok "AppIcon.icns + Assets.car"
+    ok "AppIcon.icns + Assets.car (Icon Composer layered icon)"
 else
     ok "AppIcon.icns ($(basename "$ICON_SRC"))"
 fi
@@ -280,6 +292,14 @@ if [ -z "${AA_BAKE_DATA_DIR:-}" ] && plutil -extract LSEnvironment raw "$P" >/de
 fi
 ok "forbidden keys absent"
 expect_eq "PkgInfo" "$(head -c 8 "$CONTENTS/PkgInfo")" "APPL????"
+expect_eq "CFBundleIconFile" "$(plist CFBundleIconFile)" "AppIcon"
+[ -s "$CONTENTS/Resources/AppIcon.icns" ] || fail "AppIcon.icns missing"
+if [ -d "$MAC_DIR/Resources/AppIcon.icon" ]; then
+    expect_eq "CFBundleIconName" "$(plist CFBundleIconName)" "AppIcon"
+    xcrun assetutil --info "$CONTENTS/Resources/Assets.car" 2>/dev/null | grep -q '"Name" : "AppIcon"' \
+        || fail "Assets.car holds no AppIcon"
+    ok "Assets.car holds the AppIcon icon stack"
+fi
 want_archs="$(echo $ARCHS | tr ' ' '\n' | sort | tr '\n' ' ' | sed 's/ $//')"
 have_archs="$(lipo -archs "$X" | tr ' ' '\n' | sort | tr '\n' ' ' | sed 's/ $//')"
 expect_eq "lipo -archs" "$have_archs" "$want_archs"
@@ -353,7 +373,22 @@ package() {
     fi
     ZIP="$DIST/AA-$VERSION-$BUILD_NUMBER-macOS.zip"
     rm -f "$ZIP"
-    ditto -c -k --keepParent "$T/pkg/AA" "$ZIP"
+    # SHELL-191: ditto, not zip -r. --norsrc/--noextattr/--noqtn: no AppleDouble "._*" entries (the OS re-adds
+    # com.apple.provenance after step 9); a non-Apple unzip (Info-ZIP, 7-Zip, Windows Explorer) would write them
+    # into AA.app as files and break the seal ("AA is damaged").
+    xattr -cr "$T/pkg/AA" 2>/dev/null || true
+    ditto -c -k --norsrc --noextattr --noqtn --keepParent "$T/pkg/AA" "$ZIP"
+    if unzip -Z1 "$ZIP" | grep -q -E '(^|/)\._'; then
+        unzip -Z1 "$ZIP" | grep -E '(^|/)\._' | head -n 5 >&2
+        fail "AppleDouble ._ entries in $(basename "$ZIP")"
+    fi
+    # The seal must survive a plain (non-Apple) unzip, e.g. on the Windows ship PC or `unzip` in Terminal.
+    rm -rf "$T/unzip-check"
+    mkdir -p "$T/unzip-check"
+    unzip -q "$ZIP" -d "$T/unzip-check"
+    codesign --verify --deep --strict "$T/unzip-check/AA/AA.app" 2> "$T/unzip-verify.log" \
+        || { cat "$T/unzip-verify.log" >&2; fail "signature invalid after a plain unzip of $(basename "$ZIP")"; }
+    rm -rf "$T/unzip-check"
     if [ "$PACKAGE" = "dmg" ]; then
         DMG="$DIST/AA-$VERSION-$BUILD_NUMBER-macOS.dmg"
         hdiutil create -volname AA -srcfolder "$T/pkg/AA" -ov -format UDZO "$DMG" >/dev/null
@@ -365,7 +400,7 @@ if [ "$PACKAGE" = "none" ]; then
 else
     step 13 "package"
     package
-    ok "$ZIP${DMG:+ and $DMG}; SHA256SUMS"
+    ok "$ZIP${DMG:+ and $DMG}; SHA256SUMS (no ._ entries; signature valid after a plain unzip)"
 fi
 
 # ---------------------------------------------------------------------------------------------------------------

@@ -59,6 +59,20 @@ Partly done / not done (reasons in `Docs/Deviations/W-SHELL.md`):
   right-aligned (now leading); the shortcuts window's hand-made header drifted up to 11 pt from its columns (now a
   native `Table`). The MenuBarExtra menu cannot be rendered by the hook (it is an `NSMenu`).
 
+## Verification fixes (FIX-W-SHELL, 2026-10-03)
+
+| Finding | Status | Change |
+|---|---|---|
+| V-01 Encrypt confirm / tooltip wording (01 §6.5) | **fixed** (confirm) + **cross-owner** (tooltip) | `ShellXText.encryptConfirmMessage` = the 01 §6.5 text verbatim ("a key stored in your macOS Keychain", "Only THIS Mac's local file"); `ShellXCatalogTests` pins the whole string. The SHELL-551 help lives in F3's `ShortcutRegistry` → REQ to F3 (exact 01 §6.5 tooltip). |
+| V-PACKAGE AppleDouble `._*` entries in the zip | **fixed** | Step 13: `ditto -c -k --norsrc --noextattr --noqtn --keepParent` (still ditto, SHELL-191); the script fails if `unzip -Z1` lists any `._` entry and if `codesign --verify --deep --strict` fails after a plain Info-ZIP `unzip`. Release run: 0 `._` entries, seal valid after `unzip`. |
+| V-PACKAGE "-dirty" from a file outside mac/ | **fixed** | Step 7: `git status --porcelain -- .` from mac/ (only mac/ paths), Finder metadata (`.DS_Store`, `._*`) ignored; tracked and untracked mac/ changes still stamp `-dirty`. |
+| V-PACKAGE grey plate around the icon on macOS 26 | **fixed** | `Resources/AppIcon.icon` (Icon Composer): fill #1B1B1B, group "letter" (lime "A", Liquid Glass, neutral shadow) above group "dial" (#313131 / #626262 / #4F4F4F rings); layers made by `swift Packaging/make-app-icon.swift --layers Resources/AppIcon.icon` (the round-art mode still writes a byte-identical `AppIcon-1024.png`). Step 8 compiles it with actool into a temp folder and copies only `Assets.car` (actool's own flattened `.icns` would replace the round SHELL-184 art), sets `CFBundleIconName`; step 11 asserts `CFBundleIconFile`, `CFBundleIconName` and an `AppIcon` stack in `Assets.car`. `NSWorkspace.icon(forFile:)` of `dist/AA.app` renders the full-bleed squircle in light and dark (`scratchpad/snapshots/fix1-W-SHELL/app-icon-{light,dark}.png`). |
+| V-PACKAGE AppKit warnings at launch | **cross-owner** (F3) | Reproduced under lldb: (1) `makeKeyWindow` on the `splash` window — SwiftUI `openWindow` sends `makeKeyAndOrderFront` to the `.plain` (borderless) splash scene; (2) the layout recursion is `LaunchCoordinator.loginWindowRegistered` calling `styleMask.remove(.resizable)` from `ShellWindowCaptureView.viewDidMoveToWindow`, inside `NSHostingView.layout`. Fix prototyped (splash as a non-activating `NSPanel` shown with `orderFrontRegardless`, style-mask change deferred one run-loop turn): both warnings gone, splash/login snapshots pixel-identical, `--smoke-test` green; reverted here and handed to F3 as a request (all files are F3's). |
+
+Gate: `swift build -j 3 -Xswiftc -warnings-as-errors`, `swift test -j 3 -Xswiftc -warnings-as-errors` (1,586 tests),
+`Scripts/check-ownership.sh` — green. `SKIP_TESTS=1 Scripts/build-app.sh` — exit 0 (38 MB, x86_64 + arm64, Assets.car,
+zip without `._` entries).
+
 ## Post-merge (Stage V)
 
 * `ShellXPersistIntegrationTests` (export → import ZIP and text-only through the real `BundleService`, export into
