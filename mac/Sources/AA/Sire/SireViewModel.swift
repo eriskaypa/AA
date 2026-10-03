@@ -63,8 +63,19 @@ final class SireViewModel {
     static let listRange: ClosedRange<CGFloat> = 260...520
     static let detailMin: CGFloat = 420
 
-    /// The on-screen list in its sort order.
+    /// The filtered list in its sort order (header count, selection order, export).
     private(set) var displayed: [SireQuestion] = []
+    /// The rows the question `List` shows: `displayed`, published so that NSTableView never logs its reentrant-delegate
+    /// warning (design rule 18): removals and re-sorts as a plain diff, anything that adds rows as a rebuild whose first
+    /// rows go in before the rest (see `SireStagedRows`).
+    private(set) var listRows = SireStagedRows<SireQuestion>()
+    /// The pending second step of a staged publish.
+    @ObservationIgnored private var revealTask: Task<Void, Never>?
+    /// A scroll asked for while the list was staged (the primary row may not be in the first rows yet).
+    @ObservationIgnored private var scrollAfterReveal = false
+    /// How long the first rows stay alone: long enough for SwiftUI to commit them to the table (the commit runs in a
+    /// run-loop observer, so a bare main-queue hop can land before it), short enough to be invisible.
+    static let revealDelay: Duration = .milliseconds(30)
     /// List selection (Q-3: several rows may be selected; the detail shows `primary`).
     var selection: Set<String> = [] {
         didSet { if selection != oldValue { selectionDidChange(from: oldValue) } }
@@ -138,10 +149,11 @@ final class SireViewModel {
         applyFilters()
         #if DEBUG
         if let pick = ProcessInfo.processInfo.environment["AA_SIRE_SELECT"] {
+            await revealTask?.value                              // select once every row is in the table
             let picks = pick.split(separator: ",").map(String.init).filter { byNumber[$0] != nil }
             if let last = picks.last {
                 selection = Set(picks)
-                scrollRequest += 1
+                requestScroll()
                 if primary != last { primary = last; body.load(question: byNumber[last]) }
             }
         }
@@ -159,9 +171,41 @@ final class SireViewModel {
         body.flush()                                            // SIRE-015: flush before the list is swapped
         let list = browser.apply(criteria, session: session)
         displayed = list
+        publishRows(list)
         let visible = Set(list.map(\.questionNumber))
         let kept = selection.intersection(visible)
         if kept != selection { selection = kept }
+    }
+
+    /// Hands `list` to the question `List` (two steps when `SireStagedRows` says so).
+    private func publishRows(_ list: [SireQuestion]) {
+        revealTask?.cancel()
+        revealTask = nil
+        let carriedScroll = scrollAfterReveal                    // a scroll still waiting on a superseded reveal
+        scrollAfterReveal = false
+        let generation = listRows.generation
+        let staged = listRows.publish(list)
+        // A rebuild leaves the table wherever its old scroll offset lands: bring the kept selection (or the top of the
+        // list) back into view once every row is in.
+        if carriedScroll || listRows.generation != generation { requestScroll() }
+        guard staged else { return }
+        revealTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: Self.revealDelay)
+            guard !Task.isCancelled, let self else { return }
+            self.revealRows()
+        }
+    }
+
+    /// The second step of a staged publish; re-issues a scroll that was asked for meanwhile.
+    func revealRows() {
+        revealTask = nil
+        guard listRows.reveal() else { return }
+        if scrollAfterReveal { scrollAfterReveal = false; scrollRequest += 1 }
+    }
+
+    /// Asks the list to scroll the primary row into view (after the staged rows are in, when staged).
+    func requestScroll() {
+        if listRows.isStaged { scrollAfterReveal = true } else { scrollRequest += 1 }
     }
 
     func resetFilters() {

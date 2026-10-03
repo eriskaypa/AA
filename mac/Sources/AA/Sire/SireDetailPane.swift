@@ -320,23 +320,27 @@ struct SireTaskRow: View {
 
 struct SireBodyCard: View {
     let controller: SireBodyController
+    @Environment(\.colorScheme) private var colorScheme
+
+    static let hint = "Editable — type to add line breaks / notes (Enter = new line). Your edits are saved."
+    /// The paper keeps at least this height (the Mac minimum the card had before the inset).
+    static let minPaperHeight: CGFloat = 160
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 8) {
-                Text("Editable — type to add line breaks / notes (Enter = new line). Your edits are saved.")
-                    .font(.aaMono(AAType.caption))
-                    .foregroundStyle(AAColor.muted)
-                    .lineLimit(1)
-                    .truncationMode(.tail)
-                    .help("Editable — type to add line breaks / notes (Enter = new line). Your edits are saved.")
-                Spacer(minLength: 4)
+            HStack(alignment: .center, spacing: 8) {
+                // Rule 11: the hint wraps instead of being cut off; the tooltip is only a second copy.
+                AAHelpText(Self.hint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(Self.hint)
                 Button { controller.reset() } label: { Label("Reset", systemImage: "arrow.counterclockwise") }
                     .controlSize(.small)
+                    .fixedSize()
                     .help("Discard your edits and restore the original SIRE formatting for this question.")
             }
             .padding(.horizontal, 8)
-            .frame(height: 30)
+            .padding(.vertical, 5)
+            .frame(minHeight: 30)
             .background(.bar)
             .overlay(alignment: .bottom) { Rectangle().fill(AAColor.border).frame(height: 1) }
             if controller.mode == .withheld {
@@ -347,9 +351,17 @@ struct SireBodyCard: View {
                                ? [AABannerAction(title: "Edit anyway (replaces saved edits)") { controller.editAnyway() }] : []))
                     .transition(.aaBanner)
             }
+            // Design rule 9 (DECISIONS, Stage V ruling): the #FCFCFC page is inset from the card, rounded, with a
+            // hairline border and a soft shadow in dark mode — the same paper as the container editor (`EditorPane`).
             SireBodyEditor(controller: controller)
-                .frame(minHeight: 160)
+                .frame(minHeight: Self.minPaperHeight)
+                .clipShape(RoundedRectangle(cornerRadius: EditorPane.paperRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: EditorPane.paperRadius, style: .continuous)
+                    .strokeBorder(AAColor.border, lineWidth: 1))
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.45 : 0), radius: 4, y: 1)
+                .padding(EditorPane.paperInset)
         }
+        .background(AAColor.panelAlt)
         .clipShape(RoundedRectangle(cornerRadius: AARadius.tile, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: AARadius.tile, style: .continuous).strokeBorder(AAColor.border, lineWidth: 1))
         .animation(.snappy, value: controller.mode)

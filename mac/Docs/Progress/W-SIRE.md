@@ -12,7 +12,7 @@ Branch `wave/W-SIRE`. Scope: spec 12 (SIRE 2.0) incl. Addendum SIRE-049…051, 0
 | Placeholders (`check-placeholders.sh W-SIRE`) | 0 left | — | 0 |
 | `SireContractStatus` | `wSireImplemented = true` | | |
 
-## Tests (Tests/AACoreTests/Sire, 12 files)
+## Tests (Tests/AACoreTests/Sire, 11 files)
 - Bank: TV-BANK-1…5 (SHA-256, 410 / 12 chapters / 72 sections, types, filter lists, 39 ROVIQ locations), metadata,
   lazy load + cached failure texts, tolerant decoding.
 - TaskIdentifier: TV-ID-1…4, TV-ID-BANK (332 questions, 6 106 tasks, per chapter, min 6 / max 39).
@@ -22,6 +22,8 @@ Branch `wave/W-SIRE`. Scope: spec 12 (SIRE 2.0) incl. Addendum SIRE-049…051, 0
 - Export: §7.10 goldens for all modes, empty state, file name, bytes.
 - Filters §7.9, stats, SireState TV-ST-1…5, SireToAa §7.11 (+ chapter-8 scale), Gemini TV-GEM-1…7 (URLProtocol stub),
   GeminiKeyStore (clear deletes, import once, settings untouched), insertion-only gate incl. T-KB-53.
+- Question-list publishing (`SireListStagingTests`): plain diff vs rebuild, staged first block + reveal, supersede,
+  row keys per generation; source guards for the List wiring and the inset body paper.
 - Post-merge (gated on `.wRich`): body persistence round trip; quick-add bodies load in the container editor/viewer.
 
 ## Snapshots (both appearances, `scratchpad/snapshots/W-SIRE/`)
@@ -57,6 +59,25 @@ Tab with a selected question (1500 and 1300 pt), unreadable saved body banner, c
   no zebra stripes, AAEmptyState for "No matches." and the load failure; export sheet uses `BuilderSheetHeader`,
   mono mode rows and line count, 44-pt footer; status badge = `AAStatusCapsule`; no raw `.system(size:)` left in
   `Sources/AA/Sire`. Snapshots light + dark: `scratchpad/snapshots/fix1-W-SIRE/`.
+
+## FIX2-W-SIRE (Stage V round 2 findings, 2026-10-03) — 2 defects fixed (3 findings; two were the same defect)
+- **V2-J7 + V2-DESIGN rule 18 (minor)** — `WARNING: Application performed a reentrant operation in its NSTableView
+  delegate` on every fill of the question list. Root cause (lldb on `NSLog`): not the `scrollTo` or the selection
+  write the findings suspected — the warning came from `-[NSTableRowHeightData _cacheRowSpansInRange:]` re-entering
+  itself inside `-[NSTableView endUpdates]` when SwiftUI's diff INSERTED rows (0 → 410 on load, and also 24 → 410,
+  410 → 198 → 148, 106 → 99 on search / evidence changes, and in the production path without `AA_SIRE_SELECT`).
+  Fix: `SireStagedRows` (AACore) — removals and re-sorts are a plain diff; a publish that adds rows rebuilds the list
+  with new row identities, the first 40 rows first and the rest on a later run-loop turn (`revealRows`), then the kept
+  selection (or the top) is scrolled into view (D-SIRE-22). `displayed` stays the full list (header, export,
+  selection order). Tests `SireListStagingTests` (7 logic + 1 wiring). Journey (finding repro): 22 snapshot runs —
+  TabSire with no selection / 2.2.2 / 2.1.1 / 2.1.1,5.1.1 / 1.1.1 and the 6 W-SIRE sheets, light + dark — print no
+  reentrant (or any other AppKit) warning (was 1 per run); a 13-sequence filter battery (search, clear, evidence,
+  chapters, sort, empty → full, tab away/back) printed 0 (was 6 of 13 sequences before).
+- **V2-DESIGN rule 9 (minor)** — SIRE body was an edge-to-edge white slab. `SireBodyCard` now insets the paper 8 pt on
+  a `panelAlt` card with radius `AARadius.paper`, 1-pt border and dark-mode shadow (same tokens as `EditorPane`);
+  the paper keeps its 160-pt minimum. Rule 11 on the same card: the hint no longer truncates (`AAHelpText`, wraps).
+  Test `SireListStagingTests.sireBodyIsAnInsetPaperPage`.
+- Snapshots light + dark: `scratchpad/snapshots/fix2-W-SIRE/` (PNGs + stderr logs).
 
 ## Not done / open
 - None of the assigned IDs. Optional extras not shipped are listed in `Docs/Deviations/W-SIRE.md`.

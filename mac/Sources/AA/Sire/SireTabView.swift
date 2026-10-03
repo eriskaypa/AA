@@ -262,17 +262,19 @@ struct SireQuestionListPane: View {
             }
             ScrollViewReader { proxy in
                 List(selection: $vm.selection) {
-                    ForEach(vm.displayed) { q in
-                        SireQuestionRow(question: q, vm: vm)
-                            .tag(q.questionNumber)
-                            .id(q.questionNumber)
+                    // Rows carry the list generation in their identity (see `SireStagedRows`); selection tags stay the
+                    // question numbers, so the selection survives a rebuild (SIRE-015).
+                    ForEach(vm.listRows.keyed) { row in
+                        SireQuestionRow(question: row.element, vm: vm)
+                            .tag(row.element.questionNumber)
+                            .id(row.id)
                             .listRowSeparator(.visible)
                     }
                 }
                 .listStyle(.inset)
-                .onAppear { if let p = vm.primary { proxy.scrollTo(p, anchor: .center) } }
-                .onChange(of: vm.criteria.sort) { _, _ in if let p = vm.primary { proxy.scrollTo(p, anchor: .center) } }
-                .onChange(of: vm.scrollRequest) { _, _ in if let p = vm.primary { proxy.scrollTo(p, anchor: .center) } }
+                .onAppear { scrollToPrimary(proxy) }
+                .onChange(of: vm.criteria.sort) { _, _ in scrollToPrimary(proxy) }
+                .onChange(of: vm.scrollRequest) { _, _ in scrollToPrimary(proxy, topIfNone: true) }
             }
             .overlay {
                 if vm.displayed.isEmpty {
@@ -287,6 +289,15 @@ struct SireQuestionListPane: View {
             .aaListCommands(ListCommands(role: .other, selectionCount: vm.selection.count))
         }
         .background(AAColor.panel, ignoresSafeAreaEdges: .top)
+    }
+
+    /// Scrolls the primary row into view; with no primary row in the list, a scroll request goes to the top.
+    private func scrollToPrimary(_ proxy: ScrollViewProxy, topIfNone: Bool = false) {
+        if let p = vm.primary, vm.listRows.rows.contains(where: { $0.questionNumber == p }) {
+            proxy.scrollTo(vm.listRows.key(for: p), anchor: .center)
+        } else if topIfNone, let first = vm.listRows.rows.first {
+            proxy.scrollTo(vm.listRows.key(for: first.questionNumber), anchor: .top)
+        }
     }
 }
 
