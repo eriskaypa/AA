@@ -263,6 +263,10 @@ private struct BoardColumnView: View {
                 .padding(6)
                 .animation(.snappy, value: cards.map(\.id))
             }
+            // VIEW-041 padding 6 on all sides: with "Show scroll bars: Always" a legacy scroller gutter (~16 pt) was
+            // added on the right of every column, even one that does not scroll. The list scrolls with the wheel /
+            // trackpad; the header count and the cut-off last card show that more cards follow.
+            .scrollIndicators(.never)
             .scrollContentBackground(.hidden)
             .overlay {
                 if cards.isEmpty {

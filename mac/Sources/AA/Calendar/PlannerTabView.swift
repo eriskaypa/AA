@@ -28,8 +28,11 @@ final class PlannerPageModel {
     var poolTargeted = false
     let placed = CalLive<[any SchedulableJob]>([])
     let pool = CalLive<[PlannerPoolRow]>([])
-    /// Bumped whenever the grid is rebuilt for another range (scroll back to 07:00).
+    /// Bumped whenever the grid is rebuilt for another range (scroll back to 07:00, and to today's Week column).
     var rebuildToken = 0
+    /// The all-day strip shows up to `allDayExpandedMaxHeight` after "+N more" (VIEW-089, Mac addition); reset when
+    /// the range changes.
+    var dueExpanded = false
     @ObservationIgnored private(set) weak var store: AppStore?
     @ObservationIgnored private var loadedGeneration = -1
 
@@ -64,13 +67,18 @@ final class PlannerPageModel {
     func setMode(_ m: PlannerMode) {
         guard m != mode else { return }
         mode = m
-        rebuildToken &+= 1
+        rebuilt()
     }
 
     /// VIEW-081.
-    func previous() { anchor = PlannerGeometry.step(anchor, mode: mode, forward: false); rebuildToken &+= 1 }
-    func next() { anchor = PlannerGeometry.step(anchor, mode: mode, forward: true); rebuildToken &+= 1 }
-    func goToToday() { anchor = today; rebuildToken &+= 1 }
+    func previous() { anchor = PlannerGeometry.step(anchor, mode: mode, forward: false); rebuilt() }
+    func next() { anchor = PlannerGeometry.step(anchor, mode: mode, forward: true); rebuilt() }
+    func goToToday() { anchor = today; rebuilt() }
+
+    private func rebuilt() {
+        dueExpanded = false
+        rebuildToken &+= 1
+    }
 
     var days: [CivilDate] { PlannerGeometry.days(mode: mode, anchor: anchor) }
 
@@ -338,6 +346,7 @@ private struct PlannerTimeGrid: View {
     @Bindable var model: PlannerPageModel
     let actions: PlannerActions
     @State private var position = ScrollPosition(edge: .top)
+    @State private var hPosition = ScrollPosition(edge: .leading)
 
     var body: some View {
         GeometryReader { geo in
@@ -384,15 +393,29 @@ private struct PlannerTimeGrid: View {
                 .frame(width: total, height: geo.size.height)
             }
             .scrollIndicators(.automatic)
+            .scrollPosition($hPosition)
+            .task(id: model.rebuildToken) {
+                // A week still wider than a narrow pane (columns at their 96-pt minimum): bring today's column into
+                // view (centred) after every rebuild, the way the hours scroll to 07:00.
+                for delay in [0, 120, 300] {
+                    try? await Task.sleep(for: .milliseconds(delay))
+                    if Task.isCancelled { return }
+                    let x = PlannerGeometry.initialScrollX(mode: model.mode, days: model.days, today: model.today,
+                                                           dayWidth: Self.dayWidth(mode: model.mode,
+                                                                                   available: geo.size.width,
+                                                                                   count: model.days.count),
+                                                           viewport: geo.size.width)
+                    hPosition.scrollTo(x: x)
+                }
+            }
         }
         .background(AAColor.bg)
     }
 
-    /// 700 / 132 (VIEW-087) — widened to fill a larger pane (Mac grace; the block math uses the actual width).
+    /// VIEW-087 700 / 132, fitted to the pane (`PlannerGeometry.fittedDayWidth`: Day ≥ 700; Week shrinks to fit down
+    /// to 96 so the whole week shows; the block math uses the actual width).
     static func dayWidth(mode: PlannerMode, available: Double, count: Int) -> Double {
-        let base = PlannerGeometry.dayWidth(mode)
-        let fill = (available - PlannerGeometry.gutterWidth - 1) / Double(max(1, count))
-        return max(base, fill.rounded(.down))
+        PlannerGeometry.fittedDayWidth(mode: mode, available: available, count: count)
     }
 }
 
@@ -422,25 +445,20 @@ private struct PlannerDayHeaderRow: View {
     }
 }
 
-/// VIEW-089 / 090: the all-day "due" strip.
+/// VIEW-089 / 090: the all-day "due" strip. Each day's stack scrolls inside the 108-pt cap; a day whose chips do not
+/// all fit shows a "+N more" row (counted from the chips' measured frames) that expands the strip, and "Show less"
+/// collapses it again (Mac addition: overlay scrollers alone gave no cue that chips were hidden).
 private struct PlannerDueStrip: View {
-    let model: PlannerPageModel
+    @Bindable var model: PlannerPageModel
     let days: [CivilDate]
     let dayWidth: Double
     let actions: PlannerActions
 
-    /// A wrapped chip's height (11-pt text, ≈ 6.4 pt per character, 2 pt padding top and bottom, 3 pt gap).
-    static func chipHeight(_ text: String, width: Double) -> Double {
-        let perLine = max(1, Int((width - 6 - 12) / 6.4))
-        let lines = max(1, Int((Double(text.count) / Double(perLine)).rounded(.up)))
-        return Double(lines) * 14 + 4 + 3
-    }
-
     var body: some View {
         let placed = model.placed.value
         let perDay = days.map { PlannerPlacement.allDayChips(placed, day: $0) }
-        let tallest = perDay.map { chips in chips.reduce(6.0) { $0 + Self.chipHeight($1.text, width: dayWidth) } }.max() ?? 0
-        let height = min(PlannerGeometry.allDayMaxHeight, max(28, tallest))
+        let height = PlannerGeometry.allDayStripHeight(perDay.map { $0.map(\.text) }, dayWidth: dayWidth,
+                                                       expanded: model.dueExpanded)
         HStack(alignment: .top, spacing: 0) {
             Text(PlannerPlacement.dueGutterLabel)
                 .font(.aaMono(10))
@@ -449,21 +467,74 @@ private struct PlannerDueStrip: View {
                 .padding(.top, 5)
                 .padding(.trailing, 6)
             ForEach(Array(days.enumerated()), id: \.element) { i, day in
-                ScrollView(.vertical) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        ForEach(perDay[i]) { chip in
-                            PlannerChipView(chip: chip, wraps: true, actions: actions)
-                        }
-                    }
-                    .padding(3)
-                }
-                .frame(width: dayWidth, height: height)
-                .background(day == model.today ? AAColor.tint.opacity(0.06) : .clear)
-                .overlay(alignment: .trailing) { Rectangle().fill(AAColor.Status.plannerGrid).frame(width: 1) }
+                PlannerDueDayCell(model: model, chips: perDay[i], height: height, actions: actions)
+                    .frame(width: dayWidth, height: height)
+                    .background(day == model.today ? AAColor.tint.opacity(0.06) : .clear)
+                    .overlay(alignment: .trailing) { Rectangle().fill(AAColor.Status.plannerGrid).frame(width: 1) }
             }
         }
         .background(AAColor.panelAlt)
         .overlay(alignment: .bottom) { Rectangle().fill(AAColor.Status.plannerGrid).frame(height: 1) }
+    }
+}
+
+/// One day of the due strip: the scrolling chip stack and, when needed, the "+N more" / "Show less" row.
+private struct PlannerDueDayCell: View {
+    @Bindable var model: PlannerPageModel
+    let chips: [PlannerChip]
+    let height: Double
+    let actions: PlannerActions
+    /// Each chip's frame in the scroll view's visible coordinate space, and that view's visible height.
+    @State private var frames: [String: CGRect] = [:]
+    @State private var visibleHeight: Double = 0
+
+    var body: some View {
+        let label = PlannerGeometry.allDayMoreLabel(hidden: hiddenCount, expanded: model.dueExpanded)
+        VStack(spacing: 0) {
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(chips) { chip in
+                        PlannerChipView(chip: chip, wraps: true, actions: actions)
+                            .onGeometryChange(for: CGRect.self) { $0.frame(in: .scrollView) } action: { r in
+                                frames[chip.id] = r
+                            }
+                    }
+                }
+                .padding(3)
+            }
+            .onScrollGeometryChange(for: Double.self) { Double($0.containerSize.height) } action: { _, h in
+                visibleHeight = h
+            }
+            // The "+N more" row is the cue; a legacy scroller would also narrow only the overflowing days' chips.
+            .scrollIndicators(.never)
+            .frame(height: max(0, height - (label == nil ? 0 : PlannerGeometry.allDayMoreRowHeight)))
+            if let label {
+                Button {
+                    withAnimation(.snappy) { model.dueExpanded.toggle() }
+                } label: {
+                    Text(label)
+                        .font(.aaMono(AAType.caption).monospacedDigit())
+                        .foregroundStyle(AAColor.tint)
+                        .lineLimit(1)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 6)
+                        .frame(height: PlannerGeometry.allDayMoreRowHeight)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(model.dueExpanded ? "Show the due strip at its normal height" : "Show more of the due strip")
+                .accessibilityLabel(label)
+            }
+        }
+        .frame(height: height, alignment: .top)
+        .clipped()
+    }
+
+    /// Chips cut by either edge of the visible stack (measured; frames of chips no longer in the stack are ignored).
+    private var hiddenCount: Int {
+        guard visibleHeight > 0 else { return 0 }
+        let measured = chips.compactMap { c in frames[c.id].map { (minY: Double($0.minY), maxY: Double($0.maxY)) } }
+        return PlannerGeometry.hiddenChipCount(measured, visibleHeight: visibleHeight)
     }
 }
 
@@ -654,18 +725,19 @@ private struct PlannerChipView: View {
     let actions: PlannerActions
 
     var body: some View {
+        // Rule 13: the ghost opacity (0.6 / 0.55 on a span's other days) fades the fill only; the label stays at full
+        // strength — white on a full chip, the foreground colour on a faded one (white would fall under 3:1).
+        let fill = chip.isDone ? AAColor.Status.plannerMuted : AAColor.Status.plannerBlock
         Text(chip.text)
-            .font(.system(size: 11, weight: chip.isBold ? .bold : .regular))
-            .foregroundStyle(.white)
+            .font(.aaMono(AAType.caption, weight: chip.isBold ? .bold : .regular))
+            .foregroundStyle(PlannerGeometry.chipLabelIsWhite(opacity: chip.opacity) ? Color.white : AAColor.fg)
             .lineLimit(wraps ? nil : 1)
             .truncationMode(.tail)
             .fixedSize(horizontal: false, vertical: wraps)
             .padding(.horizontal, wraps ? 6 : 4)
             .padding(.vertical, wraps ? 2 : 1)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(chip.isDone ? AAColor.Status.plannerMuted : AAColor.Status.plannerBlock,
-                        in: RoundedRectangle(cornerRadius: 3, style: .continuous))
-            .opacity(chip.opacity)
+            .background(fill.opacity(chip.opacity), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
             .contentShape(Rectangle())
             .help(chip.tooltip)
             .onTapGesture(count: 2) { actions.edit(chip.ref) }
