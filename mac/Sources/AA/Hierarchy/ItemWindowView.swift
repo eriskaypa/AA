@@ -90,7 +90,8 @@ struct HierItemWindowContent: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AASpacing.m) {
             HStack(alignment: .center, spacing: AASpacing.s) {
-                AAKindBadge(kind: item.kind)
+                Circle().fill(AAColor.kind(item.kind)).frame(width: 9, height: 9)
+                    .overlay(Circle().strokeBorder(AAColor.border, lineWidth: 0.5))
                 Text(item.kind.name).font(.aaMono(AAType.body, weight: .bold)).foregroundStyle(AAColor.accent)
                 if item.isLockProtected {
                     Image(systemName: "lock.fill").imageScale(.small).foregroundStyle(.secondary)
@@ -148,10 +149,10 @@ struct HierItemWindowFields: View {
                     .font(.aaMono(15, weight: .semibold))
                     .accessibilityLabel("Name")
             }
-            GridRow {
-                label(HierText.windowDescription)
+            GridRow(alignment: .top) {
+                label(HierText.windowDescription).padding(.top, 5)
                 HierMultilineField(text: $description)
-                    .frame(minHeight: 40, maxHeight: 76)
+                    .frame(height: 58)
                     .accessibilityLabel("Description")
             }
             GridRow {
