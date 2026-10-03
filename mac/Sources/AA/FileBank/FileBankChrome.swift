@@ -32,10 +32,9 @@ struct FileBankHeaderBar: View {
                 Text(title).font(.aaMono(AAType.small, weight: .bold)).foregroundStyle(AAColor.fg)
                     .fixedSize()
                 if total > 0 {
-                    Text("\(total)").font(.system(size: 10, weight: .semibold)).monospacedDigit()
+                    Text("(\(total))").font(.aaMono(AAType.caption)).monospacedDigit()
                         .foregroundStyle(AAColor.muted)
-                        .padding(.horizontal, 5).padding(.vertical, 1)
-                        .background(AAColor.muted.opacity(0.14), in: Capsule())
+                        .fixedSize()
                 }
             }
             .layoutPriority(1)
@@ -209,16 +208,17 @@ struct FileBankScopeChip: View {
                 if showsIcon { Image(systemName: symbol).imageScale(.small) }
                 if showsTitle { Text(title).fixedSize() }
                 Text("\(count)")
-                    .font(.system(size: 10, weight: .semibold)).monospacedDigit()
-                    .foregroundStyle(selected ? Color.white.opacity(0.9) : AAColor.muted)
+                    .font(.aaMono(AAType.caption, weight: .semibold)).monospacedDigit()
+                    .foregroundStyle(selected ? AAColor.selectionFg.opacity(0.8) : AAColor.muted)
             }
-            .font(.system(size: AAType.caption, weight: selected ? .semibold : .regular))
-            .foregroundStyle(selected ? Color.white : AAColor.fg)
+            .font(.subheadline.weight(selected ? .semibold : .regular))
+            .foregroundStyle(selected ? AAColor.selectionFg : AAColor.fg)
             .padding(.horizontal, 8)
             .padding(.vertical, 3)
             .background {
                 if selected {
-                    Capsule().fill(AAColor.tint)
+                    Capsule().fill(AAColor.selectionBg)
+                        .overlay(Capsule().strokeBorder(AAColor.tint.opacity(0.55), lineWidth: 1))
                 } else if hovering {
                     Capsule().fill(AAColor.hover)
                 }
@@ -252,9 +252,14 @@ struct FileBankSharingMenu: View {
             if compact {
                 Label(FileBankText.sharing, systemImage: "folder.badge.person.crop").labelStyle(.iconOnly)
             } else {
-                Label(sharedWithCount > 0 ? FileBankText.sharedWithCount(sharedWithCount) : FileBankText.sharing,
-                      systemImage: "folder.badge.person.crop")
+                // The button-style menu flattens the Label into an NSPopUpButton image + title with no gap, so the
+                // badge of this glyph touched the word ("📁Sharing"). AppKit ignores padding there (and drops an inline
+                // Image inside Text), so the gap is a leading en space in the rendered title only; the accessibility
+                // label stays the spec text.
+                let title = sharedWithCount > 0 ? FileBankText.sharedWithCount(sharedWithCount) : FileBankText.sharing
+                Label(FileBankSharingMenu.spaced(title), systemImage: "folder.badge.person.crop")
                     .labelStyle(.titleAndIcon)
+                    .accessibilityLabel(title)
             }
         }
         .menuStyle(.button)
@@ -262,7 +267,12 @@ struct FileBankSharingMenu: View {
         .controlSize(.small)
         .fixedSize()
         .help(FileBankText.sharePickerPrompt("this file bank"))
+        .accessibilityLabel(sharedWithCount > 0 ? FileBankText.sharedWithCount(sharedWithCount) : FileBankText.sharing)
     }
+
+    /// The rendered menu title: the spec text after an en space (U+2002), the standard icon–title gap of a toolbar
+    /// label, which the popup button does not add itself.
+    nonisolated static func spaced(_ title: String) -> String { "\u{2002}" + title }
 
     @ViewBuilder private var menuSections: some View {
         let dir = FileBankDirectory(store: env.store)
@@ -314,7 +324,7 @@ struct FileBankFooter: View {
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
-        .font(.system(size: AAType.caption))
+        .font(.aaMono(AAType.caption))
         .padding(.horizontal, AASpacing.m)
         .padding(.vertical, 4)
         .background(AAColor.panelAlt)
@@ -404,7 +414,7 @@ struct FileBankDropOverlay: View {
                     .strokeBorder(AAColor.tint, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
                 Label(state.linkInPlace ? FileBankText.dropToLinkInPlace : FileBankText.dropToImportCopy,
                       systemImage: state.linkInPlace ? "link" : "plus.rectangle.on.folder")
-                    .font(.system(size: AAType.small, weight: .semibold))
+                    .font(.aaMono(AAType.small, weight: .semibold))
                     .foregroundStyle(AAColor.tint)
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(AAColor.panel, in: Capsule())

@@ -55,3 +55,26 @@ without a selection, so it could not empty the clipboard as Windows does) · 0 m
 Gate: `swift build` and `swift test` (-j 3, warnings as errors) green; `check-placeholders.sh W-FILES` empty;
 `check-ownership.sh` steps 2–4 green, step 1 flags only this file (`Docs/Progress/W-FILES.md`, REQ-W-FILES-02 —
 required by DECISIONS REQ-F1-01, the script is F1's).
+
+## FIX-W-FILES — V-DESIGN findings (2026-10-03)
+
+Counts: 1 finding (polish, 2 parts) · 2 fixed · 0 not fixed · 0 cross-owner requests.
+
+* **Row stripes (03 §6.6.5).** `FileBankTable`, `ContainerViewerSheet` and `FileBacklinksSection` now set
+  `.alternatingRowBackgrounds(.disabled)`; the viewer no longer shows striped empty rows under its files.
+* **Sharing menu glyph touching its word.** The button-style `Menu` renders as an NSPopUpButton that puts the
+  `folder.badge.person.crop` image flush against the title (padding is ignored there, and an `Image` interpolated in
+  `Text` is dropped). The rendered title is now the spec text after an en space (`FileBankSharingMenu.spaced`), giving
+  the standard icon–title gap; the accessibility label stays "Sharing" / "Shared with N". Compact (icon-only) form
+  unchanged.
+* **Design rules applied to the rest of the W-FILES views (no finding named them):** no `.system(size:)` left in
+  `Sources/AA/FileBank` — header count is a muted mono "(N)", scope-chip counts / footer / drop overlay / viewer
+  empty line / backlinks source / icon-tile names and meta use `Font.aaMono` (chip titles keep the system font as
+  chrome); no raw `Color.white` — the selected scope chip and selected icon-tile name use `AAColor.selectionBg/Fg`
+  (tint hairline on the chip); icon-tile name radius `AARadius.control`; backlinks rows get 4-pt vertical padding.
+* Snapshots (light + dark, this worktree's binary) under scratchpad `snapshots/fix1-W-FILES/`: file bank list and
+  icons and backlinks over the W-FILES fixture, file bank and viewer over a copy of `snapdata-full`. Checked: no
+  stripes, Sharing glyph spaced, chips and counts legible in both appearances, nothing clipped.
+
+Gate: `swift build` and `swift test` (-j 3, warnings as errors) green — 1,586 tests / 234 suites;
+`check-ownership.sh --owner W-FILES` OK.

@@ -94,7 +94,7 @@ struct FileBankViewerContent: View {
             .padding(.vertical, 6)
             if rows.isEmpty {
                 Text(FileBankText.viewerNoFiles)
-                    .font(.system(size: AAType.small))
+                    .font(.aaMono(AAType.small))
                     .foregroundStyle(AAColor.muted)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -129,7 +129,7 @@ struct FileBankViewerContent: View {
             }
         }
         .tableStyle(.inset)
-        .alternatingRowBackgrounds(.enabled)
+        .alternatingRowBackgrounds(.disabled)
         .contextMenu(forSelectionType: FileBankRow.ID.self) { ids in
             let picked = rows.filter { ids.contains($0.id) }
             if !picked.isEmpty {

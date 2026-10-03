@@ -53,7 +53,7 @@ struct FileBacklinksSection: View {
             }
         }
         .listStyle(.bordered)
-        .alternatingRowBackgrounds(.enabled)
+        .alternatingRowBackgrounds(.disabled)
         .contextMenu(forSelectionType: String.self) { ids in
             menu(model, ids)
         } primaryAction: { ids in
@@ -88,9 +88,9 @@ struct FileBacklinksSection: View {
                 .font(.aaMono(AAType.caption))
             }
             Spacer(minLength: AASpacing.s)
-            FileBankSourceLabel(file: r.link.file).font(.system(size: AAType.caption))
+            FileBankSourceLabel(file: r.link.file).font(.aaMono(AAType.caption))
         }
-        .padding(.vertical, 1)
+        .padding(.vertical, AASpacing.xs)
         .help("\(r.link.file.name)\n\(FileBankText.backlinksInColumn) \(r.link.owner.label)")
     }
 
