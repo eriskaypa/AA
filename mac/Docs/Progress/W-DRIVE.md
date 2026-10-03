@@ -1,0 +1,55 @@
+# W-DRIVE — progress (Google Drive & tools)
+
+Owner card: OWNERSHIP §3 "W-DRIVE". Feature IDs: OWNERSHIP §4.
+
+## Counts
+
+| Set | Done | Total |
+|---|---|---|
+| TOOLS-001–035, 040–052, 060–071, 080–090 | 71 | 71 |
+| DATA-073, DATA-153 | 2 | 2 |
+| SHELL-010–011, 073–080, 121–122 | 12 | 12 |
+| **All** | **85** | **85** |
+
+Remaining: 0. Not done: none (N/A items and deviations: `Docs/Deviations/W-DRIVE.md`).
+
+Caller registry: VIEW-212 row 1 (backup picker) — done (`DriveActions.loadBackup`, single selection, newest first).
+Vector home: 14 §7.7 smart import — written, gated on `.wPersist` (post-merge, Stage V).
+
+## Contracts
+
+- AACore (ARCH §6.8): `GoogleTokenStore` (+ `DriveTokenVault`), `BundleName` — real; `GoogleDriveContractStatus` = true.
+- AA (ARCH §7.7): `DriveSyncCoordinator` (+ `DriveOperation`), `DriveActions` (8 commands), `DriveSettingsSection`,
+  `FolderBuilderView()`, `DateCalculatorView()`, `UnitConverterView(sessionID:)` — real; no placeholders left
+  (`Scripts/check-placeholders.sh W-DRIVE` prints nothing).
+
+## Tests (AACoreTests)
+
+- `Tools/`: unit converter (catalog, 7.5.1 seed rows of all 14 categories, 7.5.2 conversions and parsing, 7.5.3
+  formatting), date calculator (7.4 difference and add tables, amount validation, de-DE, Q-16), folder plan (7.3 parse
+  table, headers, sanitise, Q-15, create outcomes incl. the file-in-the-way case).
+- `GoogleDrive/`: 7.1 names, 7.2 restorable table, 7.6-1…8 (best remote in two zones, non-bundles, no-stamp download,
+  decline memory, own push, "o" round trip, query strings, HasToken/NeedsReconsent), 7.8 AgeVerdict, synced-folder
+  detection order, token vault (Keychain item, legacy plaintext, foreign DPAPI), client file, PKCE (RFC 7636 vector),
+  consent URL, live loopback redirect on 127.0.0.1, refresh rules (4xx deletes / 5xx keeps), REST paging + 401 retry,
+  resumable upload, download, error texts, the whole interactive flow with a fake browser (prompt=consent retry,
+  access_denied, Cancel, timeout).
+- 49 test functions; gated: 2 (`.wPersist`, 14 §7.7).
+
+## Snapshots (both appearances, `scratchpad/snapshots/W-DRIVE/`)
+
+folder-builder (empty and with the Example + case-merge text), date-calculator (today and the 2026-09-30 → 2027-03-01
+inclusive / +1000 days state), unit-converter (Speed seed and Pressure with 14.7 psi typed), sign-in waiting sheet,
+Settings ▸ Sync Drive section. Registered sheets: `w-drive.sign-in`, `w-drive.settings`, `w-drive.folder-builder`,
+`w-drive.date-calculator`, `w-drive.unit-converter`.
+
+## Gate
+
+`swift build -j 3 -Xswiftc -warnings-as-errors && swift test -j 3 -Xswiftc -warnings-as-errors` green;
+`Scripts/check-ownership.sh` green for every code path — it flags only this file, whose path the F1 script does not map
+yet (REQ-W-DRIVE-03).
+
+## Open requests
+
+REQ-W-DRIVE-01 (toolbar sync indicator slot, F3), REQ-W-DRIVE-02 (tool window default sizes, F3),
+REQ-W-DRIVE-03 (`Docs/Progress/*.md` in check-ownership, F1).
