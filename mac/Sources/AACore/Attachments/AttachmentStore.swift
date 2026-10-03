@@ -10,13 +10,16 @@ import Foundation
     /// resource values say isDirectory/isPackage) is ZIPPED into ONE entry `files/<32hex>_<name>.zip` (DECISIONS 05).
     /// The stored leaf is Windows-safe (01 §6.6) so a bundle made on this Mac always extracts on Windows.
     public static func importFile(_ ds: DataStore, from source: URL) throws -> String {
+        try PersistWriteGate.check(ds)
         let files = ds.filesFolder
         try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+        // The stored name is the source's own leaf (`Path.GetFileName(source)`), even when it is a symbolic link;
+        // the copy follows the link to its target, as `File.Copy` does.
+        let name = source.standardizedFileURL.lastPathComponent
         let src = source.standardizedFileURL.resolvingSymlinksInPath()
         let values = try? src.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey])
         let isFolder = (values?.isDirectory ?? false) || (values?.isPackage ?? false)
-        let name = src.lastPathComponent
-        let leaf = windowsSafeLeaf(UUID().netN + "_" + (isFolder ? name + ".zip" : name))
+        let leaf = storedLeaf(isFolder ? name + ".zip" : name)
         let dest = files.appending(path: leaf)
         if FileManager.default.fileExists(atPath: dest.path) { try FileManager.default.removeItem(at: dest) }
         if isFolder {
@@ -31,12 +34,20 @@ import Foundation
     /// `files/<32hex>_<windowsSafeLeaf(suggestedName)>` (atomic) and returns the stored path. This is the only way
     /// the AA target gets such bytes into the data folder (§2.1: the AA target never writes temp files).
     public static func importData(_ ds: DataStore, _ data: Data, suggestedName: String) throws -> String {
+        try PersistWriteGate.check(ds)
         let files = ds.filesFolder
         try FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
         let base = NetText.isBlank(suggestedName) ? "attachment" : suggestedName
-        let leaf = windowsSafeLeaf(UUID().netN + "_" + base)
+        let leaf = storedLeaf(base)
         try AtomicWrite.write(data, to: files.appending(path: leaf))
         return "files/" + leaf
+    }
+
+    /// `"<32hex>_<original part>"`: the original name made Windows-safe (05 §4.2: forbidden characters, trailing
+    /// dots/spaces, NFC, the original part capped at 150 UTF-16 units keeping the extension). No reserved-device rule:
+    /// the stored leaf always starts with the GUID, so `CON.txt` is stored as `<32hex>_CON.txt`.
+    nonisolated static func storedLeaf(_ originalName: String) -> String {
+        UUID().netN + "_" + windowsSafeLeaf(originalName, reservedDeviceRule: false)
     }
 
     // MARK: Resolve (DATA-063)
@@ -111,6 +122,10 @@ import Foundation
     /// (`CON PRN AUX NUL COM1–9 LPT1–9`, any case) gets a `_` prefix; capped at 150 UTF-16 units keeping the
     /// extension. Never empty (`_`).
     public nonisolated static func windowsSafeLeaf(_ name: String) -> String {
+        windowsSafeLeaf(name, reservedDeviceRule: true)
+    }
+
+    nonisolated static func windowsSafeLeaf(_ name: String, reservedDeviceRule: Bool) -> String {
         let nfc = name.precomposedStringWithCanonicalMapping
         var scalars = String.UnicodeScalarView()
         for sc in nfc.unicodeScalars {
@@ -119,7 +134,7 @@ import Foundation
         var s = PersistPaths.trimTrailingSpacesAndDots(String(scalars))
         if s.isEmpty { return "_" }
         let stem = String(s.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
-        if PersistPaths.isReservedDeviceName(stem) { s = "_" + s }
+        if reservedDeviceRule, PersistPaths.isReservedDeviceName(stem) { s = "_" + s }
         if s.utf16.count > PersistPaths.maxLeafUnits {
             var ext = ""
             if let dot = s.lastIndex(of: "."), dot != s.startIndex {

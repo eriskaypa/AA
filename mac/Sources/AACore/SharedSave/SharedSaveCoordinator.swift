@@ -354,6 +354,7 @@ public enum PersistSharedText {
     /// reload and mark in sync; otherwise push our data over it (creating it). Then starts sync. On failure the
     /// setting is cleared and the error rethrown.
     public func adoptSharedFile(_ url: URL, useItsContents: Bool) async throws {
+        try PersistWriteGate.check(ds)                                              // DATA-174, §MP.3.5
         host?.flushAllEditors()
         let p = url.standardizedFileURL.path
         ds.settings.setSharedSaveFile(p)
@@ -367,10 +368,11 @@ public enum PersistSharedText {
                     ds.loadSettings()
                     store.replaceData(ds.load(), reason: .sharedSavePull)
                 }
+                // Windows sets both stamps but leaves the indicator flags alone: the indicator then reads
+                // "Shared save on" until the first push or pull of the running sync (MenuSetSharedFile_Click).
                 lastSeen = store.data.lastModified
                 lastSynced = store.data.lastModified
                 stampsInitialized = true
-                setOnline(true)
             } else {
                 stampsInitialized = true
                 try? push(label: PersistSharedText.periodicLabel)

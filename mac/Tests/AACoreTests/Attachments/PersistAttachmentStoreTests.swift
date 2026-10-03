@@ -101,6 +101,72 @@ struct PersistAttachmentStoreTests {
         let dots = try src.write("report. ", "x")
         let stored4 = try AttachmentStore.importFile(ds, from: dots)
         #expect(stored4.range(of: #"^files/[0-9a-f]{32}_report$"#, options: .regularExpression) != nil)
+        // 05 §4.2: the ORIGINAL part is capped at 150 UTF-16 units (the GUID prefix is not counted).
+        let longName = String(repeating: "m", count: 180) + ".pdf"
+        let long = try src.write(longName, "x")
+        let stored5 = try AttachmentStore.importFile(ds, from: long)
+        let original5 = String(stored5.dropFirst("files/".count + 33))
+        #expect(original5.utf16.count == 150)
+        #expect(original5.hasSuffix(".pdf"))
+        #expect(original5 == AttachmentStore.windowsSafeLeaf(longName))
+    }
+
+    @Test("ImportFile keeps the link's own name and copies its target (File.Copy semantics)")
+    func importSymlink() throws {
+        let made = StoreFactory.make()
+        let ds = made.dataStore
+        let src = TempFolder("persist-link")
+        let target = try src.write("Target.pdf", "real bytes")
+        let link = src.file("Shortcut name.pdf")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        let stored = try AttachmentStore.importFile(ds, from: link)
+        #expect(stored.range(of: #"^files/[0-9a-f]{32}_Shortcut name\.pdf$"#, options: .regularExpression) != nil)
+        let dest = ds.appFolder.appending(path: stored)
+        #expect(try Data(contentsOf: dest) == Data("real bytes".utf8))
+        let attrs = try FileManager.default.attributesOfItem(atPath: dest.path)
+        #expect(attrs[.type] as? FileAttributeType == .typeRegular)
+    }
+
+    @Test("DATA-067: trashing, purging and emptying the Trash never delete attachment files")
+    func itemDeletionKeepsFiles() throws {
+        let made = StoreFactory.make()
+        let ds = made.dataStore
+        let store = made.store
+        let src = TempFolder("persist-067")
+        let stored1 = try AttachmentStore.importFile(ds, from: try src.write("Manual.pdf", "manual"))
+        let stored2 = try AttachmentStore.importFile(ds, from: try src.write("Photo.jpg", "photo"))
+        let d = AppData()
+        let e1 = Equipment(name: "Pump"), e2 = Equipment(name: "Valve")
+        e1.container.files = [FileItem(name: "Manual.pdf", path: stored1, kind: .document)]
+        e2.container.files = [FileItem(name: "Photo.jpg", path: stored2, kind: .image)]
+        d.equipment = [e1, e2]
+        store.replaceData(d, reason: .initialLoad)
+        try store.save()
+        let entry = try #require(store.trash(e1))
+        store.purge(entry)
+        _ = store.trash(e2)
+        store.emptyTrash()
+        try store.save()
+        #expect(store.data.equipment.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: ds.appFolder.appending(path: stored1).path))
+        #expect(FileManager.default.fileExists(atPath: ds.appFolder.appending(path: stored2).path))
+    }
+
+    @Test("A closed write gate (read-only copy, Stop Editing Here) refuses every attachment write (DATA-174)")
+    func writeGate() throws {
+        let made = StoreFactory.make()
+        let ds = made.dataStore
+        let src = TempFolder("persist-gate")
+        let pump = try src.write("Pump.pdf", "x")
+        ds.settings.isWriteGated = true
+        defer { ds.settings.isWriteGated = false }
+        #expect(throws: PersistWriteGateError.readOnly) { try AttachmentStore.importFile(ds, from: pump) }
+        #expect(throws: PersistWriteGateError.readOnly) {
+            try AttachmentStore.importData(ds, Data([1, 2, 3]), suggestedName: "Pasted.png")
+        }
+        #expect(PersistWriteGateError.readOnly.localizedDescription == "Not available in a read-only copy of AA.")
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: ds.filesFolder.path)) ?? []
+        #expect(files.isEmpty)
     }
 
     @Test("Windows-safe leaf rules (01 §6.6)")

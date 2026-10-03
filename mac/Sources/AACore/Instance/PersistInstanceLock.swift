@@ -324,7 +324,10 @@ public final class PersistInstanceLock: @unchecked Sendable {
             close(d)
             return .unguarded(String(cString: strerror(e)))
         }
-        if network, !force {
+        // An empty lock file carries no claim: it was just created (by this open, or by a process that has not
+        // written its record yet — it then holds the flock, or will find ours). Without this, the first launch on a
+        // network volume would read "unreadable record, fresh mtime" and refuse itself for 90 s.
+        if network, !force, PersistInstanceLock.size(d) > 0 {
             let rec = PersistInstanceLock.readRecord(d)
             let m = PersistInstanceLock.mtime(d)
             if PersistLockClassifier.leaseHeld(rec, env: env, lockMTime: m) {
@@ -428,6 +431,12 @@ public final class PersistInstanceLock: @unchecked Sendable {
             if n == size, let rec = PersistLockRecord(json: Data(buf)) { return rec }
         }
         return nil
+    }
+
+    static func size(_ d: Int32) -> Int64 {
+        var st = stat()
+        guard fstat(d, &st) == 0 else { return 0 }
+        return Int64(st.st_size)
     }
 
     static func mtime(_ d: Int32) -> Date? {

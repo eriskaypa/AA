@@ -23,7 +23,9 @@ struct ReadOnlyInstanceBanner: View {
             .onAppear {
                 bridge.attach(env)
                 bridge.startReadOnly()
+                bridge.installReadOnlySaveInterceptor()
             }
+            .onDisappear { bridge.removeReadOnlySaveInterceptor() }
             .animation(.snappy, value: bridge.readOnlySession?.phase)
     }
 

@@ -1,6 +1,6 @@
 // Spec: 01 DATA-174 (read-only instance: live view of the editor's saves, texts), DATA-175 (5 s upgrade poll, keep the
 //       lock, "Edit Here" / "Stay Read-Only"), DATA-184 (shared-with-Windows evidence and its once-per-folder banner),
-//       §MP.3.5 (write gate texts), §MP.3.7 (constants), MP.7.4 R-1…R-4, MP.7.9.
+//       §MP.3.5 (write gate texts), §MP.3.7 (constants), MP.7.4 R-1…R-4, MP.7.9; DATA-177 / MP.7.3 L-1 (lease lost).
 import Foundation
 import Observation
 
@@ -34,6 +34,10 @@ public enum PersistReadOnlyText {
     public enum Phase: Sendable, Equatable { case readOnly, canEdit }
     public private(set) var phase: Phase = .readOnly
     public private(set) var isRunning = false
+    /// "Stay Read-Only" was chosen: the upgrade poll pauses until the live view sees another editor save (then the
+    /// next time that editor quits, "Edit Here" is offered again). Without the pause the poll would take the freed
+    /// lock back within 5 s and show the same banner again.
+    public private(set) var upgradeDeclined = false
 
     @ObservationIgnored private let dataFile: () -> URL
     @ObservationIgnored private let tryUpgrade: () -> Bool
@@ -78,12 +82,15 @@ public enum PersistReadOnlyText {
 
     /// One upgrade attempt (the 5 s poll body).
     public func pollOnce() {
-        guard phase == .readOnly else { return }
+        guard phase == .readOnly, !upgradeDeclined else { return }
         if tryUpgrade() { phase = .canEdit }
     }
 
-    /// "Stay Read-Only": the caller hands the lock back; polling continues.
-    public func stayReadOnly() { phase = .readOnly }
+    /// "Stay Read-Only": the caller hands the lock back; upgrade attempts pause until another editor is seen saving.
+    public func stayReadOnly() {
+        phase = .readOnly
+        upgradeDeclined = true
+    }
 
     /// Records the data file as currently on disk (after a reload).
     public func rememberDisk() {
@@ -96,7 +103,23 @@ public enum PersistReadOnlyText {
         let url = dataFile()
         guard table.check(url) != .ok else { return }
         table.acceptCurrent(url)
+        upgradeDeclined = false                                   // another editor is at work: offer again later
         onSaveSeen()
+    }
+}
+
+/// DATA-177 (MP.7.3 L-1): what a lease-mode editor does to its own model when another computer took the folder over.
+@MainActor public enum PersistLeaseLoss {
+    /// Keeps unsaved changes as a `-mine` conflict copy (only when there are any — DATA-181), then closes every write
+    /// path of this process: repository saving is suspended and settings become memory-only (read-only instance mode,
+    /// DATA-174). Returns the conflict copy's file name, if one was written.
+    @discardableResult
+    public static func enterReadOnly(_ store: AppStore, hasUnsavedChanges: Bool) -> String? {
+        var name: String?
+        if hasUnsavedChanges { name = try? ConflictCopies.saveMine(store) }
+        store.suspendSaving = true
+        store.dataStore.settings.isWriteGated = true
+        return name
     }
 }
 

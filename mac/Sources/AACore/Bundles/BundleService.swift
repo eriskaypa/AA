@@ -76,6 +76,7 @@ public enum PersistBundleError: Error, LocalizedError, Sendable, Equatable {
     // MARK: Smart import (DATA-043…045, §3.10)
 
     public static func importBundleSmart(_ ds: DataStore, from url: URL) throws -> ImportKind {
+        try PersistWriteGate.check(ds)                                          // DATA-174, §MP.3.5
         ds.prepareFolders()
         let staging = tempRoot.appending(path: "AA_import_" + UUID().netN, directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: staging) }
@@ -100,6 +101,7 @@ public enum PersistBundleError: Error, LocalizedError, Sendable, Equatable {
     // MARK: Shared import (DATA-058, §3.10)
 
     public static func importSharedBundle(_ ds: DataStore, from url: URL) throws {
+        try PersistWriteGate.check(ds)                                          // DATA-174, §MP.3.5
         ds.prepareFolders()
         let staging = tempRoot.appending(path: "AA_shared_" + UUID().netN, directoryHint: .isDirectory)
         defer { try? FileManager.default.removeItem(at: staging) }
@@ -122,6 +124,7 @@ public enum PersistBundleError: Error, LocalizedError, Sendable, Equatable {
     /// extracts the bundle over it, deletes an extracted `settings.json`, resets the active file, migrates and
     /// rewrites (errors in that last step ignored, as on Windows).
     public static func importFolderFromZipLegacy(_ ds: DataStore, from url: URL) throws {
+        try PersistWriteGate.check(ds)                                          // DATA-174, §MP.3.5
         let fm = FileManager.default
         let app = ds.appFolder
         try fm.createDirectory(at: app, withIntermediateDirectories: true)

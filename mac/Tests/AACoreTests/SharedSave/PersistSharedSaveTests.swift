@@ -279,6 +279,8 @@ struct PersistSharedSaveTests {
         #expect(b.ds.settings.values.sharedSaveFile == shared.path)
         #expect(b.coordinator.lastSeen == b.store.data.lastModified)
         #expect(b.coordinator.isRunning)
+        // Windows leaves the indicator flags alone on "Use ITS contents": "Shared save on" until the first sync.
+        #expect(b.coordinator.indicatorText == PersistSharedText.on)
         b.coordinator.stop()
         let c = try Copy(clock: clock, shared: nil, name: "From C")
         clock.advance(5)
@@ -288,6 +290,27 @@ struct PersistSharedSaveTests {
         #expect(c.coordinator.health == .off)
         #expect(c.ds.settings.values.sharedSaveFile == nil)
         #expect(!c.coordinator.isRunning)
+    }
+
+    @Test("A read-only copy cannot adopt a shared file (DATA-174): nothing is set, imported or written")
+    func adoptRefusedWhenGated() async throws {
+        let clock = PersistTestClock()
+        let (t, shared) = sharedFolder(); _ = t
+        let a = try Copy(clock: clock, shared: shared, name: "From A")
+        try a.coordinator.push(label: "Shared save")
+        let bundleBefore = try Data(contentsOf: shared)
+        let b = try Copy(clock: clock, shared: nil, name: "From B")
+        b.ds.settings.isWriteGated = true
+        await #expect(throws: PersistWriteGateError.readOnly) {
+            try await b.coordinator.adoptSharedFile(shared, useItsContents: true)
+        }
+        await #expect(throws: PersistWriteGateError.readOnly) {
+            try await b.coordinator.adoptSharedFile(shared, useItsContents: false)
+        }
+        #expect(b.ds.settings.values.sharedSaveFile == nil)
+        #expect(b.store.data.equipment.first?.name == "From B")
+        #expect(try Data(contentsOf: shared) == bundleBefore)
+        #expect(!b.coordinator.isRunning)
     }
 
     @Test("Adopt failure clears the setting and rethrows")

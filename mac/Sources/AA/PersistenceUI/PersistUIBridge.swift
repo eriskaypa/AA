@@ -17,6 +17,8 @@ import AACore
     private(set) var windowsWarningDismissed = false
     @ObservationIgnored private var contentBaseline: String?
     @ObservationIgnored private var subscriptions: [EventSubscription] = []
+    @ObservationIgnored private var saveMonitor: Any?
+    @ObservationIgnored private var presentingSaveSheet = false
 
     // MARK: Attach (once per environment)
 
@@ -34,7 +36,7 @@ import AACore
                 env.loadDataAndInitUI(reason: .reloadFromDisk, status: status)
                 self?.refreshConflictCopies()
             }
-            fp.onModeChange = { [weak self] _ in self?.refreshConflictCopies() }
+            fp.onModeChange = { [weak self] mode in self?.editingModeChanged(mode) }
             if !env.isReadOnlyInstance, !env.isSafeMode { fp.start() }
         }
         InstanceGuard.onLeaseLost = { [weak self] host in self?.leaseLost(host: host) }
@@ -47,6 +49,23 @@ import AACore
         windowsWarningDismissed = MacPreferences.shared.bool(PersistWindowsEvidence.warnedKey(env.dataStore.appFolder),
                                                              default: false)
         if env.isReadOnlyInstance { startReadOnly() }
+        refreshConflictCopies()
+    }
+
+    /// DATA-180 "Stop Editing Here" applies the DATA-174 list (§MP.3.5): the shared-save sync and the 5-minute autosave
+    /// stop while editing is stopped (each would only report "Saving is paused…") and start again on "Resume Editing".
+    private func editingModeChanged(_ mode: PersistConflictState.Mode) {
+        guard let env else { return }
+        switch mode {
+        case .stoppedEditing:
+            env.sharedSave.stop()
+            env.stopAutosaveTimer()
+        case .normal:
+            if !env.isReadOnlyInstance, !env.isSafeMode {
+                env.startAutosaveTimer()
+                env.sharedSave.start()
+            }
+        }
         refreshConflictCopies()
     }
 
@@ -163,22 +182,68 @@ import AACore
         return (try? JSONWriter.string(.object(o))) ?? ""
     }
 
+    // MARK: ⌘S in a read-only copy (DATA-174; REQ-W-PERSIST-02 workaround)
+
+    /// While this copy is read-only, ⌘S shows the DATA-174 warning sheet instead of reaching F3's Save (which would
+    /// write nothing and still report "Saved"). Installed by the read-only banner; idempotent.
+    func installReadOnlySaveInterceptor() {
+        guard saveMonitor == nil else { return }
+        saveMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard PersistReadOnlyKeys.isSave(event) else { return event }
+            let consumed = MainActor.assumeIsolated { () -> Bool in
+                let bridge = PersistUIBridge.shared
+                guard let env = bridge.env, env.isReadOnlyInstance,
+                      NSApp.modalWindow == nil, NSApp.keyWindow?.attachedSheet == nil else { return false }
+                Task { @MainActor in await bridge.presentReadOnlySaveSheet() }
+                return true
+            }
+            return consumed ? nil : event
+        }
+    }
+
+    func removeReadOnlySaveInterceptor() {
+        if let saveMonitor { NSEvent.removeMonitor(saveMonitor) }
+        saveMonitor = nil
+    }
+
+    /// "Read-only — not saving" with "OK" (default) and, when the editing copy runs on this Mac, "Switch to Other AA".
+    func presentReadOnlySaveSheet() async {
+        guard let env, !presentingSaveSheet else { return }
+        presentingSaveSheet = true
+        defer { presentingSaveSheet = false }
+        let canSwitch = otherAppPid != nil
+        var buttons = [AlertButton(title: "OK", role: .default)]
+        if canSwitch { buttons.append(AlertButton(title: PersistReadOnlyText.switchToOther)) }
+        let picked = await env.mainDialogs.alert(AlertSpec(title: PersistReadOnlyText.saveTitle,
+                                                           message: PersistReadOnlyText.saveMessage,
+                                                           style: .warning, buttons: buttons))
+        if canSwitch, picked == 1 { switchToOther() }
+    }
+
     // MARK: Lease lost (DATA-177)
 
     private func leaseLost(host: String) {
         guard let env else { return }
-        if env.store.isDirty || hasInMemoryChanges { _ = try? ConflictCopies.saveMine(env.store) }
+        PersistLeaseLoss.enterReadOnly(env.store, hasUnsavedChanges: env.store.isDirty || hasInMemoryChanges)
         env.sharedSave.stop()
+        env.stopAutosaveTimer()
         env.dataFileGuard?.stop()
         ReminderCenter.shared.stop()
         withAnimation(.snappy) { env.isReadOnlyInstance = true }
-        env.store.suspendSaving = true
-        env.settings.isWriteGated = true
         startReadOnly()
         refreshConflictCopies()
         Task { @MainActor in
             await env.mainDialogs.info(PersistReadOnlyText.leaseLostTitle, PersistReadOnlyText.leaseLostMessage(host: host))
         }
+    }
+}
+
+/// Key matching for the read-only ⌘S interception.
+enum PersistReadOnlyKeys {
+    /// ⌘S exactly (no ⇧/⌥/⌃ — ⇧⌘S is Save a Copy As, which stays available in a read-only copy).
+    nonisolated static func isSave(_ event: NSEvent) -> Bool {
+        let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        return mods == .command && event.charactersIgnoringModifiers?.lowercased() == "s"
     }
 }
 

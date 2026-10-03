@@ -231,6 +231,20 @@ struct PersistInstanceGuardTests {
         #expect(mine.lockKind == "lease")
         #expect(mine.mode == "Owner")
         #expect(l.heartbeat())
+        l.release()
+        // The very first launch on a network folder (no .aa.lock yet, an empty file just created) is not blocked by
+        // its own empty file; a garbage record with a fresh mtime still counts as held.
+        let fresh = TempFolder("persist-lease-first")
+        let first = lock(fresh.url, env(network: true, now: Date()))
+        #expect(first.acquire() == .owner)
+        #expect(PersistLockRecord(json: try fresh.read(".aa.lock"))?.lockKind == "lease")
+        first.release()
+        let garbage = TempFolder("persist-lease-garbage")
+        try Data("{\"Mode\":\"Own".utf8).write(to: garbage.file(".aa.lock"))
+        if case .blocked(nil, .unknown, true) = lock(garbage.url, env(network: true, now: Date())).acquire() {} else {
+            Issue.record("a fresh unreadable claim was not treated as held")
+        }
+        #expect(l.takeOver() == .owner)
         // Another computer takes over → the heartbeat notices and confirmLease reports it.
         try other.jsonData().write(to: t.file(".aa.lock"))
         #expect(!l.heartbeat())
@@ -334,6 +348,105 @@ struct PersistInstanceGuardTests {
         #expect(PersistLockRecord(json: try t.read(".aa.lock"))?.mode == "Released")
     }
 
+    @Test("G-9 analogue: a folder this process cannot write, with no .aa.lock → unguarded (launch continues)")
+    func unwritableFolder() throws {
+        let t = TempFolder("persist-g9")
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: t.url.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: t.url.path) }
+        guard case .unguarded(let why) = lock(t.url, env()).acquire() else { Issue.record("not unguarded"); return }
+        #expect(!why.isEmpty)
+        #expect(!FileManager.default.fileExists(atPath: t.file(".aa.lock").path))
+    }
+
+    @Test("§MP.3.1 a lock file this user cannot write is still locked through a read-only descriptor; no record")
+    func readOnlyLockFile() throws {
+        let t = TempFolder("persist-rofile")
+        let foreign = PersistLockRecord(mode: "Released", pid: 77, hostId: "x", host: "Other", user: "ana", uid: 502)
+        try foreign.jsonData().write(to: t.file(".aa.lock"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o444], ofItemAtPath: t.file(".aa.lock").path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: t.file(".aa.lock").path) }
+        let before = try t.read(".aa.lock")
+        let a = lock(t.url, env())
+        #expect(a.acquire() == .owner)
+        #expect(try t.read(".aa.lock") == before)                       // the record could not be rewritten
+        let b = lock(t.url, env(pid: 5151))
+        if case .blocked = b.acquire() {} else { Issue.record("second process allowed") }
+        a.release()
+        #expect(try t.read(".aa.lock") == before)
+    }
+
+    @Test("G-10 the lock comes free while blocked → retry makes this process the editor; DATA-175 Stay Read-Only hands it back")
+    func retryAndRelinquish() throws {
+        let t = TempFolder("persist-g10")
+        defer { InstanceGuard.release() }
+        let other = PersistInstanceLock(lockURL: t.file(".aa.lock"), env: env(pid: 999_999))
+        #expect(other.acquire() == .owner)
+        #expect(InstanceGuard.acquire(appFolder: t.url) != .editor)
+        #expect(InstanceGuard.folderBlocked != nil)
+        #expect(!InstanceGuard.isEditor)
+        #expect(!InstanceGuard.retryFolderLock())                         // the 1 s re-check while the alert is up
+        other.release()                                                   // the other copy quits
+        #expect(InstanceGuard.retryFolderLock())
+        #expect(InstanceGuard.isEditor)
+        #expect(InstanceGuard.folderBlocked == nil)
+        let rec = try #require(PersistLockRecord(json: try t.read(".aa.lock")))
+        #expect(rec.pid == getpid())
+        #expect(rec.mode == "Owner")
+        // A third process is now blocked (DATA-175: the lock is kept, so nobody else can take it)…
+        let third = PersistInstanceLock(lockURL: t.file(".aa.lock"), env: env(pid: 888_888))
+        if case .blocked = third.acquire() {} else { Issue.record("third process allowed") }
+        // …until "Stay Read-Only" hands it back.
+        InstanceGuard.relinquishFolderLock()
+        #expect(!InstanceGuard.isEditor)
+        #expect(InstanceGuard.folderBlocked != nil)
+        #expect(third.acquire() == .owner)
+        third.release()
+    }
+
+    @Test("L-1 lease lost while asleep: wake check → onLeaseLost(host); -mine copy only when dirty; read-only gate")
+    func leaseLostAfterWake() throws {
+        let t = TempFolder("persist-l1")
+        let savedEnv = InstanceGuard.environment
+        let savedHandler = InstanceGuard.onLeaseLost
+        InstanceGuard.environment = env(network: true, pid: getpid())
+        defer {
+            InstanceGuard.release()
+            InstanceGuard.environment = savedEnv
+            InstanceGuard.onLeaseLost = savedHandler
+        }
+        var lostTo: [String] = []
+        InstanceGuard.onLeaseLost = { lostTo.append($0) }
+        #expect(InstanceGuard.acquire(appFolder: t.url) == .editor)
+        #expect(InstanceGuard.folderLock?.isLeaseMode == true)
+        InstanceGuard.checkLeaseAfterWake()                               // still ours: nothing happens
+        #expect(lostTo.isEmpty)
+        #expect(InstanceGuard.isEditor)
+        let foreign = PersistLockRecord(lockKind: "lease", pid: 31337, heartbeatUtc: PersistInstanceGuardTests.now,
+                                        hostId: "0123456789abcdef", host: "Engine-Mac", user: "chief", uid: 501)
+        try foreign.jsonData().write(to: t.file(".aa.lock"))               // rewritten in place by the other Mac
+        InstanceGuard.checkLeaseAfterWake()
+        #expect(lostTo == ["Engine-Mac"])
+        #expect(!InstanceGuard.isEditor)
+        #expect(InstanceGuard.folderBlocked?.lease == true)
+        // The model side (UI bridge → PersistLeaseLoss): a clean model writes no copy…
+        let clean = StoreFactory.make()
+        #expect(PersistLeaseLoss.enterReadOnly(clean.store, hasUnsavedChanges: false) == nil)
+        #expect(ConflictCopies.list(clean.dataStore).isEmpty)
+        #expect(clean.store.suspendSaving)
+        #expect(clean.dataStore.settings.isWriteGated)
+        // …a dirty one keeps its edits as conflicts/data-…-mine.json.
+        let dirty = StoreFactory.make()
+        dirty.store.data.equipment.append(Equipment(name: "Unsaved pump"))
+        dirty.store.markDirty()
+        let name = try #require(PersistLeaseLoss.enterReadOnly(dirty.store, hasUnsavedChanges: dirty.store.isDirty))
+        #expect(name.hasSuffix("-mine.json"))
+        let copy = try #require(ConflictCopies.list(dirty.dataStore).first)
+        #expect(ConflictCopies.peekData(copy, dirty.dataStore)?.equipment.first?.name == "Unsaved pump")
+        #expect(PersistReadOnlyText.leaseLostTitle == "Another copy of AA took over this data folder")
+        #expect(PersistReadOnlyText.leaseLostMessage(host: "Engine-Mac")
+                == "While this Mac was asleep, the copy of AA on “Engine-Mac” took over editing. This copy is now read-only so neither overwrites the other.")
+    }
+
     @Test("Result mapping per holder (DECISIONS: runningHere forwards; others get the alert)")
     func resultMapping() {
         let d = PersistInstanceGuardTests.now
@@ -417,6 +530,10 @@ struct PersistInstanceGuardTests {
         #expect(s.phase == .canEdit)
         s.stayReadOnly()
         #expect(s.phase == .readOnly)
+        #expect(s.upgradeDeclined)
+        // Stay Read-Only is not undone by the next 5 s poll (the lock it just handed back is free).
+        s.pollOnce()
+        #expect(s.phase == .readOnly)
         s.checkDisk()
         #expect(saves == 0)
         try AtomicWrite.write(Data(#"{"Equipment":[]}"#.utf8), to: file)
@@ -424,6 +541,10 @@ struct PersistInstanceGuardTests {
         #expect(saves == 1)
         s.checkDisk()
         #expect(saves == 1)
+        // Another editor saved: once it quits, Edit Here is offered again.
+        #expect(!s.upgradeDeclined)
+        s.pollOnce()
+        #expect(s.phase == .canEdit)
     }
 
     @Test("The directory watcher fires after its debounce and re-arms when the folder comes back")

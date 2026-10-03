@@ -320,6 +320,28 @@ struct PersistBundleServiceTests {
         #expect(try Data(contentsOf: ds.defaultDataFile) == before)
     }
 
+    @Test("A closed write gate refuses every import into the data folder before anything changes (DATA-174)")
+    func writeGateRefusesImports() throws {
+        let source = try folder(files: ["a.pdf": "aaaa"])
+        let (t, zip) = zipURL(); _ = t
+        try BundleService.exportFolderToZipSync(source.dataStore, to: zip, includeAttachments: true)
+        let made = try folder(files: ["mine.pdf": "m"])
+        let ds = made.dataStore
+        let dataBefore = try Data(contentsOf: ds.defaultDataFile)
+        ds.settings.isWriteGated = true
+        defer { ds.settings.isWriteGated = false }
+        #expect(throws: PersistWriteGateError.readOnly) { _ = try BundleService.importBundleSmart(ds, from: zip) }
+        #expect(throws: PersistWriteGateError.readOnly) { try BundleService.importSharedBundle(ds, from: zip) }
+        #expect(throws: PersistWriteGateError.readOnly) { try BundleService.importFolderFromZipLegacy(ds, from: zip) }
+        #expect(throws: PersistWriteGateError.readOnly) { _ = try ds.applySyncedData(dataBefore) }
+        #expect(try Data(contentsOf: ds.defaultDataFile) == dataBefore)
+        #expect(persistListing(ds.filesFolder) == ["mine.pdf": 1])
+        // Exports write outside the data folder and stay available in a read-only copy (DATA-174 "Still available").
+        let (t2, out) = zipURL("ro-export.zip"); _ = t2
+        try BundleService.exportFolderToZipSync(ds, to: out, includeAttachments: true)
+        #expect(Set(try PersistZip.names(out)) == ["data.json", "source.json", "files/mine.pdf"])
+    }
+
     // MARK: Legacy import (DATA-047)
 
     @Test("Legacy full-wipe import keeps .aa.lock and the Google client secret, drops settings.json")
