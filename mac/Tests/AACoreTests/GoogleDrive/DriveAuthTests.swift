@@ -293,3 +293,88 @@ import Testing
         #expect(short == .api(status: 400, message: "Bad", reason: nil))
     }
 }
+
+/// The interactive loopback flow end to end: a fake "browser" follows the consent URL's redirect to 127.0.0.1 and
+/// the token endpoint is the mock transport (no network).
+@Suite struct DriveInteractiveSignInTests {
+    final class Recorder: @unchecked Sendable {
+        let lock = NSLock()
+        var events: [String] = []
+        var consentURLs: [URL] = []
+        func add(_ e: String) { lock.withLock { events.append(e) } }
+    }
+
+    private static func follow(_ url: URL, code: String?, error: String? = nil) async -> Bool {
+        let q = DriveFixture.query(URLRequest(url: url))
+        guard let redirect = q["redirect_uri"], let state = q["state"] else { return false }
+        var target = "\(redirect)?state=\(state)"
+        if let code { target += "&code=\(code)" }
+        if let error { target += "&error=\(error)" }
+        Task.detached { _ = try? await URLSession.shared.data(from: URL(string: target)!) }
+        return true
+    }
+
+    // TV: §3.1.14 steps 3–4 and 6 (PKCE exchange, retry with prompt=consent when no refresh token, token stored)
+    @Test func interactiveFlowStoresAnOfflineToken() async throws {
+        let f = TempFolder("aa-signin")
+        let rec = Recorder()
+        var exchanges = 0
+        let transport = DriveMockTransport { r, _ in
+            let body = String(decoding: r.httpBody ?? Data(), as: UTF8.self)
+            #expect(body.contains("grant_type=authorization_code") && body.contains("code_verifier="))
+            #expect(body.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A"))
+            exchanges += 1
+            if exchanges == 1 {   // no refresh token on the first round → one retry with prompt=consent
+                return .init(status: 200, body: Data(#"{"access_token":"A1","expires_in":3599,"token_type":"Bearer"}"#.utf8))
+            }
+            return .init(status: 200, body: Data(#"{"access_token":"A2","expires_in":3599,"refresh_token":"R2","token_type":"Bearer"}"#.utf8))
+        }
+        let hooks = DriveSignInHooks(
+            started: { url, _ in rec.add("started"); rec.lock.withLock { rec.consentURLs.append(url) } },
+            ended: { rec.add("ended") },
+            openBrowser: { url in await DriveInteractiveSignInTests.follow(url, code: "4/xyz") })
+        let secretFile = try f.write("google_client_secret.json", DriveFixture.clientSecret)
+        let vault = DriveTokenVault(folder: f.url.appending(path: "google-token"), secrets: InMemorySecretStore())
+        let auth = DriveAuthorizer(clientSecretFile: secretFile, vault: vault, transport: transport,
+                                   clock: FixedClock(local: "2026-09-30T12:00:00", zone: TimeZone(identifier: "UTC")!),
+                                   hooks: hooks)
+        await #expect(throws: DriveError.interactiveSignInRequired) { try await auth.accessToken(interactive: false) }
+        #expect(FileManager.default.fileExists(atPath: vault.folder.path))   // created by the first Drive action
+        let token = try await auth.accessToken(interactive: true)
+        #expect(token == "A2")
+        #expect(vault.hasToken && vault.load()?.refreshToken == "R2")
+        #expect(rec.events == ["started", "ended", "started", "ended"])
+        #expect(DriveFixture.query(URLRequest(url: rec.consentURLs[0]))["prompt"] == nil)
+        #expect(DriveFixture.query(URLRequest(url: rec.consentURLs[1]))["prompt"] == "consent")
+    }
+
+    // TV: §3.1.14 step 4 (consent refused) and §6.3 (Cancel / timeout)
+    @Test func refusedCancelledAndTimedOut() async throws {
+        let f = TempFolder("aa-signin")
+        let secretFile = try f.write("google_client_secret.json", DriveFixture.clientSecret)
+        let transport = DriveMockTransport { _, _ in .init(status: 500) }
+        let clock = FixedClock(local: "2026-09-30T12:00:00", zone: TimeZone(identifier: "UTC")!)
+        func make(_ hooks: DriveSignInHooks, timeout: Duration = .seconds(300)) -> DriveAuthorizer {
+            DriveAuthorizer(clientSecretFile: secretFile,
+                            vault: DriveTokenVault(folder: f.url.appending(path: "google-token"), secrets: InMemorySecretStore()),
+                            transport: transport, clock: clock, hooks: hooks, signInTimeout: timeout)
+        }
+        let denied = make(DriveSignInHooks(started: { _, _ in }, ended: {},
+                                           openBrowser: { url in await DriveInteractiveSignInTests.follow(url, code: nil, error: "access_denied") }))
+        do {
+            _ = try await denied.accessToken(interactive: true)
+            Issue.record("expected access_denied")
+        } catch let e as DriveError {
+            #expect(e == .oauth(code: "access_denied", description: ""))
+            #expect(e.localizedDescription.hasSuffix(DriveError.setupHint))
+        }
+        let cancelled = make(DriveSignInHooks(started: { _, cancel in cancel() }, ended: {}, openBrowser: { _ in true }))
+        await #expect(throws: DriveError.signInCancelled) { try await cancelled.accessToken(interactive: true) }
+        let slow = make(DriveSignInHooks(started: { _, _ in }, ended: {}, openBrowser: { _ in true }), timeout: .milliseconds(200))
+        await #expect(throws: DriveError.signInTimedOut) { try await slow.accessToken(interactive: true) }
+        let noClient = DriveAuthorizer(clientSecretFile: f.file("missing.json"),
+                                       vault: DriveTokenVault(folder: f.url.appending(path: "t"), secrets: InMemorySecretStore()),
+                                       transport: transport, clock: clock, hooks: .none)
+        await #expect(throws: DriveError.notConfigured) { try await noClient.accessToken(interactive: true) }
+    }
+}

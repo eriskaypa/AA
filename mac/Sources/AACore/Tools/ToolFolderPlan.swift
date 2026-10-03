@@ -175,6 +175,19 @@ public struct ToolFolderPlan: Sendable, Equatable {
         return r
     }
 
+    /// `Directory.Exists(path)` (false for blank paths and regular files).
+    public static func directoryExists(_ path: String) -> Bool {
+        guard !NetText.isBlank(path) else { return false }
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: path, isDirectory: &isDir) && isDir.boolValue
+    }
+
+    /// TOOLS-049 step 3: create the missing base location with every intermediate level.
+    public static func createBase(_ path: String) throws {
+        try FileManager.default.createDirectory(at: URL(filePath: path, directoryHint: .isDirectory),
+                                                withIntermediateDirectories: true)
+    }
+
     // MARK: Messages (exact)
 
     public static let title = "Folder builder"

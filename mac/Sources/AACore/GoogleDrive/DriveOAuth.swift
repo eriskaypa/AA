@@ -207,21 +207,21 @@ public final class DriveLoopbackReceiver: @unchecked Sendable {
 
 /// Callbacks the UI provides for the interactive part (the waiting sheet with Cancel, 14 §6.3).
 public struct DriveSignInHooks: Sendable {
-    /// Called when the browser is about to open; `cancel` aborts the sign-in.
-    public var started: @Sendable (_ cancel: @escaping @Sendable () -> Void) async -> Void
+    /// Called when the browser is about to open with the consent URL; `cancel` aborts the sign-in.
+    public var started: @Sendable (_ consentURL: URL, _ cancel: @escaping @Sendable () -> Void) async -> Void
     /// Called when the interactive part ended (success, failure or cancel).
     public var ended: @Sendable () async -> Void
     /// Opens the consent URL in the default browser.
     public var openBrowser: @Sendable (URL) async -> Bool
 
-    public init(started: @escaping @Sendable (_ cancel: @escaping @Sendable () -> Void) async -> Void,
+    public init(started: @escaping @Sendable (_ consentURL: URL, _ cancel: @escaping @Sendable () -> Void) async -> Void,
                 ended: @escaping @Sendable () async -> Void,
                 openBrowser: @escaping @Sendable (URL) async -> Bool) {
         self.started = started; self.ended = ended; self.openBrowser = openBrowser
     }
 
     /// No UI: interactive sign-in is refused (tests, background).
-    public static let none = DriveSignInHooks(started: { _ in }, ended: {}, openBrowser: { _ in false })
+    public static let none = DriveSignInHooks(started: { _, _ in }, ended: {}, openBrowser: { _ in false })
 }
 
 /// Hands out access tokens: cached → refreshed → interactive loopback flow. One interactive flow at a time; other
@@ -339,7 +339,7 @@ public actor DriveAuthorizer {
             receiver.cancel(.invalidClientFile)
             throw DriveError.invalidClientFile
         }
-        await hooks.started { receiver.cancel(.signInCancelled) }
+        await hooks.started(url) { receiver.cancel(.signInCancelled) }
         let timeout = signInTimeout
         let timer = Task {
             try? await Task.sleep(for: timeout)
