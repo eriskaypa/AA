@@ -141,7 +141,7 @@ struct FileBankTable: View {
             }
         }
         .tableStyle(.inset)
-        .alternatingRowBackgrounds(.enabled)
+        .alternatingRowBackgrounds(.disabled)
         .environment(\.defaultMinListRowHeight, 22)
         .contextMenu(forSelectionType: FileBankRow.ID.self) { ids in
             FileBankContextMenu(ids: ids, rows: rows, isShared: isShared, actions: actions)
@@ -286,13 +286,14 @@ struct FileBankGrid: View {
                 .background(selected ? AAColor.selectionBg.opacity(0.55) : .clear,
                             in: RoundedRectangle(cornerRadius: AARadius.tile, style: .continuous))
             Text(r.file.name)
-                .font(.system(size: AAType.caption, weight: selected ? .semibold : .regular))
-                .foregroundStyle(selected ? Color.white : AAColor.fg)
+                .font(.aaMono(AAType.caption, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? AAColor.selectionFg : AAColor.fg)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .padding(.horizontal, 5).padding(.vertical, 1)
-                .background(selected ? AAColor.tint : .clear, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+                .background(selected ? AAColor.selectionBg : .clear,
+                            in: RoundedRectangle(cornerRadius: AARadius.control, style: .continuous))
             HStack(spacing: 3) {
                 if !r.file.linkedItemIds.isEmpty {
                     Image(systemName: "link").imageScale(.small).foregroundStyle(AAColor.tint)
@@ -300,7 +301,7 @@ struct FileBankGrid: View {
                 Text(isShared ? (r.owner?.label ?? "") : r.file.sourceLabel)
                     .lineLimit(1).truncationMode(.middle)
             }
-            .font(.system(size: 9.5))
+            .font(.aaMono(AAType.caption))
             .foregroundStyle(AAColor.muted)
         }
         .frame(maxWidth: .infinity)
