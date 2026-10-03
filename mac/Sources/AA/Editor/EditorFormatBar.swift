@@ -17,7 +17,9 @@ struct EditorFormatBar: View {
     var body: some View {
         EditorFlowLayout(spacing: 6, lineSpacing: 5) {
             EditorBarGroup {
-                EditorFontFamilyMenu(family: s.family) { controller.applyFontFamily($0) }
+                EditorFontFamilyMenu(family: s.family, showFonts: { controller.perform(.showFonts) }) {
+                    controller.applyFontFamily($0)
+                }
                     .equatable()
                     .help("Font")
                 EditorFontSizeCombo(controller: controller, size: s.size)
@@ -61,7 +63,7 @@ struct EditorFormatBar: View {
             EditorBarGroup {
                 bar("link", "Insert hyperlink (⌘K)", .insertLink)
                 EditorTablePickerButton(controller: controller)
-                bar("list.bullet.indent", EditorSavedListInsert.buttonHelp + " (⌥⌘L)", .insertSavedList)
+                bar("text.badge.plus", EditorSavedListInsert.buttonHelp + " (⌥⌘L)", .insertSavedList)
             }
 
             EditorBarGroup {
@@ -202,7 +204,7 @@ struct EditorColorButton: View {
                     .foregroundStyle(AAColor.fg)
                 RoundedRectangle(cornerRadius: 1)
                     .fill(barColor)
-                    .overlay(RoundedRectangle(cornerRadius: 1).strokeBorder(AAColor.border, lineWidth: 0.5))
+                    .overlay(RoundedRectangle(cornerRadius: 1).strokeBorder(AAColor.muted.opacity(0.55), lineWidth: 0.5))
                     .frame(width: 14, height: 3)
             }
             .frame(width: 30, height: 22)
@@ -436,12 +438,15 @@ struct EditorZoomMenu: View {
 /// The family menu: shows the stored token (XD.5), lists every installed family once per process (CONT-020).
 struct EditorFontFamilyMenu: View, Equatable {
     let family: String?
+    let showFonts: () -> Void
     let apply: (String) -> Void
 
     nonisolated static func == (a: EditorFontFamilyMenu, b: EditorFontFamilyMenu) -> Bool { a.family == b.family }
 
     var body: some View {
         Menu {
+            Button("Show Fonts… (⌘T)") { showFonts() }
+            Divider()
             if let family, !EditorFontCatalog.isInstalled(family) {
                 Section("Stored in this note (shown with a substitute)") {
                     Button(family) { apply(family) }
@@ -475,8 +480,11 @@ struct EditorFontSizeCombo: NSViewRepresentable {
         var applying = false
         init(controller: EditorController) { self.controller = controller }
 
+        /// K-16: a typed size applies on commit. Leaving the box without changing what it shows applies nothing
+        /// (K-7: never stamp an identical size onto the selection).
         @MainActor func commit(_ box: NSComboBox) {
-            guard !applying, let v = EditorFontCatalog.parseSize(box.stringValue) else { return }
+            guard !applying, box.stringValue != EditorFontCatalog.displaySize(controller.summary.size),
+                  let v = EditorFontCatalog.parseSize(box.stringValue) else { return }
             applying = true
             controller.applyFontSize(v)
             applying = false
@@ -488,7 +496,7 @@ struct EditorFontSizeCombo: NSViewRepresentable {
             MainActor.assumeIsolated {
                 guard let box = notification.object as? NSComboBox, box.indexOfSelectedItem >= 0,
                       let v = box.itemObjectValue(at: box.indexOfSelectedItem) as? String,
-                      let size = EditorFontCatalog.parseSize(v) else { return }
+                      let size = EditorFontCatalog.parseSize(v), size != controller.summary.size else { return }
                 applying = true
                 controller.applyFontSize(size)
                 applying = false

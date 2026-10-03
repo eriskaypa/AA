@@ -137,6 +137,34 @@ public struct EditorSelectionSummary: Equatable {
         return out
     }
 
+    /// Attributes that describe one stored piece of text and must never spread to newly typed or pasted text:
+    /// a list marker (the writer drops marker text, so typed text carrying it would vanish on save), an in-run
+    /// newline's original sequence and an opaque preserved fragment (the writer would repeat them), and attachments.
+    public static let nonInheritableKeys: [NSAttributedString.Key] = [.aaListMarker, .aaInRunNewline, .aaPreservedXaml,
+                                                                     .attachment]
+
+    /// Typing attributes safe to type with at `caret` (05 §6.4, §7.4, XD.2.8): never a list marker, in-run newline,
+    /// preserved fragment, attachment or lock. Right after a list marker (the start of an item's text) the item's
+    /// first character supplies the attributes, so typed text matches the item and not the marker glyph.
+    public static func cleanTypingAttributes(_ typing: [NSAttributedString.Key: Any], in s: NSAttributedString,
+                                             caret: Int) -> [NSAttributedString.Key: Any] {
+        var a = typing
+        if a[.aaListMarker] != nil, caret >= 0, caret < s.length {
+            let next = s.attributes(at: caret, effectiveRange: nil)
+            let ch = (s.string as NSString).character(at: caret)
+            if next[.aaListMarker] == nil, ch != 0x0A, ch != 0x2029, ch != 0x0D {
+                a = next
+            }
+        }
+        for k in nonInheritableKeys { a[k] = nil }
+        return EditorLocking.unlockedTypingAttributes(a)
+    }
+
+    /// Whether `typing` carries anything `cleanTypingAttributes` would remove.
+    public static func needsCleaning(_ typing: [NSAttributedString.Key: Any]) -> Bool {
+        nonInheritableKeys.contains { typing[$0] != nil } || EditorLocking.isLocked(typing)
+    }
+
     // MARK: Decisions (WPF toggle semantics)
 
     /// Runs that count for "is the selection uniformly X": no list markers and not newline-only (unless the range

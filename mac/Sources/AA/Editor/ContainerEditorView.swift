@@ -103,6 +103,17 @@ struct EditorPane: View {
         }
     }
 
+    /// Notice text with the lock emoji drawn as SF Symbols.
+    static func noticeText(_ raw: String) -> Text {
+        let body = raw.hasPrefix("🔒 ") ? String(raw.dropFirst(2)) : raw
+        let parts = body.components(separatedBy: "🔓")
+        var t = Text(verbatim: parts[0])
+        for p in parts.dropFirst() {
+            t = Text("\(t)\(Image(systemName: "lock.open"))\(Text(verbatim: p))")
+        }
+        return t
+    }
+
     @ViewBuilder private var noticeView: some View {
         if let n = controller.notice {
             HStack(spacing: 8) {
@@ -110,8 +121,9 @@ struct EditorPane: View {
                       : n.style == .warning ? "lock.fill" : "info.circle.fill")
                     .foregroundStyle(n.style == .success ? AAColor.Status.ok
                                      : n.style == .warning ? AAColor.Status.dueSoon : AAColor.tint)
-                // The lock hint's leading emoji is replaced by the symbol on the left.
-                Text(verbatim: n.text.hasPrefix("🔒 ") ? String(n.text.dropFirst(2)) : n.text)
+                // The lock hint's emoji are icons (ARCH §8.5): the leading 🔒 is the symbol on the left, the 🔓 in
+                // the sentence is the format bar's `lock.open` symbol inline.
+                Self.noticeText(n.text)
                     .font(.system(size: AAType.small, weight: .medium))
                     .foregroundStyle(Color(nsColor: EditorFormatting.editorInk))
                     .fixedSize(horizontal: false, vertical: true)

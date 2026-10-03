@@ -211,6 +211,7 @@ final class EditorController: NSObject {
         self.container = container
         hasContainer = true
         orphaned = false
+        parkedByOtherEditor = false                             // parked was about the previous container
         // Claim first: an older editor of the same container flushes before this one reads it (§6.12).
         EditorBindingRegistry.claim(self, container: container)
         load()
@@ -310,7 +311,7 @@ final class EditorController: NSObject {
         if storage.length == 0 {
             return EditorFormatting.defaultTypingAttributes(paragraphStyle: Self.defaultParagraphStyle())
         }
-        return EditorLocking.unlockedTypingAttributes(storage.attributes(at: 0, effectiveRange: nil))
+        return EditorFormatting.cleanTypingAttributes(storage.attributes(at: 0, effectiveRange: nil), in: storage, caret: 0)
     }
 
     private func applyEditability() {
@@ -324,6 +325,8 @@ final class EditorController: NSObject {
         guard !parkedByOtherEditor else { return }
         session.flushPending()
         parkedByOtherEditor = true
+        // `EditorFlushCenter.holder(of:)` must name the editor that holds the container now (CONT-008).
+        if let token = flushToken { flushCenter?.rebind(token, to: nil) }
         applyEditability()
     }
 
@@ -331,6 +334,7 @@ final class EditorController: NSObject {
     func unpark() {
         guard parkedByOtherEditor else { return }
         parkedByOtherEditor = false
+        if let token = flushToken, let c = container { flushCenter?.rebind(token, to: c) }
         if container != nil, !orphaned { load() } else { applyEditability() }
     }
 
@@ -1343,11 +1347,13 @@ extension EditorController: NSTextViewDelegate, NSTextStorageDelegate {
         guard !loading, let tv = _textView else { return }
         var typing = tv.typingAttributes
         var changed = false
-        if EditorLocking.isLocked(typing) {                  // boundaries stay editable (§7.4)
-            typing = EditorLocking.unlockedTypingAttributes(typing)
+        let sel = tv.selectedRange()
+        // Boundaries stay editable (§7.4) and typed text never inherits a list marker, an in-run newline or a
+        // preserved fragment (the writer would drop or repeat it).
+        if EditorFormatting.needsCleaning(typing) {
+            typing = EditorFormatting.cleanTypingAttributes(typing, in: storage, caret: sel.location)
             changed = true
         }
-        let sel = tv.selectedRange()
         if sel.length == 0, typing[.link] != nil {
             // Typing at the end of a link does not extend it.
             let next = sel.location < storage.length ? storage.attribute(.link, at: sel.location, effectiveRange: nil) : nil

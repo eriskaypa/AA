@@ -216,6 +216,56 @@ import Testing
         #expect(b[.aaFontFamilyName] as? String == "Consolas")
     }
 
+    // TV: 05 §6.4 / §4.3.7 rule 6 — text typed right after a list marker takes the item's first character, never the
+    // marker tag (the writer drops marker text, so a tagged typed run would vanish on save)
+    @Test func typingAfterAListMarkerTakesTheItemText() {
+        let s = NSMutableAttributedString()
+        var marker = EditorFx.base
+        marker[.aaListMarker] = true
+        marker[.foregroundColor] = NSColor.systemGray
+        s.append(NSAttributedString(string: "\t•\t", attributes: marker))
+        var item = EditorFx.base
+        item[.font] = EditorFormatting.font(EditorFormatting.defaultFont(), bold: true)
+        s.append(NSAttributedString(string: "Check oil\n", attributes: item))
+        let typing = s.attributes(at: 2, effectiveRange: nil)            // what NSTextView takes at caret 3
+        #expect(EditorFormatting.needsCleaning(typing))
+        let clean = EditorFormatting.cleanTypingAttributes(typing, in: s, caret: 3)
+        #expect(clean[.aaListMarker] == nil)
+        #expect(EditorFormatting.isBold(clean[.font] as? NSFont))
+        #expect((clean[.foregroundColor] as? NSColor) == EditorFormatting.editorInk)
+        // An empty item (marker then the terminator): only the tag goes.
+        let empty = NSMutableAttributedString(string: "\t•\t", attributes: marker)
+        empty.append(NSAttributedString(string: "\n", attributes: EditorFx.base))
+        let c2 = EditorFormatting.cleanTypingAttributes(empty.attributes(at: 2, effectiveRange: nil), in: empty, caret: 3)
+        #expect(c2[.aaListMarker] == nil && (c2[.foregroundColor] as? NSColor) == NSColor.systemGray)
+    }
+
+    // TV: XD.3 / CONT-166 — in-run newline sequences, preserved fragments, attachments and locks never spread
+    @Test func typingNeverInheritsStoredOnlyAttributes() {
+        var a = EditorFx.base
+        a[.aaInRunNewline] = "\r\n"
+        a[.aaPreservedXaml] = "<Figure/>"
+        a[.attachment] = NSTextAttachment()
+        a[.backgroundColor] = EditorLocking.sentinelColor
+        let s = NSAttributedString(string: "x", attributes: a)
+        #expect(EditorFormatting.needsCleaning(a))
+        let clean = EditorFormatting.cleanTypingAttributes(a, in: s, caret: 1)
+        #expect(clean[.aaInRunNewline] == nil && clean[.aaPreservedXaml] == nil && clean[.attachment] == nil)
+        #expect(clean[.backgroundColor] == nil)
+        #expect(clean[.aaFontFamilyName] as? String == "Consolas")
+        #expect(!EditorFormatting.needsCleaning(EditorFx.base))
+        // Plain paste and link insertion use the same rule.
+        var typing = EditorFx.base
+        typing[.aaListMarker] = true
+        typing[.aaInRunNewline] = "\r\n"
+        let p = EditorRichSanitiser.plain("abc", typing: typing)
+        #expect(p.attribute(.aaListMarker, at: 0, effectiveRange: nil) == nil)
+        #expect(p.attribute(.aaInRunNewline, at: 0, effectiveRange: nil) == nil)
+        let edit = EditorLinkRules.insertion(url: "https://x.org/", in: NSAttributedString(), selection: NSRange(location: 0, length: 0),
+                                             typing: typing, linkColor: EditorLinkRules.editorLinkColor)
+        #expect(edit.replacement.attribute(.aaListMarker, at: 0, effectiveRange: nil) == nil)
+    }
+
     @Test func numberedListDetection() {
         #expect(EditorFormatting.isNumbered(NSTextList(markerFormat: .decimal, options: 0)))
         #expect(EditorFormatting.isNumbered(NSTextList(markerFormat: .lowercaseAlpha, options: 0)))

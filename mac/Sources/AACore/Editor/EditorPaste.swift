@@ -161,6 +161,7 @@ public struct EditorExtractedImage {
     /// CONT-034 paste text only: the text with the destination's typing attributes (never a lock or a link).
     public static func plain(_ s: String, typing: [NSAttributedString.Key: Any]) -> NSAttributedString {
         var a = EditorLocking.unlockedTypingAttributes(typing)
+        for k in EditorFormatting.nonInheritableKeys { a[k] = nil }
         if a[.link] != nil { a = EditorLinkRules.removingLink(a) }
         return NSAttributedString(string: EditorPaste.plainText(s), attributes: a)
     }

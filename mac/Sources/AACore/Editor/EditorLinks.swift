@@ -110,6 +110,7 @@ public enum EditorLinkRules {
                                             linkColor: NSColor) -> EditorTextEdit {
         if selection.length == 0 {
             var attrs = EditorLocking.unlockedTypingAttributes(typing)
+            for k in EditorFormatting.nonInheritableKeys { attrs[k] = nil }
             attrs = linkAttributes(attrs, url: normalised, linkColor: linkColor)
             let str = NSAttributedString(string: normalised, attributes: attrs)
             return EditorTextEdit(range: selection, replacement: str,

@@ -250,6 +250,24 @@ struct EditorSelfTestView: View {
         tv.setSelectedRange(NSRange(location: 0, length: 0))
         c.perform(.bigger)
         check("Bigger steps the typing size by 0.75", ((tv.typingAttributes[.font] as? NSFont)?.pointSize ?? 0) == 14.75)
+
+        // Text typed at the start of a list item (right after its marker) is item text, never marker text.
+        let list = NSMutableAttributedString()
+        let p = NSMutableParagraphStyle()
+        p.textLists = [NSTextList(markerFormat: .disc, options: 0)]
+        var marker = base
+        marker[.paragraphStyle] = p
+        marker[.aaListMarker] = true
+        list.append(NSAttributedString(string: "\t•\t", attributes: marker))
+        var itemAttrs = base
+        itemAttrs[.paragraphStyle] = p
+        list.append(NSAttributedString(string: "Check oil\n", attributes: itemAttrs))
+        c.showPreview(list, selection: NSRange(location: 3, length: 0))
+        tv.setSelectedRange(NSRange(location: 0, length: 0))
+        tv.setSelectedRange(NSRange(location: 3, length: 0))
+        tv.insertText("Z", replacementRange: tv.selectedRange())
+        check("typing after a list marker is item text", storage.attribute(.aaListMarker, at: 3, effectiveRange: nil) == nil
+              && storage.string.hasPrefix("\t•\tZCheck"))
         return out
     }
 }
