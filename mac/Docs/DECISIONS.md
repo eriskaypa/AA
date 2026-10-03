@@ -183,3 +183,14 @@ is not rewritten; where it and this list differ, this list wins.
 | REQ-W-CREW-02, REQ-W-PLAN-03, REQ-W-SIRE-02 | §9.6 | Snapshot layer mode redraws only the window's own split-view columns (first wrapper on each path), skipping hidden / alpha-0 subtrees | ee1411b |
 | REQ-F2-02 | §6.5 | `@MainActor QuickSwitcherScoring.rows(store: AppStore, isGated: (HierarchyItem) -> Bool) -> [Row]` is contract (ruled before Stage W); `rows(store:)` stays the conservative default | (pre-wave) |
 | REQ-F3-01 | §7.1, §7.7 | `AAMain` calls `SmokeTest.run(options:)` before `AAApp.main()`: non-zero = refusal, the process exits with it (BD.3.12 exit 3); 0 = harness armed and the normal launch continues | (pre-wave) |
+
+### Stage V rulings (round 1 → round 2)
+- **Date pickers show ISO dates.** Every date picker (incl. `OptionalDatePicker`, `DatePromptSheet` and all
+  inline pickers) displays `yyyy-MM-dd` like the rest of the app by setting `.environment(\.locale,
+  Locale(identifier: "en_CA"))` on the picker only (verified on macOS 27: short date `2026-10-04`, month names in
+  English). Calendar stays Gregorian; stored values unchanged (ARCH §9.8 amended).
+- **Tests never touch the user's Preferences.** No test may create a `UserDefaults` suite on disk (they leave
+  empty plists in `~/Library/Preferences` even after `removePersistentDomain`). Tests use an in-memory
+  `MacPreferences` store; the 537 files left by earlier runs were moved to the Trash on 2026-10-03.
+- Design rule 9 (inset "paper" for rich text) applies to every rich-text surface: container editor, SIRE body,
+  read-only viewer, saved-list viewer.
