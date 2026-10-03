@@ -26,6 +26,15 @@ extension SnapshotRegistry {
             AnyView(EditorPreviewHost(width: 760, height: 360, text: NSAttributedString(),
                                       selection: NSRange(location: 0, length: 0), withheld: .legacyLocked))
         }
+        register("w-cont.editor-legacy-undecryptable") { _ in
+            AnyView(EditorPreviewHost(width: 760, height: 360, text: NSAttributedString(),
+                                      selection: NSRange(location: 0, length: 0), withheld: .legacyUndecryptable))
+        }
+        register("w-cont.editor-legacy-nopassword") { _ in
+            AnyView(EditorPreviewHost(width: 760, height: 360, text: NSAttributedString(),
+                                      selection: NSRange(location: 0, length: 0), withheld: .legacyLocked,
+                                      hasAppPassword: false))
+        }
         register("w-cont.editor-notice") { _ in
             AnyView(EditorPreviewHost(width: 760, height: 420, text: EditorPreviewText.sample(),
                                       selection: NSRange(location: 0, length: 0),
@@ -70,6 +79,7 @@ struct EditorPreviewHost: View {
     let selection: NSRange
     var withheld: EditorWithheldReason?
     var notice: EditorNotice?
+    var hasAppPassword = true
     @State private var controller = EditorController()
 
     var body: some View {
@@ -77,7 +87,8 @@ struct EditorPreviewHost: View {
             .frame(width: width, height: height)
             .padding(12)
             .onAppear {
-                controller.showPreview(text, selection: selection, withheld: withheld, notice: notice)
+                controller.showPreview(text, selection: selection, withheld: withheld, notice: notice,
+                                       hasAppPassword: hasAppPassword)
             }
     }
 }
@@ -163,7 +174,7 @@ struct EditorSelfTestView: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             EditorPane(controller: controller, title: "Self-test")
-                .frame(width: 560, height: 520)
+                .frame(width: 560, height: 640)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Editor self-test").font(.aaMono(AAType.body, weight: .semibold))
                 ForEach(Array(results.enumerated()), id: \.offset) { _, r in
@@ -173,7 +184,7 @@ struct EditorSelfTestView: View {
                 }
                 Spacer()
             }
-            .frame(width: 330, height: 520, alignment: .topLeading)
+            .frame(width: 330, height: 640, alignment: .topLeading)
         }
         .padding(12)
         .onAppear { results = Self.run(controller) }
@@ -292,6 +303,18 @@ struct EditorSelfTestView: View {
             c.undo()
             check("Undo takes the stored indent back", written().contains(##"Margin="0,1,0,1""##))
         }
+
+        // FIX2 (V2-J3): a read-only note dims the folded Alignment and Lists menus; the overflow keeps Find / Zoom.
+        // A throw-away controller, so the pane on screen keeps the self-test document.
+        let ro = EditorController()
+        let bar = EditorFormatBar(controller: ro)
+        ro.showPreview(doc, selection: NSRange(location: 0, length: 0))
+        check("folded menus live while editable",
+              bar.menuEnabled(EditorFormatBar.alignments) && bar.menuEnabled(EditorFormatBar.listCommands))
+        ro.showPreview(NSAttributedString(), selection: NSRange(location: 0, length: 0), withheld: .legacyLocked)
+        check("Alignment menu disabled read-only", !bar.menuEnabled(EditorFormatBar.alignments))
+        check("Lists menu disabled read-only", !bar.menuEnabled(EditorFormatBar.listCommands))
+        check("overflow (Find / Zoom) live read-only", ro.validate(.showFind))
         return out
     }
 }

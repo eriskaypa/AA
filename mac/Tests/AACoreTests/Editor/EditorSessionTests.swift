@@ -324,7 +324,95 @@ import Testing
     @Test func bannerTexts() {
         for r in [EditorWithheldReason.legacyLocked, .legacyUndecryptable, .unparseable, .engineUnavailable] {
             #expect(!r.bannerText.isEmpty)
+            #expect(!r.bannerText(hasAppPassword: false).isEmpty)
         }
+    }
+
+    // FIX2 (V2-J3): the legacy banners name the button beside them and never offer to set a password.
+    @Test func legacyBannerActions() {
+        #expect(EditorWithheldReason.legacyLocked.bannerAction(hasAppPassword: true) == .unlock)
+        #expect(EditorWithheldReason.legacyUndecryptable.bannerAction(hasAppPassword: true) == .unlockWithAppPassword)
+        #expect(EditorWithheldReason.legacyLocked.bannerAction(hasAppPassword: false) == nil)
+        #expect(EditorWithheldReason.legacyUndecryptable.bannerAction(hasAppPassword: false) == nil)
+        #expect(EditorWithheldReason.unparseable.bannerAction(hasAppPassword: true) == nil)
+        #expect(EditorWithheldReason.engineUnavailable.bannerAction(hasAppPassword: true) == nil)
+        let locked = EditorWithheldReason.legacyLocked.bannerText(hasAppPassword: true)
+        #expect(locked.contains(EditorWithheldAction.unlock.title))
+        #expect(!locked.contains("Tools"))
+        let undecryptable = EditorWithheldReason.legacyUndecryptable.bannerText(hasAppPassword: true)
+        #expect(undecryptable.contains(EditorWithheldAction.unlockWithAppPassword.title))
+        #expect(undecryptable.contains("master password"))
+        for r in [EditorWithheldReason.legacyLocked, .legacyUndecryptable] {
+            let t = r.bannerText(hasAppPassword: false)
+            #expect(t.contains("no app password is set on this Mac"))
+            #expect(!t.contains("Unlock"))
+        }
+    }
+
+    // FIX2 journey (V2-J3 lockAndLegacyBodies, §7.6 vector): master-password session → undecryptable, blob kept →
+    // "Unlock with App Password…" with test1234 → the session is re-keyed → reload migrates the body.
+    @Test func lockAndLegacyBodiesJourney() {
+        let (made, pw) = setup()
+        #expect(pw.unlock(PasswordHashing.masterPassword))
+        let c = Container(richTextXaml: Self.blob, isLocked: true)
+        let s = EditorSession(reader: { x, ctx in
+            x == Self.plain ? .document(NSAttributedString(string: "Secret"), RichTextMetadata(context: ctx)) : .unparseable(raw: x)
+        }, writer: { _, _, _ in "" }, engineAvailable: { true })
+        let first = s.load(c, store: made.store, passwords: pw)
+        #expect(first.withheld == .legacyUndecryptable)
+        #expect(first.withheld?.bannerAction(hasAppPassword: pw.hasPassword) == .unlockWithAppPassword)
+        #expect(c.richTextXaml == Self.blob)
+
+        // Failures leave the session (and the blob) exactly as they were.
+        #expect(EditorLegacyUnlock.tryAppPassword("redemption", blob: c.richTextXaml, passwords: pw) == .masterPassword)
+        #expect(EditorLegacyUnlock.tryAppPassword("nope", blob: c.richTextXaml, passwords: pw) == .wrongPassword)
+        #expect(pw.isUnlocked)
+        #expect(pw.decryptLegacyBody(Self.blob) == nil)          // still the master-password session
+        #expect(c.richTextXaml == Self.blob)
+        #expect(!made.store.isDirty)
+
+        #expect(EditorLegacyUnlock.tryAppPassword("test1234", blob: c.richTextXaml, passwords: pw) == .unlocked)
+        #expect(pw.isUnlocked)
+        let second = s.load(c, store: made.store, passwords: pw)
+        #expect(second.withheld == nil)
+        #expect(second.text.string == "Secret")
+        #expect(c.richTextXaml == Self.plain)
+        #expect(!c.isLocked)
+        #expect(made.store.isDirty)
+    }
+
+    // The right app password that still can't decrypt (other computer / older salt) changes nothing.
+    @Test func appPasswordThatCannotDecryptKeepsSession() {
+        let made = StoreFactory.make()
+        // test1234 again, but with a fresh salt (password re-set / another computer): it verifies, never decrypts.
+        let salt = PasswordHashing.newSalt()
+        made.dataStore.settings.setPassword(hash: NetBase64.encode(PasswordHashing.hash(password: "test1234", salt: salt)),
+                                            salt: NetBase64.encode(salt))
+        let pw = PasswordService(settings: made.dataStore.settings)
+        #expect(pw.unlock("redemption"))
+        #expect(EditorLegacyUnlock.tryAppPassword("test1234", blob: Self.blob, passwords: pw) == .cannotDecrypt)
+        #expect(pw.isUnlocked)
+        #expect(pw.verify("test1234"))
+        #expect(!made.store.isDirty)
+        for o in [EditorLegacyUnlock.Outcome.masterPassword, .wrongPassword, .cannotDecrypt] {
+            #expect(o.failure?.text.contains("kept unchanged") == true)
+        }
+        #expect(EditorLegacyUnlock.Outcome.unlocked.failure == nil)
+    }
+
+    // No app password: the master password unlocks the session but nothing can decrypt — no action, no new password.
+    @Test func noAppPasswordOffersNothing() {
+        let made = StoreFactory.make()
+        let pw = PasswordService(settings: made.dataStore.settings)
+        #expect(!pw.hasPassword)
+        let c = Container(richTextXaml: Self.blob)
+        let s = EditorStubEngine.session()
+        let locked = s.load(c, store: made.store, passwords: pw)
+        #expect(locked.withheld == .legacyLocked)
+        #expect(locked.withheld?.bannerAction(hasAppPassword: pw.hasPassword) == nil)
+        #expect(EditorLegacyUnlock.tryAppPassword("test1234", blob: Self.blob, passwords: pw) == .wrongPassword)
+        #expect(!pw.hasPassword)
+        #expect(c.richTextXaml == Self.blob)
     }
 }
 

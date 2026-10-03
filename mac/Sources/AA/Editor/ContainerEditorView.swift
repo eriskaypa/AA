@@ -121,10 +121,12 @@ struct EditorPane: View {
                      text: "This note is open in another editor. Edit it there — this view refreshes when that editor closes.")
                 .transition(.aaBanner)
         } else if let w = controller.withheld {
-            AABanner(style: w == .legacyLocked ? .warning : .danger, text: w.bannerText,
-                     actions: w == .legacyLocked
-                        ? [AABannerAction(title: "Unlock…", isProminent: true) { Task { await controller.unlockAndReload() } }]
-                        : [])
+            let hasPassword = controller.hasAppPassword
+            let action = w.bannerAction(hasAppPassword: hasPassword)
+            AABanner(style: action != nil ? .warning : .danger, text: w.bannerText(hasAppPassword: hasPassword),
+                     actions: action.map { a in
+                        [AABannerAction(title: a.title, isProminent: true) { Task { await controller.performWithheldAction(a) } }]
+                     } ?? [])
                 .transition(.aaBanner)
         }
     }
