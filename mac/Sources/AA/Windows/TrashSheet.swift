@@ -1,7 +1,9 @@
 // Spec: 08 §2.6 (QUICK-170…178), §3.6, §6.2-F (a sheet on the main window, Table with multi-select, destructive
 //       confirmations, Close / Esc); 02 REPO-078 (window), REPO-080 (permanent removal), §6.4 (Finder wording);
 //       01 DATA-113; DECISIONS 02 Q-5 ("Put Back" / "Delete Immediately", "Restore" in tooltips); 03 SHELL-675
-//       (in-sheet keys ⌘⌫ / ⌥⌘⌫ / ⇧⌘⌫), §6.5.1.5 (close-type sheet: ⌘W / ⎋ close); ARCHITECTURE.md §7.5, §7.7.
+//       (in-sheet keys ⌘⌫ / ⌥⌘⌫ / ⇧⌘⌫), §6.5.1.5 (close-type sheet: ⌘W / ⎋ close); 01 DATA-174 (read-only copy:
+//       Put Back / Delete Immediately / Empty Trash disabled, "Not available in a read-only copy of AA."); ARCHITECTURE.md
+//       §7.5, §7.7.
 import AppKit
 import SwiftUI
 import AACore
@@ -20,17 +22,22 @@ struct TrashSheet: View {
 
     private var entries: [TrashedItem] { env.store.data.trash }
 
+    /// 01 DATA-174: a read-only copy of AA never changes the Trash (the in-memory change would never be saved).
+    private var readOnly: Bool { env.isReadOnlyInstance || env.settings.isWriteGated }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-                .padding(.horizontal, 18)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
-            table
-                .padding(.horizontal, 18)
+                .padding(.horizontal, AASpacing.l)
+                .padding(.top, AASpacing.l)
+                .padding(.bottom, AASpacing.m)
+            content
+                .padding(.horizontal, AASpacing.l)
+                .padding(.bottom, AASpacing.m)
+            Divider()
             footer
-                .padding(.horizontal, 18)
-                .padding(.vertical, 14)
+                .padding(.horizontal, AASpacing.l)
+                .frame(height: 44)
         }
         .frame(minWidth: 680, idealWidth: 680, minHeight: 480, idealHeight: 480)
         .background(AAColor.bg.opacity(0.0001))
@@ -44,86 +51,104 @@ struct TrashSheet: View {
     // MARK: Parts
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "trash")
-                .font(.system(size: 26, weight: .regular))
-                .foregroundStyle(AAColor.tint)
-                .frame(width: 34)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Text(TrashText.windowTitle).font(.system(size: 17, weight: .bold))
-                    if !entries.isEmpty {
-                        AAStatusCapsule(text: TrashText.count(entries.count), color: AAColor.muted)
-                    }
-                }
-                AAHelpText(TrashText.info)
+        HStack(alignment: .top, spacing: AASpacing.m) {
+            BuilderSheetHeader(title: TrashText.windowTitle, subtitle: TrashText.info, symbol: "trash")
+            if !entries.isEmpty {
+                AAStatusCapsule(text: TrashText.count(entries.count), color: AAColor.muted)
+                    .monospacedDigit()
+                    .fixedSize()
             }
+        }
+    }
+
+    /// QUICK-172: the live list; an empty Trash shows the empty state over a plain background (no table, no stripes).
+    @ViewBuilder
+    private var content: some View {
+        if entries.isEmpty {
+            AAEmptyState(title: TrashText.emptyListMessage, symbol: "trash", message: TrashText.emptyListHint)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            table
         }
     }
 
     private var table: some View {
         Table(entries, selection: $selection) {
             TableColumn(TrashText.columns[0]) { e in
-                HStack(spacing: 6) {
-                    Image(systemName: symbol(for: e)).foregroundStyle(kindTint(e)).frame(width: 16)
-                    Text(e.name.isEmpty ? "(unnamed)" : e.name).lineLimit(1).truncationMode(.tail)
+                // REPO-078 / T-TR-15: the raw Name, as the WPF list binds it (an empty name shows an empty cell).
+                HStack(spacing: AASpacing.s) {
+                    Image(systemName: symbol(for: e))
+                        .symbolRenderingMode(.hierarchical)
+                        .foregroundStyle(kindTint(e))
+                        .frame(width: 16)
+                    Text(e.name)
+                        .font(.aaMono(AAType.body))
+                        .lineLimit(2)
+                        .truncationMode(.tail)
                 }
+                .padding(.vertical, AASpacing.xs)
                 .help(e.name)
             }
             .width(min: 180, ideal: 300)
             TableColumn(TrashText.columns[1]) { e in
-                Text(e.kindLabel).foregroundStyle(AAColor.muted).lineLimit(1)
+                Text(e.kindLabel).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted).lineLimit(1)
             }
             .width(min: 90, ideal: 160)
             TableColumn(TrashText.columns[2]) { e in
-                Text(e.deletedLocal).monospacedDigit().foregroundStyle(AAColor.muted).lineLimit(1)
+                Text(e.deletedLocal).font(.aaMono(AAType.caption)).monospacedDigit().foregroundStyle(AAColor.muted)
+                    .lineLimit(1)
             }
             .width(min: 120, ideal: 150)
         }
-        .tableStyle(.bordered(alternatesRowBackgrounds: true))
+        .tableStyle(.inset)
+        .alternatingRowBackgrounds(.disabled)
         .contextMenu(forSelectionType: UUID.self) { ids in
             if !ids.isEmpty {
                 Button { putBack(Array(ids)) } label: { Label(TrashText.putBack, systemImage: "arrow.uturn.backward") }
+                    .disabled(readOnly)
                 Button(role: .destructive) { deleteImmediately(Array(ids)) } label: {
                     Label(TrashText.deleteImmediately, systemImage: "trash.slash")
                 }
+                .disabled(readOnly)
             }
         } primaryAction: { ids in
             putBack(Array(ids))
-        }
-        .overlay {
-            if entries.isEmpty {
-                AAEmptyState(title: TrashText.emptyListMessage, symbol: "trash")
-                    .allowsHitTesting(false)
-            }
         }
         .aaListCommands(ListCommands(role: .trashTable, selectionCount: selection.count))
     }
 
     private var footer: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AASpacing.s) {
+            if readOnly {
+                Label(PersistReadOnlyText.disabledHelp, systemImage: "lock.fill")
+                    .symbolRenderingMode(.hierarchical)
+                    .font(.aaMono(AAType.caption))
+                    .foregroundStyle(AAColor.muted)
+                    .lineLimit(2)
+            }
+            Spacer(minLength: AASpacing.s)
+
             Button { putBack(orderedSelection) } label: {
                 Label(TrashText.putBack, systemImage: "arrow.uturn.backward")
             }
             .aaProminent()
             .keyboardShortcut(.delete, modifiers: .command)
-            .help(TrashText.putBackHelp)
-            .disabled(selection.isEmpty || busy)
+            .help(TrashText.help(TrashText.putBackHelp, readOnly: readOnly))
+            .disabled(readOnly || selection.isEmpty || busy)
 
             Button(TrashText.deleteImmediately) { deleteImmediately(orderedSelection) }
                 .keyboardShortcut(.delete, modifiers: [.command, .option])
-                .help(TrashText.deleteImmediatelyHelp)
-                .disabled(selection.isEmpty || busy)
+                .help(TrashText.help(TrashText.deleteImmediatelyHelp, readOnly: readOnly))
+                .disabled(readOnly || selection.isEmpty || busy)
 
             Button(TrashText.emptyTrash) { emptyTrash() }
                 .keyboardShortcut(.delete, modifiers: [.command, .shift])
-                .help(TrashText.emptyTrashHelp)
-                .disabled(entries.isEmpty || busy)
-
-            Spacer(minLength: 18)
+                .help(TrashText.help(TrashText.emptyTrashHelp, readOnly: readOnly))
+                .disabled(readOnly || entries.isEmpty || busy)
 
             Button(TrashText.close) { close() }
                 .frame(minWidth: 80)
+                .padding(.leading, AASpacing.m)
         }
     }
 
@@ -162,7 +187,7 @@ struct TrashSheet: View {
     // MARK: Actions (QUICK-174…176)
 
     private func putBack(_ ids: [UUID]) {
-        guard !ids.isEmpty, !busy else { return }
+        guard !ids.isEmpty, !busy, !readOnly else { return }
         let ordered = entries.map(\.id).filter { Set(ids).contains($0) }
         let types = TrashActions.restore(entryIDs: ordered, store: env.store)
         if types.isEmpty {
@@ -175,7 +200,7 @@ struct TrashSheet: View {
     }
 
     private func deleteImmediately(_ ids: [UUID]) {
-        guard !ids.isEmpty, !busy else { return }
+        guard !ids.isEmpty, !busy, !readOnly else { return }
         busy = true
         Task { @MainActor in
             defer { busy = false }
@@ -190,7 +215,7 @@ struct TrashSheet: View {
     }
 
     private func emptyTrash() {
-        guard !entries.isEmpty, !busy else { return }
+        guard !entries.isEmpty, !busy, !readOnly else { return }
         busy = true
         let n = entries.count
         Task { @MainActor in

@@ -86,7 +86,9 @@ import AACore
     func windowDidResignKey(_ notification: Notification) {
         // 08 §6.2-C: an Open-Quickly panel closes when it loses key status (an attached alert keeps it open).
         guard let p = panel, notification.object as? NSWindow === p, p.attachedSheet == nil else { return }
-        if ProcessInfo.processInfo.arguments.contains("--snapshot") { return }
+        // Only a DEBUG snapshot run keeps the panel up (ARCH §9.6); `snapshotMode` is never set in a release build,
+        // where `--snapshot` prints its notice and the launch continues normally (SHELL-192).
+        if LaunchCoordinator.shared.snapshotMode { return }
         close()
     }
 }
@@ -162,7 +164,7 @@ struct SwitcherView: View {
             rowsView
             Rectangle().fill(AAColor.border).frame(height: 1)
             Text(SwitcherText.hint)
-                .font(.system(size: 11))
+                .font(.aaMono(AAType.caption))
                 .foregroundStyle(AAColor.fg.opacity(0.6))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
@@ -200,7 +202,7 @@ struct SwitcherView: View {
             }
             .overlay {
                 if model.ranked.isEmpty {
-                    Text(SwitcherText.noMatches).foregroundStyle(AAColor.muted)
+                    Text(SwitcherText.noMatches).font(.aaMono(AAType.body)).foregroundStyle(AAColor.muted)
                 }
             }
             .onChange(of: model.selected) { _, k in
@@ -211,39 +213,42 @@ struct SwitcherView: View {
     }
 }
 
-/// QUICK-102: kind chip (per-kind colour), name (semi-bold, one line, no `(unnamed)` fallback), tags at 60 %.
+/// QUICK-102: kind chip (`KindLabel`; per-kind pastel fill with black text — sanctioned in Deviations/W-QUICK.md),
+/// name (one line, no `(unnamed)` fallback), tags at 60 %.
 struct SwitcherRow: View {
     let row: QuickSwitcherScoring.Row
     let selected: Bool
     let hovered: Bool
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: AASpacing.m) {
             Text(row.kindLabel)
-                .font(.system(size: 11, weight: .semibold))
+                .font(.aaMono(AAType.caption, weight: .semibold))
                 .foregroundStyle(.black)
+                .lineLimit(1)
                 .padding(.horizontal, 6)
                 .padding(.vertical, 1)
                 .background(AAColor.kind(row.kind), in: RoundedRectangle(cornerRadius: 3, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 3, style: .continuous).strokeBorder(AAColor.border.opacity(0.6), lineWidth: 0.5))
-                .frame(width: 104, alignment: .leading)
+                .frame(width: 112, alignment: .leading)
             Text(row.name)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(selected ? Color.white : AAColor.fg)
+                .font(.aaMono(AAType.body, weight: .semibold))
+                .foregroundStyle(selected ? AAColor.selectionFg : AAColor.fg)
                 .lineLimit(1)
                 .truncationMode(.tail)
-            Spacer(minLength: 8)
+            Spacer(minLength: AASpacing.s)
             Text(SwitcherText.tags(row.tags))
-                .font(.system(size: 11))
-                .foregroundStyle(selected ? Color.white.opacity(0.8) : AAColor.fg.opacity(0.6))
+                .font(.aaMono(AAType.caption))
+                .foregroundStyle(selected ? AAColor.selectionFg.opacity(0.8) : AAColor.fg.opacity(0.6))
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
+        .frame(minHeight: 22)
         .background {
             RoundedRectangle(cornerRadius: 7, style: .continuous)
-                .fill(selected ? AAColor.tint : (hovered ? AAColor.hover : Color.clear))
+                .fill(selected ? AAColor.selectionBg : (hovered ? AAColor.hover : Color.clear))
         }
         .animation(.easeOut(duration: 0.12), value: selected)
     }

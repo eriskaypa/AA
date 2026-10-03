@@ -48,3 +48,31 @@ All 109 IDs re-checked against the spec text and the C# (`FloatingTasksWindow`, 
   Kind/Name/Detail wrap inside the window.
 Snapshots re-rendered in both appearances: `scratchpad/snapshots/W-QUICK/audit-*.png` (due, switcher, quick-work task /
 procedure / none selected, activity log, trash, review, review-empty, search sheet, search window).
+
+## Verification fixes (FIX-W-QUICK, 2026-10-03)
+Findings: **9 / 9 fixed**, 0 remaining.
+- V-01 DATA-174: Trash `Put Back`, `Delete Immediately…`, `Empty Trash…` (footer, context menu, double-click,
+  ⌘⌫ family) are disabled in a read-only copy (`env.isReadOnlyInstance || settings.isWriteGated`), with help
+  `Not available in a read-only copy of AA.` (`TrashText.help(_:readOnly:)`) and a leading lock note in the footer;
+  the actions also guard on it.
+- V-02 REPO-078: the Trash Name column shows the raw `Name` (no `(unnamed)`), as the WPF list binds it.
+- V-07: new suite `QuickWorkPickerVectorTests` (13 tests) pins 07 P5, P6, P12, P13; K7b–K7g through the quick-work
+  bucket path (`preselectedBuckets` → `ShellPickerSelection` as `pickItems` drives it → `applyBuckets`); SL2
+  (picker + `BoardSavedListAdd.apply`); B9 (`BoardModel.setStatus` → `save()` → `reconcileRecurrences`); DATA-174 help.
+- V-08 QUICK-041: the quick-work split is an HStack with an 8-pt drag handle (`QuickWorkSplit`,
+  `QuickWorkSplitGeometry`): the list opens at 360 pt (snapshot: 360 pt list at 1200×800), draggable
+  (list ≥ 300, detail ≥ 420), not persisted. `HSplitView` ignored `idealWidth`.
+- V-08 QUICK-010/020: due rows use `.pointerStyle(.link)` (and the grip `.pointerStyle(.frameResize)`) instead of
+  `NSCursor.push/pop`, so ticking a row off under the mouse cannot leak a pushed cursor.
+- V-08 QUICK-102: per-kind switcher chip kept and recorded in `Deviations/W-QUICK.md` (with the Search Where badge).
+- V-DESIGN tables: Search, Trash, Activity log and the children list have stripes off; empty → `AAEmptyState` over a
+  plain background (no table).
+- V-DESIGN Activity log: Name is the flexible column (ideal 214, 12-pt mono, wraps ≤ 2 lines); no time column truncates.
+- V-PACKAGE: the switcher's resign-key close skips only when `LaunchCoordinator.shared.snapshotMode` (DEBUG-only), not on
+  a release `--snapshot` argument.
+- Design rules applied across the owned views: brand mono for content (rows, meta, counts, dates with
+  `.monospacedDigit`), tokens for spacing, label column muted / trailing in the quick-work detail, item actions as
+  small bordered buttons, `BuilderSheetHeader` + Divider + 44-pt footer in the Trash, rounded-bezel query field in
+  Search, `AASelBg/AASelFg` selection in the switcher, dynamic overdue red (`overdueMeta`) in the quick-work list.
+- Snapshots (light + dark): `scratchpad/snapshots/fix1-W-QUICK/` — quick-work (+ task selected), due, switcher,
+  activity-log, search window, sheets trash and search.

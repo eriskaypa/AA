@@ -46,31 +46,26 @@ struct SearchWindowView: View {
     // MARK: Query bar (QUICK-121)
 
     private var queryBar: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: AASpacing.s) {
             Text(SearchWindowText.queryLabel)
-                .frame(width: 60, alignment: .leading)
-                .foregroundStyle(AAColor.fg)
-            HStack(spacing: 6) {
-                Image(systemName: "magnifyingglass").foregroundStyle(AAColor.muted)
-                TextField(SearchWindowText.queryPrompt, text: $model.query)
-                    .textFieldStyle(.plain)
-                    .font(.aaMono(AAType.body))
-                    .focused($queryFocused)
-                    .onSubmit { model.run(env: env) }
-                    .aaFilterField(for: .search)
-                if !model.query.isEmpty {
-                    Button { model.query = ""; model.run(env: env); focusQuery(selectAll: false) } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(AAColor.muted)
-                    }
-                    .buttonStyle(.borderless)
-                    .help("Clear")
+                .font(.aaMono(AAType.body))
+                .foregroundStyle(AAColor.muted)
+                .frame(width: 60, alignment: .trailing)
+            TextField(SearchWindowText.queryPrompt, text: $model.query)
+                .textFieldStyle(.roundedBorder)
+                .font(.aaMono(AAType.body))
+                .focused($queryFocused)
+                .onSubmit { model.run(env: env) }
+                .aaFilterField(for: .search)
+            if !model.query.isEmpty {
+                Button { model.query = ""; model.run(env: env); focusQuery(selectAll: false) } label: {
+                    Image(systemName: "xmark.circle.fill").symbolRenderingMode(.hierarchical)
                 }
+                .buttonStyle(.borderless)
+                .foregroundStyle(AAColor.muted)
+                .help("Clear")
+                .accessibilityLabel("Clear")
             }
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(AAColor.panelAlt, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .strokeBorder(queryFocused ? AAColor.tint.opacity(0.7) : AAColor.border, lineWidth: 1))
             Button(SearchWindowText.searchButton) { model.run(env: env) }
                 .aaProminent()
                 .frame(minWidth: 80)
@@ -80,19 +75,37 @@ struct SearchWindowView: View {
 
     // MARK: Results (QUICK-124, QUICK-125)
 
+    /// The results table, or the empty state over a plain background (no table, no stripes) when there are no hits.
+    @ViewBuilder
     private var results: some View {
+        if model.hits.isEmpty && !model.isRunning {
+            Group {
+                if model.lastQuery.isEmpty {
+                    AAEmptyState(title: "Search every item", symbol: "magnifyingglass",
+                                 message: "Names, tags, descriptions, notes, file names and paths, components, subtasks and checklist steps. Press Return to search.")
+                } else {
+                    AAEmptyState(title: "No results", symbol: "magnifyingglass", message: model.status)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            table
+        }
+    }
+
+    private var table: some View {
         Table(model.hits, selection: $selection) {
             TableColumn(SearchWindowText.whereColumn) { h in
-                VStack(alignment: .leading, spacing: 1) {
-                    HStack(spacing: 5) {
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: AASpacing.xs + 1) {
                         AAKindBadge(kind: h.ownerKind, compact: true)
-                        Text(h.ownerHeader).font(.system(size: AAType.body, weight: .bold)).lineLimit(1)
+                        Text(h.ownerHeader).font(.aaMono(AAType.body, weight: .semibold)).lineLimit(1)
                             .truncationMode(.tail)
                     }
-                    Text(h.whereLabel).font(.system(size: AAType.caption)).foregroundStyle(AAColor.fg.opacity(0.7))
+                    Text(h.whereLabel).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
                         .lineLimit(1)
                 }
-                .padding(.vertical, 2)
+                .padding(.vertical, AASpacing.xs)
                 .help(h.ownerHeader)
             }
             .width(min: 180, ideal: 230)
@@ -105,7 +118,8 @@ struct SearchWindowView: View {
             }
             .width(min: 300, ideal: 600)
         }
-        .tableStyle(.inset(alternatesRowBackgrounds: true))
+        .tableStyle(.inset)
+        .alternatingRowBackgrounds(.disabled)
         .contextMenu(forSelectionType: Int.self) { ids in
             if let id = ids.first, let h = model.hits.first(where: { $0.id == id }) {
                 Button { open(h) } label: { Label("Open \(h.ownerHeader)", systemImage: "arrow.up.forward.app") }
@@ -120,25 +134,13 @@ struct SearchWindowView: View {
         }
         .aaListCommands(ListCommands(role: .searchResults, selectionCount: selection == nil ? 0 : 1,
                                      primary: { if let id = selection, let h = model.hits.first(where: { $0.id == id }) { open(h) } }))
-        .overlay {
-            if model.hits.isEmpty && !model.isRunning {
-                if model.lastQuery.isEmpty {
-                    AAEmptyState(title: "Search every item", symbol: "magnifyingglass",
-                                 message: "Names, tags, descriptions, notes, file names and paths, components, subtasks and checklist steps. Press Return to search.")
-                        .allowsHitTesting(false)
-                } else {
-                    AAEmptyState(title: "No results", symbol: "magnifyingglass", message: model.status)
-                        .allowsHitTesting(false)
-                }
-            }
-        }
     }
 
     private var statusBar: some View {
         HStack(spacing: 8) {
             if model.isRunning { ProgressView().controlSize(.small) }
             Text(model.status)
-                .font(.system(size: AAType.caption))
+                .font(.aaMono(AAType.caption))
                 .foregroundStyle(AAColor.muted)
                 .lineLimit(1)
             Spacer()
