@@ -223,10 +223,11 @@ struct HierItemHeader: View {
                         Button {
                             exportPDF()
                         } label: {
-                            Label(HierText.exportPDF, systemImage: "doc.richtext")
+                            Label(PdfExportCommand.item.title, systemImage: PdfExportCommand.item.symbol)
                         }
                         .buttonStyle(.bordered)
-                        .help(HierText.exportPDFHelp)
+                        .help(PdfExportCommand.item.help ?? "")
+                        .accessibilityLabel(PdfExportCommand.item.accessibilityLabel)
                     }
                 }
                 GridRow {

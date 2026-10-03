@@ -519,7 +519,8 @@ struct PersistInstanceGuardTests {
 
     @Test("MP.7.9 shared-with-Windows evidence and the per-folder Don't Show Again")
     func windowsEvidence() throws {
-        let prefs = MacPreferences(defaults: UserDefaults(suiteName: "persist-tests-\(UUID().uuidString)")!)
+        let temp = TempDefaults("persist-tests"); defer { temp.remove() }
+        let prefs = temp.preferences
         let none = TempFolder("persist-ev0")
         #expect(!PersistWindowsEvidence.detect(appFolder: none.url, settings: AppSettings(), foreignTempAtLaunch: false, outsideWriteSeen: false))
         let enc = TempFolder("persist-ev1")

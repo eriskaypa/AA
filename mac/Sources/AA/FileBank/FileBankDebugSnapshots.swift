@@ -1,6 +1,7 @@
 // Debug snapshot registrations of W-FILES (ARCHITECTURE.md §9.6; sheet ids "w-files.<name>"). They render the file
 // bank, the read-only viewer and the backlinks section over the fixture data folder
 // `Tests/AACoreTests/Fixtures/ui/w-files/` (copied to a scratch folder, `sample-data.json` → `data.json`).
+#if DEBUG
 import QuickLookUI
 import SwiftUI
 import AACore
@@ -103,3 +104,4 @@ struct FileBankQuickLookProbe: View {
                          sharedWithContainerIds: c.sharedWithContainerIds, isLocked: c.isLocked)
     }
 }
+#endif

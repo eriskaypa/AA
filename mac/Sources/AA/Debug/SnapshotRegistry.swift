@@ -1,6 +1,7 @@
 // Spec: ARCHITECTURE.md §9.6 (sheet registry: each UI owner registers its sheets in its own
 //       `AA/<Dir>/<Area>DebugSnapshots.swift`; F3 calls every `registerW_*()` at launch in DEBUG). The registrations are
-//       compiled only #if DEBUG (F3's own file is; the calls below are; each wave owner wraps its file, V-PACKAGE).
+//       compiled only #if DEBUG: this whole file and every owner's file (V-PACKAGE).
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -16,7 +17,6 @@ enum SnapshotRegistry {
 
     /// F3's demo sheets plus every wave owner's registrations.
     static func registerAll() {
-        #if DEBUG
         guard !registered else { return }
         registered = true
         registerF3()
@@ -34,6 +34,6 @@ enum SnapshotRegistry {
         registerW_SIRE()
         registerW_FLASH()
         registerW_DRIVE()
-        #endif
     }
 }
+#endif

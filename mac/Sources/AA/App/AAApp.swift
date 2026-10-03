@@ -26,16 +26,7 @@ struct AAApp: App {
             .windowResizability(.contentSize)
             .defaultPosition(.bottomTrailing)
 
-        Window("AA", id: SceneID.splash.rawValue) { SplashView().aaWindowRoot(.splash) }
-            .defaultLaunchBehavior(.suppressed)
-            .windowStyle(.plain)
-            .windowLevel(.floating)
-            .windowResizability(.contentSize)
-            .restorationBehavior(.disabled)
-            .commandsRemoved()
-            .defaultWindowPlacement { content, context in
-                WindowPlacement(.center, size: content.sizeThatFits(.unspecified))
-            }
+        // The splash (SHELL-003) is an AppKit panel, not a scene: SplashPanelController (never made key).
 
         Window(ShellLogin.windowTitle, id: SceneID.login.rawValue) { LoginView().aaWindowRoot(.login) }
             .defaultLaunchBehavior(.suppressed)
@@ -115,7 +106,7 @@ struct AAApp: App {
             .defaultLaunchBehavior(.suppressed)
             .restorationBehavior(.disabled)
             .commandsRemoved()
-            .defaultSize(width: 1100, height: 700)
+            .defaultSize(width: 1360, height: 720)                  // fits the nine default columns (CREW-103)
 
         Window("AA Keyboard Shortcuts", id: SceneID.shortcuts.rawValue) { KeyboardShortcutsView().aaWindowRoot(.shortcuts) }
             .defaultLaunchBehavior(.suppressed)

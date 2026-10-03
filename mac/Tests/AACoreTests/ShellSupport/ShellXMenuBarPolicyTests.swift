@@ -16,9 +16,9 @@ import Testing
     }
 
     @Test func repairRunsOnce() {
-        let suite = "aa.tests.shellx.menubar.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let temp = TempDefaults("aa.tests.shellx.menubar")
+        defer { temp.remove() }
+        let defaults = temp.defaults
         let store = ShellXMenuBarGuardStore(prefs: MacPreferences(defaults: defaults))
         #expect(!store.userHidden && !store.repaired)                // defaults
         defaults.set(true, forKey: "aa.shellx.menuBarUserHidden")

@@ -117,6 +117,8 @@ import Testing
         #expect(ShortcutRegistry.title(.about) == "About AA")
         #expect(ShortcutRegistry.title(.searchAll) == "Search All Items…")
         #expect(ShortcutRegistry.title(.encryptLocalData) == "Encrypt Local Data File (This Mac)")
+        // 01 §6.5 tooltip, verbatim (SHELL-551).
+        #expect(ShortcutRegistry.row(.encryptLocalData)?.help == "Encrypt this Mac's data file at rest with a key kept in your macOS Keychain. Shared, exported and Google Drive copies stay portable plaintext, so sync between machines is unaffected.")
         #expect(ShortcutRegistry.title(.trash) == "Trash (Restore Deleted Items)…")
         for r in ShortcutRegistry.rows { #expect(!r.title.contains("..."), "\(r.id) uses three dots") }
     }

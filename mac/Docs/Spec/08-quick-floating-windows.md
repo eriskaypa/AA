@@ -996,8 +996,11 @@ equality matters.
 | `FileKind` | 0 Document, 1 Image, 2 Video, 3 Link, 4 Other |
 | `ItemKind` (not persisted on items — implied by the containing array) | 0 Equipment, 1 Task, 2 Procedure, 3 Vessel |
 
-UI strings for these enums are their C# names (`Todo`, `InProgress`, …) — used verbatim in the Status/Recurrence combos,
-in the diff (`status: Todo → Done`, `recurrence: None → Weekly`) and in search `Where` labels (`File › Document`).
+On Windows the UI strings for these enums are their C# names (`Todo`, `InProgress`, …), used verbatim in the
+Status/Recurrence combos, in the diff (`status: Todo → Done`, `recurrence: None → Weekly`) and in search `Where` labels
+(`File › Document`). **Mac (DECISIONS 08 OQ-10, amended Stage V round 1):** the combos and the diff show friendly labels
+(`To Do`, `In Progress`, `Blocked`, `Done`; `status: To Do → Done`, `recurrence: None → Weekly`); the integers on disk and
+the search `Where` labels are unchanged.
 
 ### 4.3 Persisted fields read or written by this subsystem
 * `Tasks[]` (TaskItem, recursive via `Subtasks[]`): `Id`, `Name`, `Description`, `Container{Id, RichTextXaml, Files[], SharedWithContainerIds[], IsLocked}`,

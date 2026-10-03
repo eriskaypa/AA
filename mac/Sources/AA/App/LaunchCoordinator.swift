@@ -108,7 +108,10 @@ final class LaunchCoordinator {
     }
 
     func loginWindowRegistered(_ w: NSWindow) {
-        w.styleMask.remove(.resizable)
+        // Registration runs inside SwiftUI's layout pass (ShellWindowCaptureView.viewDidMoveToWindow); setStyleMask
+        // lays the window out again → AppKit "not legal to call -layoutSubtreeIfNeeded on a view which is already
+        // being laid out". Defer it to the next run-loop turn (V-PACKAGE).
+        DispatchQueue.main.async { [weak w] in w?.styleMask.remove(.resizable) }
     }
 
     /// SHELL-004: closing the login window (✕ or ⌘W) = Exit → terminate (nothing written).

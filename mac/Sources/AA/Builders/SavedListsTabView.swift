@@ -185,9 +185,9 @@ struct SavedListsTabView: View {
                 .disabled(sortAZ)
                 .help("Move the selected saved list(s) to a chosen position within its group.")
                 Divider()
-                Button("Export this list (PDF)…", systemImage: "doc.richtext") { run { await exportList() } }
-                Button("Export group (PDF)…", systemImage: "doc.on.doc") { run { await exportGroup() } }
-                Button("Export ALL (PDF)…", systemImage: "books.vertical") { run { await exportAll() } }
+                Button(PdfExportCommand.savedList.title, systemImage: PdfExportCommand.savedList.symbol) { run { await exportList() } }
+                Button(PdfExportCommand.savedGroup.title, systemImage: PdfExportCommand.savedGroup.symbol) { run { await exportGroup() } }
+                Button(PdfExportCommand.savedAll.title, systemImage: PdfExportCommand.savedAll.symbol) { run { await exportAll() } }
             } label: {
                 Image(systemName: "ellipsis.circle").symbolRenderingMode(.hierarchical)
             }
@@ -218,7 +218,7 @@ struct SavedListsTabView: View {
                 selection = ids; run { await moveToPosition() }
             }
             Divider()
-            Button("Export this list (PDF)…", systemImage: "doc.richtext") { selection = ids; run { await exportList() } }
+            Button(PdfExportCommand.savedListMenu.title, systemImage: PdfExportCommand.savedListMenu.symbol) { selection = ids; run { await exportList() } }
             Button("Delete", systemImage: "trash", role: .destructive) { selection = ids; run { await deleteList() } }
         }
     }
@@ -245,14 +245,17 @@ struct SavedListsTabView: View {
                                 .help("Edit the items in this saved list (title, duration, notes & files).")
                             Button { run { await duplicate() } } label: { Label("Duplicate", systemImage: "plus.square.on.square") }
                             Button { run { await exportList() } } label: {
-                                Label("Export this list (PDF)…", systemImage: "doc.richtext")
+                                Label(PdfExportCommand.savedList.title, systemImage: PdfExportCommand.savedList.symbol)
                             }
+                            .accessibilityLabel(PdfExportCommand.savedList.accessibilityLabel)
                             Button { run { await exportGroup() } } label: {
-                                Label("Export group (PDF)…", systemImage: "doc.on.doc")
+                                Label(PdfExportCommand.savedGroup.title, systemImage: PdfExportCommand.savedGroup.symbol)
                             }
+                            .accessibilityLabel(PdfExportCommand.savedGroup.accessibilityLabel)
                             Button { run { await exportAll() } } label: {
-                                Label("Export ALL (PDF)…", systemImage: "books.vertical")
+                                Label(PdfExportCommand.savedAll.title, systemImage: PdfExportCommand.savedAll.symbol)
                             }
+                            .accessibilityLabel(PdfExportCommand.savedAll.accessibilityLabel)
                         }
                         .controlSize(.regular)
                         .padding(.top, AASpacing.xs)
@@ -266,7 +269,8 @@ struct SavedListsTabView: View {
                 AAEmptyState(title: "Select a saved list", symbol: "list.bullet.rectangle",
                              message: "Pick a list on the left to see its items, edit it or export it.")
                 // Always enabled (PDF-022 / DEV-10): with no saved lists the flow answers "No saved lists to export."
-                Button { run { await exportAll() } } label: { Label("Export ALL (PDF)…", systemImage: "books.vertical") }
+                Button { run { await exportAll() } } label: { Label(PdfExportCommand.savedAll.title, systemImage: PdfExportCommand.savedAll.symbol) }
+                    .accessibilityLabel(PdfExportCommand.savedAll.accessibilityLabel)
                 Spacer(minLength: AASpacing.xl)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

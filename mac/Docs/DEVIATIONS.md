@@ -5,27 +5,30 @@ Consolidated on 2026-10-03 by the integrator (acting for the lead, ARCHITECTURE.
 the next consolidation copies it here. Sections follow the OWNERSHIP.md order; each section is the owner's file
 verbatim with its headings moved down one level. Format inside the tables: ID · spec reference · one line.
 
+Re-consolidated after Stage V round 1 (fix branches `fix1/*` merged, 2026-10-03): every section was regenerated
+from the owners' current files, so rows added, reworded or removed in round 1 appear here as their owners wrote them.
+
 | Owner | Source file | Lines |
 |---|---|---|
-| F1 | [`Deviations/F1.md`](Deviations/F1.md) | 37 |
-| F2 | [`Deviations/F2.md`](Deviations/F2.md) | 44 |
-| F3 | [`Deviations/F3.md`](Deviations/F3.md) | 24 |
+| F1 | [`Deviations/F1.md`](Deviations/F1.md) | 39 |
+| F2 | [`Deviations/F2.md`](Deviations/F2.md) | 46 |
+| F3 | [`Deviations/F3.md`](Deviations/F3.md) | 38 |
 | W-SHELL | [`Deviations/W-SHELL.md`](Deviations/W-SHELL.md) | 52 |
 | W-PERSIST | [`Deviations/W-PERSIST.md`](Deviations/W-PERSIST.md) | 37 |
-| W-GOLD | [`Deviations/W-GOLD.md`](Deviations/W-GOLD.md) | 148 |
+| W-GOLD | [`Deviations/W-GOLD.md`](Deviations/W-GOLD.md) | 65 |
 | W-RICH | [`Deviations/W-RICH.md`](Deviations/W-RICH.md) | 42 |
-| W-CONT | [`Deviations/W-CONT.md`](Deviations/W-CONT.md) | 55 |
+| W-CONT | [`Deviations/W-CONT.md`](Deviations/W-CONT.md) | 56 |
 | W-FILES | [`Deviations/W-FILES.md`](Deviations/W-FILES.md) | 23 |
-| W-HIER | [`Deviations/W-HIER.md`](Deviations/W-HIER.md) | 42 |
-| W-BUILD | [`Deviations/W-BUILD.md`](Deviations/W-BUILD.md) | 22 |
-| W-PLAN | [`Deviations/W-PLAN.md`](Deviations/W-PLAN.md) | 103 |
-| W-QUICK | [`Deviations/W-QUICK.md`](Deviations/W-QUICK.md) | 34 |
+| W-HIER | [`Deviations/W-HIER.md`](Deviations/W-HIER.md) | 48 |
+| W-BUILD | [`Deviations/W-BUILD.md`](Deviations/W-BUILD.md) | 23 |
+| W-PLAN | [`Deviations/W-PLAN.md`](Deviations/W-PLAN.md) | 70 |
+| W-QUICK | [`Deviations/W-QUICK.md`](Deviations/W-QUICK.md) | 36 |
 | W-CREW | [`Deviations/W-CREW.md`](Deviations/W-CREW.md) | 39 |
-| W-VESSEL | [`Deviations/W-VESSEL.md`](Deviations/W-VESSEL.md) | 28 |
-| W-PDF | [`Deviations/W-PDF.md`](Deviations/W-PDF.md) | 37 |
+| W-VESSEL | [`Deviations/W-VESSEL.md`](Deviations/W-VESSEL.md) | 32 |
+| W-PDF | [`Deviations/W-PDF.md`](Deviations/W-PDF.md) | 38 |
 | W-SIRE | [`Deviations/W-SIRE.md`](Deviations/W-SIRE.md) | 52 |
-| W-FLASH | [`Deviations/W-FLASH.md`](Deviations/W-FLASH.md) | 55 |
-| W-DRIVE | [`Deviations/W-DRIVE.md`](Deviations/W-DRIVE.md) | 40 |
+| W-FLASH | [`Deviations/W-FLASH.md`](Deviations/W-FLASH.md) | 57 |
+| W-DRIVE | [`Deviations/W-DRIVE.md`](Deviations/W-DRIVE.md) | 42 |
 
 ---
 
@@ -52,6 +55,7 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 
 | ID | Spec ref | Fix |
 |---|---|---|
+| D-5 | 01 §8.1, DATA-080, 05 CONT-007, DECISIONS 01 | `PasswordService.setPassword(_:current:migratingLegacyBodiesIn:)`: before re-salting, every live legacy `enc:` body (REPO-012 `allContainers`) that the typed current password or the unlocked session password decrypts with the **old** salt is written back as plaintext (`IsLocked` cleared, CONT-007 form) and the data file is saved first; if that save cannot happen (read-only / safe mode, paused writes, write error) the change throws `.legacyBodiesNotSaved` and the password and salt stay unchanged. Bodies nothing decrypts are kept (never `""`) and counted (`LegacyBodyMigration.undecryptable`) for the caller's warning (`orphanWarning(count:)`, pre-check `undecryptableLegacyBodyCount(in:current:)`). Trash payloads (`PayloadJson`) are not rewritten. |
 | D-6 | 01 §8.1, DATA-080, DECISIONS 01 Q-4 | `PasswordService.setPassword(_:current:)` requires the current password (master accepted) when one exists. |
 | D-7 | 01 §8.1, DATA-150, DECISIONS 12 | The Mac never writes `GeminiApiKey`; a value found in settings.json is preserved verbatim by every key-level merge (the Keychain copy is W-SIRE's). |
 | D-14 | 01 §8.1, DATA-032, ARCH §6.2 | `DataStore.saveTo` serialises a deep **copy** stamped `LastModified = now` with `SchemaVersion = max(v, 1)`; the live model's stamp and dirty state are untouched. |
@@ -68,6 +72,7 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 
 | ID | Spec ref | Divergence |
 |---|---|---|
+| SHELL-193 paths | 03 SHELL-193, BD.3.2 | `DataStore` keeps the AppFolder and the active data file **lexically** normalised (`.`/`..` removed, symlinks and the `/private` firmlink prefix kept, `DataStore.lexical`), so the status line, Settings and the persisted `CurrentDataFile` show the path the user gave. Containment tests (`isUnderAppFolder`) compare `DataStore.comparablePath`, which folds `/private/{tmp,var,etc}` onto `/tmp`, `/var`, `/etc`, so both spellings are one folder. |
 | OC-02 | DATA-024 | Unknown members are preserved on **every** object (Windows keeps them only at the top level, in `Ui` and in settings.json; it drops nested ones). Emitted after the known keys, verbatim (null, `1.50`, `-0`, `1e2` kept). |
 | A06 / A07 | 01 §4.1.10, ARCH §3.8 rule 1 | JSON `null` for a value-typed key (bool/int/double/enum/Guid/DateTime) or for a collection / nested object reads as the C# default instead of failing (Windows: load failure or a later crash). Real type mismatches (`"Done"` for an enum, `60.0` / `6E1` / `2147483648` for an int) still fail the load, like Windows. |
 | A06e | 01 §4.1.10, ARCH §3.8 rule 1 | JSON `null` **inside** a collection: a string-array element or string-map value reads as `""` and a model-array element is skipped (Windows keeps the null and fails later in the UI); a `null` GUID-array element or bool-map value stays a load failure (STJ cannot hold it either). Only hand-edited files contain such nulls. |
@@ -109,6 +114,8 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 | 09 Clear all | DECISIONS 09 | `trashAllCrew()` moves every crew member to the Trash as one batch (one ⌘Z restores all) and logs a single `Removed / "Crew" / "all {n} member(s)"` line. |
 | 08 OQ-7 | REPO-104, 08 Q-6 | Search text joins text nodes separated only by inline run boundaries (`Run`, `Span`, `Bold`, `Italic`, `Underline`, `Hyperlink`), so a word split across formatting runs is found (`Hel|lo` → `Hello`). Every other separator space (paragraphs, line breaks, list items, CDATA, comments, insignificant white space) is exactly Windows'. Supersedes 08 T-SR-5. |
 | 08 OQ-8 | REPO-107, 08 Q-7 | `QuickSwitcherScoring.rows(store:)` blanks the description of password-protected items (`rows(store:isGated:)` blanks only items still locked this session), so locked content never influences ranking. |
+| 08 OQ-10 | QUICK-194/195, 08 §4.2, 01 §3.15 | `DataDiff` status and recurrence change lines show the friendly labels (`status: To Do → Done`, `status: In Progress → Blocked`, `recurrence: None → Weekly`) instead of the C# enum names (`Todo`, `InProgress`). Only the display text differs; the stored integers and every other diff line are unchanged. |
+| 09 Clear all (order) | CREW-061/062, REPO-077 | Every entry of a `trashAllCrew()` batch carries one `DeletedUtc`, so ⌘Z restores the roster in its original order (per-entry stamps would re-append it reversed). Single and multi-select (`trashItems`) deletes keep per-entry stamps as Windows. |
 | 01 Q-3 | DATA-103 | `DataDiff.compareOtherData` — the opt-in "Other data" section (crew members incl. checklist and schedule, saved lists, saved schedules, ports DB, SIRE session). The Windows-scope `compare` is unchanged. |
 | 02 Q-11 | REPO-101 | Every search hit carries the matched component/subtask/step id (`childID`) for the UI to select. |
 | OC-11 | REPO-102 | A gated item is searched by Name and Tags only. |
@@ -154,7 +161,21 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 | CONT-026 palette | 03 SHELL-609 | Format ▸ Font ▸ Highlight offers six pastel swatches (never `#FFE699`, the lock sentinel), No Highlight and Other…; W-CONT validates/performs them via `aaValidate`/`aaPerform`. |
 | §9.6 rendering | ARCHITECTURE.md §9.6 | The snapshot hook renders the window's layer tree, re-draws glass-hosted split-view columns (macOS 26 floating sidebar) piece by piece with `cacheDisplay`, and composites an attached sheet; materials and glass are approximated as flat fills. |
 | additive | 03 §6.2, 01 §6.9 | Toolbar status-history popover (last 20 messages) and a shared-save popover (path, Check Now, Stop…). |
-| additive | 03 §6.2 | Sidebar context menu Move Up / Move Down / Customize Tab Colors…; the brand tagline is broken into three lines so the narrow sidebar never truncates it. |
+| additive | 03 §6.2 | Sidebar context menu Move Up / Move Down / Customize Tab Colors…. The brand header ("AA" + the verbatim tagline) is fixed above the section list (it does not scroll) and the tagline wraps naturally (caption, muted, up to 3 lines). |
+| sidebar colour | 03 §6.2, SHELL-029 (FIX-F3, V-DESIGN) | A custom tab colour is a 20×20 rounded (radius 5) tile behind the section's SF Symbol, glyph in the SHELL-029 contrast colour, instead of a full-row fill. The selected row uses native sidebar selection; a coloured section's active row adds a semibold title and a 2-pt accent underline (the "active marker"). `TabColors` data unchanged. The Crew badge is the native list `.badge` and is recomputed at `NSCalendarDayChanged`. |
+| §6.5.1.13 bridge | 03 §6.5.1.13, SHELL-509/578/591/592/640/660 (FIX-F3) | Every SwiftUI-driven menu (Edit, Format and its submenus, Tools, View, Window…) gets a delegate proxy that re-applies the bridge right after SwiftUI rebuilds it in `menuNeedsUpdate`, so Paste and Match Style, the four text submenus and the hidden aliases are never missing. The bridge also inserts View ▸ Enter Full Screen (⌃⌘F, `toggleFullScreen:`, retitled by AppKit) when SwiftUI's rebuild drops it, and collapses doubled separators in Window. |
+| G2 switcher | 03 SHELL-505, §6.5.1.10, DECISIONS 08 OQ-2 (FIX-F3) | The quick switcher is non-modal on the Mac, but while it is the key window G2 applies (every APP / MAIN command disabled; Quit, Hide…, About, Keyboard Shortcuts, list/move commands and ⌘W Close stay). |
+| D1 cause | 01 §6.5, DECISIONS 01 DPAPI (FIX-F3) | The D1 safe-mode alert keeps the §6.5 Mac text (now with the "(a file encrypted by AA on Windows can only be opened on that PC — export a bundle there and import it here)" parenthetical) and, for a Windows-encrypted file or an unavailable Keychain key, leads with `DataLoadError`'s own sentence. The safe-mode status line appends " The file was encrypted by AA on Windows." / " The Keychain key for this Mac's encrypted file is unavailable." in those two cases (additive). |
+| password prompt | 03 SHELL-161 table, DECISIONS 01 Q-4 (FIX-F3) | ChangeExisting has three fields on the Mac (Current / New / Confirm), so its prompt reads "Enter the new password and confirm it on the line below." instead of "…on the second line.". |
+| SHELL-552 help | 03 §6.9, DECISIONS 03 Q-7 (FIX-F3) | The shared-save help ends "…point every computer at the same file to keep them in sync." (PC→Mac rule, matching the D29 box). |
+| subtitle | 03 SHELL-022 (FIX-F3, V-DESIGN) | The main window subtitle shows the status message with any path abbreviated (`~` for home, middle-truncated to 60 characters); the full text stays in `StatusCenter`, the status button's help and the history popover. |
+| toolbar | 03 §6.2 (FIX-F3, V-DESIGN) | The status-history button and the Drive indicator sit in the leading group with the shared-save capsule; the primary actions (Due, Search, Go to, Reload, Save) follow in spec order. |
+| prompt sheet look | 06 BUILD-136…150 (FIX-F3, V-DESIGN) | The shared prompt follows the NSAlert layout (headline title, 11-pt body, native rounded-bezel field, 16-pt margins); text, buttons and behaviour unchanged. |
+| hidden pages | 04 HIER-025/040/120, ARCH §7.2 (FIX-F3) | Visited sections stay alive but the hidden ones are `.disabled` (out of the key-view loop and their keyboard shortcuts), and after every section switch — and when the main window opens — keyboard focus moves to the section sidebar unless it is already there, so no keystroke reaches a page the user cannot see. |
+| banners | 01 DATA-021, §6.8, §6.10, DATA-174/180/184 (FIX-F3) | The main-window banners are laid out above the section content (not a safe-area inset) by `ShellBannerStack`, which never measures them narrower than 560 pt, so AppKit's minimum-size query can no longer grow the split view past the window. |
+| item picker | 07 VIEW-208…211, A.6 (FIX-F3) | Multi mode: a click toggles at once (no double-click handler, so a double-click is two toggles); ↑/↓ move a list cursor and Space toggles it; each row is one accessible toggle. Single mode unchanged (click chooses, double-click chooses + OK). |
+| TOOLS-027 | 03 D15, 14 TOOLS-027 (FIX-F3) | The "Confirm import" fallback uses Yes / No buttons (it used Replace / Cancel). |
+| §9.6 DEBUG | ARCHITECTURE.md §9.6 (FIX-F3, V-PACKAGE) | `ShellDebugSnapshots.swift` and the registration calls in `SnapshotRegistry.registerAll()` compile only `#if DEBUG`; the wave owners' `<Area>DebugSnapshots.swift` files are wrapped by their owners (cross-owner request), after which `SnapshotRegistry` itself can be wrapped. The snapshot hook also draws the sidebar column's own SwiftUI content above its list (the fixed brand header). |
 
 ---
 
@@ -177,7 +198,7 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 | Q-13 | 03 SHELL-130/131, §6.8, DECISIONS 02 Q-13 | Tray icon and balloon → MenuBarExtra (headline, per-bucket counts, crew line, Show Due Dates…, Show AA, Settings…, Quit AA), UserNotifications (`aa.reminder`, banner while frontmost, click → due-dates panel) and a Dock badge with the overdue count. Unbundled runs and `--smoke-test` post the text to the status line instead (`AA — due soon: …`). |
 | Q-16 | 03 SHELL-196, BD Q-16 | When `EncryptLocalData` is on, the local data file is plaintext and this Mac has no local-data key, AA asks **Encrypt** / **Keep Plaintext** (writes paused while asking); Keep Plaintext turns the setting off. |
 | SHELL-190 | 03 SHELL-190, REQ-F3-02 | The "Move AA to Applications" sheet is shown once per launch when `ReminderCenter` starts (after the main window and the D1/D2 alerts), never in smoke runs. |
-| PC → Mac | 03 Appendix A.3, §6.9 | D31 "on this Mac only"; D33 rewritten for the macOS Keychain ("this Mac", "your user account", "between computers"); D29 "Point every computer at this same file." |
+| PC → Mac | 03 Appendix A.3, §6.9 | D31 "on this Mac only"; D33 = the 01 §6.5 Mac wording verbatim ("a key stored in your macOS Keychain", "Only THIS Mac's local file", "between computers"; 01 owns the DATA-070 strings, DATA-202 A14); D29 "Point every computer at this same file." |
 | D12 | 03 SHELL-069, 01 DATA-012 | NSWorkspace reports no error text, so Open Data Folder's failure box says "Finder couldn't open the data folder:\n\n{path}" under "Open failed". |
 | BD.3.7 | 03 BD.3.7, SHELL-185 | A Finder document that vanished before it was drained shows "Import failed" with the .NET wording "Could not find file '{path}'." |
 | §6.10 | 01 §6.10 (File ▸ Shared Save ▸ Check Now) | Check Shared Save Now posts "Checked the shared save file (HH:mm:ss)." when the coordinator found nothing to reload and posted nothing itself. |
@@ -187,7 +208,7 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 | REQ-W-SHELL-02 | DECISIONS 03 Q-4 | Main phase: a stored `aa.menuBarExtra = false` that the user did not choose is turned back on (local workaround for the F3 binding, see Requests). |
 | SHELL-523 | 03 SHELL-523 | The Windows column of the shortcuts window drops the registry's spec cross-references and WPF access-key underscores (`E_xit` → `Exit`); a reference-only cell shows "—". |
 | §6.4 | 03 §6.4 | Settings: General (identity with Use Mac Name, appearance System/Light/Dark, shortcut bar, menu-bar item, notification settings link, data folder, version), Security (password status, Set/Change Password…, Lock Now, encryption toggle, on-disk state), Sync (shared save file with status, Change…/Check Now/Stop Using…, text-only exports, W-DRIVE's section), File Links (W-PERSIST), AI (W-SIRE). Data-bound controls are disabled until the user has signed in. Committing a blank identity resets it to this Mac's name (BUILD-145 B1). |
-| BD.3.12 | 03 BD.3.12 | The smoke harness treats a window as shown when it is ordered in (`isVisible`); `occlusionState` stays "occluded" while the display sleeps or another Space is in front, which made unattended runs time out. The expected status path is standardised like DataStore's (`/private/tmp/…` → `/tmp/…`). |
+| BD.3.12 | 03 BD.3.12 | The smoke harness treats a window as shown when it is ordered in (`isVisible`); `occlusionState` stays "occluded" while the display sleeps or another Space is in front, which made unattended runs time out. |
 | §9.4 | ARCHITECTURE.md §9.4, 03 BD.4.1 | Info.plist also exports `com.eriskay.aa.job-ref` and `com.eriskay.aa.item-ref` (all in-app drag types; BD.4.1 listed only `task-ref`). |
 | BD.3.9 | 03 BD.3.9 | build-app.sh builds only the `AA` product per slice with `-j $AA_JOBS` (default 3, shared build Mac) and copies each slice aside, because every `--triple` writes into the same `.build/out/Products/Release`. |
 
@@ -317,90 +338,7 @@ what any golden asserts about Windows; they are naming, layout and plan refineme
 
 ### Progress record
 
-`Docs/Progress/W-GOLD.md` is not an owned path (OWNERSHIP §2; `Scripts/check-ownership.sh` rejects it), so the
-progress record lives here until the lead rules on REQ-W-GOLD-05.
-
-Card: OWNERSHIP §3 "W-GOLD — Golden-fixture plan". Specs: 01 Addendum GF (DATA-300…326), 10 §X.7.6, 05 XD.8.
-Branch `wave/W-GOLD`. Format of each row: ID · status · where.
-
-#### Counts
-
-| | Count |
-|---|---|
-| Feature IDs | 27 (DATA-300…326) |
-| Complete in this worktree (code + tests/docs) | 23 |
-| Complete here, Swift reproducers of some must-cases pending another owner's API (Requests) | 2 (DATA-319: E09, E11, E13, E15b; DATA-320: X04, X05, X06) |
-| Not done here — needs a person on Windows (tooling, procedure and the Swift consumer complete) | 2 (DATA-322, DATA-323) |
-| Placeholders / ContractStatus owned | 0 (`Scripts/check-placeholders.sh W-GOLD` prints nothing) |
-| Goldens committed | 0 Windows goldens (no .NET SDK here; see "Remaining") · 16 mac-out artefacts · 6 synthetic XLSX inputs |
-| Swift | 21 files under `Tests/AACoreTests/WinFixtures/`, 6 235 lines, 90 `@Test` functions (several parameterised over the manifest) |
-| C# | 3 oracle projects under `Tools/`, ~7 060 lines, compiled by inspection only |
-| Gate | `swift build`/`swift test -warnings-as-errors` green (489 tests in 97 suites), `check-ownership` OK, `check-placeholders W-GOLD` empty |
-
-#### Feature IDs
-
-| ID | Status | Where |
-|---|---|---|
-| DATA-300 WinFixtures project | done | `Tools/WinFixtures/WinFixtures.csproj` (linked read-only sources, ClosedXML 0.104.2, PDFsharp-MigraDoc 6.2.0), `Shims/DispatcherTimer.cs` |
-| DATA-301 source pinning | done | `Support/SourcePin.cs` (`verify-sources`, provenance in MANIFEST), `Scripts/fixtures.sh verify-sources` |
-| DATA-302 CLI | done | `Program.cs` (`verify-sources`, `generate`, `case`, `selfcheck`, `check-mac`, `list`); parent pins a scratch `AA_DATA_DIR` |
-| DATA-303 process-per-group driver, determinism | done | `Support/Driver.cs` (groups, staging, swap, `--verify-only` diff); A20 noise SHA-256-derived; fixed ZIP timestamps |
-| DATA-304 reflection access | done | `Fx.Call/CallVoid`, `Fx.Opts/TrashOpts` (read-only reflection) |
-| DATA-305 masking | done | C# `Support/Masker.cs`; Swift `GoldenMatcher.swift` (+ `%%DATADIRUPPER%%`, Deviations) |
-| DATA-306 fixture tree | done | `Tests/AACoreTests/Fixtures/{winfixtures,mac-out,xaml/wpf-capture,xaml/mac-roundtrip}`; authored inputs `winfixtures/inputs/{A05,A10}.input.json`, `E11.rows.json` |
-| DATA-307 MANIFEST + case records | done | C# `CaseRun.Record`, `Driver.MergeManifest`; Swift `GoldManifest`/`GoldFixtureIndex` (rejects duplicate ids, unknown modes, divergent without reason) |
-| DATA-308 goldens win / spec conflicts | done | C# `Support/SelfCheck.cs` (01 §4.2.1, §4.4, §7.1, §7.2, §7.4, §7.5, §7.8; 02 §7.7–7.9; 05 §7.6; 09 §7.1, §7.13); Swift presence suite fails on an open conflict |
-| DATA-309 comparison modes | done | `GoldCaseRunner.compare` (bytes, bytes-masked, json-semantic, zip-manifest(-ordered), text-lf, xml-canonical, record-only); `GoldZipManifest`, `GoldXMLCanonicalizer` |
-| DATA-310 platform matrix | done | `Runs` Any/Unix/Windows/Both; `w`-suffixed windows twins; `GoldFixtureIndex.windowsTwin` |
-| DATA-311 Swift golden harness | done | `GoldFixtureIndex`, `GoldenMatcher`, `GoldZipManifest`, `GoldCaseRunner`, one suite per family; GF.9 self-tests (`GoldHarnessTests`) |
-| DATA-312 reverse direction (mac-out) | done for F1/F2 paths | `GoldMacOutEmitter.swift` (+ always-on read-back `GoldMacOutTests`); committed `Fixtures/mac-out/` (json ×5, settings ×4 + expect, crypto locks/blobs, INDEX.json); bundles/ and xaml/ emit once W-PERSIST / W-RICH flip; C# `Support/CheckMac.cs` |
-| DATA-313 toolchain pin, regeneration, CI | done | `Tools/global.json` (SDK 10.0.100, latestPatch), `Scripts/fixtures.sh` (`ci`, `verify-generated`, `require`, `status`, …) |
-| DATA-314 privacy | done | synthetic content only; `GoldRealDataRoundTrip` (`AA_REAL_DATA_JSON`, `fixtures.sh real-data`; copy in temp, offsets only); C# parent/child scratch data folders |
-| DATA-315 family (a) | done | C# `Cases/FamilyA.cs` (A01–A26, W19); Swift `GoldJSONGoldenTests.swift` (A25/A25x/A25s/A26-paths gated on W-PERSIST) |
-| DATA-316 family (b) | done | C# `FamilyB.cs` (S01–S12, one process each); Swift `GoldSettingsGoldenTests.swift` |
-| DATA-317 family (c) | done | C# `FamilyC.cs` (B01–B08, R01–R17, M, P, T, C01); Swift `GoldBundleGoldenTests.swift` (writer/import/peek gated on W-PERSIST; B07/B08 run now) |
-| DATA-318 family (d) | done | C# `FamilyD.cs` (K01–K10); Swift `GoldCryptoGoldenTests.swift` (K03/K08 literal tests pass) |
-| DATA-319 family (e) | partial — C# complete; Swift reproducers for E09, E11, E13, E15b pending other owners | C# `FamilyE.cs` (E01–E16); Swift `GoldServiceGoldenTests.swift`; E09, E11, E15b → REQ-W-GOLD-01, E13 → REQ-W-GOLD-02 |
-| DATA-320 family (f) | partial — C# complete; Swift reproducers for X04, X05, X06 pending other owners | C# `FamilyF.cs` (X01.rel/purge/rec/recToday/tr/log, X02–X06); Swift `GoldExtGoldenTests.swift`; X04/X05 → REQ-W-GOLD-03, X06 → REQ-W-GOLD-01 |
-| DATA-321 WinCapture W01–W18 | done | `Tools/WinCapture/` (Program.cs W01–W06, Cases/Recipes.cs W07–W18, culture invariance); Swift `GoldXamlCaptureTests.swift` (gated on W-RICH) |
-| DATA-322 clipboard input capture | **not done** — needs Word/Excel/Outlook/Edge on Windows | tool `WinCapture dump-clipboard` and the R-1…R-11 / H-1…H-7 recipe table are complete (`Tools/WinCapture/README.md` §2) |
-| DATA-323 manual confirmations M-01…M-09 | **not done** — needs a person driving AA.exe on Windows | procedure + extraction script complete (`Tools/WinCapture/README.md` §4); Swift consumer `GoldManualCaptures.swift` (M ↔ W claims, M-06, M-09, M-capture round trip) with synthetic self-tests (GOLD-R6/R7) |
-| DATA-324 Windows-only non-WPF artefacts | done (tooling) | W19 in FamilyA (`Runs.Windows`), windows run + neutrality cross-check in `Driver`; W21 Explorer ZIP joins the M/P matrices as R20 and survives windows runs (GOLD-C9); W20 = M-07, compared with E13.X1 by `GoldManualCaptureTests` |
-| DATA-325 WPF load-check of Mac XAML (W23) | done | `WinCapture load-check`; Swift `GoldMacRoundtripTests` (load-check rows, sentinel count, canonical differences recorded, text check gated on W-RICH) |
-| DATA-326 acceptance gate | done (harness side) | `GoldFixturePresenceTests` (absence fails under `AA_REQUIRE_FIXTURES=1`; open spec conflicts / platform divergences fail); `GoldAcceptanceGate.swift` (GF.9 items 1, 3, 6, 9 — GOLD-R8); `fixtures.sh ci` |
-
-10 §X.7.6 XlsxGolden (not a DATA id): `Tools/XlsxGolden/` + `GoldXlsxGoldenTests.swift` + synthetic X.8 inputs
-`Fixtures/winfixtures/xlsx-inputs/` (emitter `GoldXlsxInputEmitter`).
-
-#### Remaining (not doable in this worktree)
-
-1. Generate the Windows goldens — needs the .NET 10 SDK (only the 10.0.12 runtime is installed here; installing the
-   SDK is a download, not done): `Scripts/fixtures.sh generate`, `xlsx-golden`, then commit
-   `Fixtures/winfixtures/`. First run also confirms the C# compiles (written by inspection).
-2. Windows capture machine: `WinCapture all`, DATA-322 clipboard inputs, DATA-323 manual steps, the windows run of
-   WinFixtures (`generate --platform windows`, W19/W22), W21 Explorer ZIP, `check-mac --platform windows`,
-   `load-check` (W23) over `mac-out/xaml` once W-RICH has emitted it.
-3. Windows capture machine, W21: the Explorer ZIP `windows/bundles/R20.explorer.bundle.zip`, then a `generate` to add
-   its M/P rows.
-4. Post-merge: re-run `Scripts/fixtures.sh emit-mac-out` once W-PERSIST and W-RICH have flipped (adds `bundles/`,
-   `xaml/`); write the pending reproducers when REQ-W-GOLD-01…04 are answered; `Scripts/fixtures.sh require`.
-
-#### Independent audit (2026-10-02)
-
-Gate re-run from a clean `.build`: green. Every DATA-300…326 row re-read against the spec and the code. Found and
-fixed:
-
-| Gap | Fix |
-|---|---|
-| W21 (GF.6.8): "the M matrix gains row R20 on the next generate" was not implemented, and a `generate --platform windows` would have deleted a committed `windows/bundles/R20.explorer.bundle.zip` (the windows run rebuilds `windows/bundles/` from scratch) | `FamilyC` R20 rows, `CaseDef.RequiresFile`, `Driver.AuthoredWindowsArtefacts` carried into staging (GOLD-C9); coverage ids in `GoldBundleReproducerTests` |
-| DATA-323 / W20 / W24: nothing on the Swift side read `wpf-capture/manual/` — the manual confirmations, the shipped-exe XLSX and the AA.exe-written data.json would have settled nothing | `GoldManualCaptures.swift` + synthetic self-tests; README §4 table and the timezone file (GOLD-R6, GOLD-R7) |
-| GF.9 items 1, 3, 6, 9 had no check (ledger coverage, provenance, release-gate presence of manual/W23/XlsxGolden/clipboard sources, source pins) | `GoldAcceptanceGate.swift` (GOLD-R8) |
-| GF.6.10: the W01b root start tag was never compared with the Mac writer's new-document root | `GoldW01bRootTagTests` (runs once W-RICH flips and W01b is committed) |
-| DATA-319/320 were counted done although seven must/should reproducers are pending other owners | counted as partial above |
-
-Not fixable here: the .NET 10 SDK is not installed (runtime 10.0.12 only), so the C# oracles are still unbuilt; the
-audit re-checked their calls against the linked AA sources by inspection (DataStore, AppRepository, PasswordService,
-ItemLockService, DataDiff, Models, ZIP inspection) and found no mismatch.
+Moved to `Docs/Progress/W-GOLD.md` (REQ-W-GOLD-05).
 
 ---
 
@@ -487,7 +425,8 @@ readable by the Windows build with the same meaning in every row.
 | CONT-030 ⇧↩ / ⌃↩ | 03 SHELL-681 | ⇧↩ and ⌃↩ insert a line break (U+2028). |
 | CONT-031 | 03 SHELL-678 | ⌘-click opens a link; a plain click only places the caret. Context menu adds Open Link, Copy Link, Edit Link…, Remove Link. |
 | CONT-033 | §6.8 | The right-click menu keeps the Windows items (every suggestion in bold, `(no spelling suggestions)`, `(locked — can't correct)`, Cut, Copy, Paste, `Paste text only` with ⌥⇧⌘V, Select All); Windows' "Ignore All" is the Mac's **Ignore Spelling**, also offered on a locked word (§6.8; Windows hid it there). |
-| CONT-020…061 | §6.3 | The format bar keeps the Windows toolbar order (ContainerEditor.xaml:21-55) in rounded groups: font + size · B I U S · colour, highlight · alignment · bullets, numbering, indent, outdent · insert saved list, move up, move down · undo, redo · link, table, clear · lock, unlock — then the Mac additions find and zoom. The family menu starts with **Show Fonts… (⌘T)**. |
+| CONT-020…061 | §6.3 | The format bar keeps the Windows toolbar order (ContainerEditor.xaml:21-55) in rounded groups: font + size · B I U S · colour, highlight · alignment · bullets, numbering, indent, outdent · insert saved list, move up, move down · undo, redo · link, table, clear · lock, unlock — then the Mac additions find and zoom. The family menu starts with **Show Fonts… (⌘T)**. When the pane is too narrow for one row the bar folds instead of wrapping (§6.3 "overflow Menu when narrow"): first alignment and lists become pop-up menus, then saved list / move, lock / unlock and find / zoom move into a trailing `ellipsis.circle` menu, then undo / redo and link / table / clear too; only a pane too narrow for that wraps. Folded commands keep their Format-menu names (Align Left, Center, Align Right, Justify, Bulleted List, Numbered List, Indent, Outdent, Saved List…, Move Up, Move Down, Lock Highlighted Text…, Unlock Highlighted Text…, Link…, Table…, Clear Formatting, Find in Note…, Zoom) and their tooltips. |
+| CONT-001 | §6.2, V-DESIGN 9 | The 260 pt file-bank height is the default only: on a short pane the bank gives way until the paper (below the format bar and banners) has 200 pt; the bank never drops below 110 pt. The #FCFCFC paper is presented as a page — inset 8 pt in the notes pane, radius 6, 1-pt `AAColor.border`, a soft shadow in dark mode — never an edge-to-edge slab. |
 | CONT-034 | 03 §6.5.1 | Paste text only is also Edit ▸ Paste and Match Style (⌥⇧⌘V); the inserted text never carries a lock or a link from the destination. |
 | CONT-036/038 | DECISIONS 05, §6.6 | Pasted / dropped images go to the file bank as copies (`AttachmentStore.importData` → `FileBankOperations.addImported`) with a short inline notice; Finder files dropped or pasted onto the text go to the file bank (none = copy; ⇧ or ⌥⌘ = link in place, SHELL-679). Foreign RTF is reduced to the storable subset (fonts with family tokens, sizes, colours, B/I/U/S, links, baseline, paragraph styles incl. lists and tables). |
 | CONT-036 | §6.6 | Copy writes our own `com.eriskay.aa.xaml` type (from the real writer) next to RTF and plain text; paste prefers it. |
@@ -572,9 +511,15 @@ section. Stored data keeps the Windows shape in every row (no new keys, same `Pa
 | additive | 02 REPO-051 | The Task specifics show "range · {n} days" next to the start date while a range exists. |
 | HIER-001 | 04 §6.3 | The details tabs are a segmented control (a pop-up menu when the pane is too narrow); the Specifics header text per kind is kept, "Container" kept (DECISIONS 04 Q-H). |
 | Q-11 (02) | DECISIONS 02 Q-11, HIER-120 | A navigation naming a child selects it: a subtask (a nested one selects the direct subtask containing it) on the Schedule & Subtasks tab, a component on the Equipment specifics tab; checklist steps wait for REQ-W-HIER-02. |
-| HIER-056 | 04 HIER-056, §6.7 | Hosted container editors (main pane and item window) are keyed on the container AND the app-password session, so Tools ▸ Lock Now re-loads the editor of a non-gated item (Windows `RelockCurrent`); a detached item's main pane never re-binds (Q-17). |
+| HIER-056 | 04 HIER-056, §6.7; 05 CONT-007, CONT-062, D-4 | Hosted container editors (main pane and item window) are keyed on the container and a re-load counter that steps when the app-password session goes unlocked → locked (Tools ▸ Lock Now re-loads the editor of a non-gated item, Windows `RelockCurrent`) and, on locked → unlocked, only while the body is still a legacy encrypted one (CONT-007). An unlock made by the editor's own 🔒/🔓 gate (CONT-062) keeps the same editor, so caret, scroll and undo survive (D-4). A detached item's main pane never re-binds (Q-17). |
 | HIER-112 | 04 HIER-112, §6.7 | The item window binds its editor only after its id is in `AppStore.detachedItemIDs` (the main pane has parked), so one container never has two live editors, even for one frame. |
 | M03 | 04 HIER-M03 | Double-clicking empty sidebar space does nothing (it never opens the details item in a window). |
+| HIER-004 | 04 HIER-003/004, V-DESIGN rule 4 | The top-of-sidebar buttons and the wrapping toolbar are one icon bar: `plus` (click = + New; its menu = + New, + Group), `trash` = Delete, the A→Z toggle (`arrow.up.arrow.down`), and a trailing `ellipsis.circle` "Group commands" menu with Assign group…, Rename group…, Delete group. Spec names are the accessibility labels / menu titles, spec tooltips are kept, enablement unchanged; the row context menu and the menu bar are unchanged. |
+| HIER-010 | 04 HIER-010, V-DESIGN rules 2/5 | Section headers are non-selectable rows on a PanelAlt band (not pinned List headers, whose full-width separator did not line up with the rows); the group name wraps instead of truncating, with the muted "(N)" following it. Rows are aaMono 13. |
+| HIER-025 | 04 HIER-025 | After Return the Name box keeps the focus and the item stays out of the rebuild signature (`HierRenameState.editingAfterCommit`): later keystrokes re-label the row in place; the next Return or focus loss commits again. |
+| HIER-085 | 04 HIER-085, Q-28 | Subtasks table: Name is the flexible, wrapping column (no line cap); When flexible (ideal 130); Status fixed 96; Done fixed 44 — every column fits without a horizontal scroll at the minimum details width. |
+| VESSEL-005 | 10 VESSEL-005, DECISIONS 10 Q5 | Tools ▸ Vessel commands are withheld while the selected vessel is detached (its panels are shown disabled in the main window and the item window does not host them). |
+| HIER-111 | 04 HIER-111, V-DESIGN rules 7/8/11 | Item window kind line = `AAKindBadge` on the fields' leading edge; the footer note is AAHelpText in a footer bar under a Divider. |
 
 ---
 
@@ -582,17 +527,18 @@ section. Stored data keeps the Windows shape in every row (no new keys, same `Pa
 
 | ID | Spec ref | Change (one line) |
 |---|---|---|
-| D1 | 06 §8 D1, BUILD-072, A10 | Saved Lists sections are keyed by group **Id** (equal names stay separate); a dangling `GroupId` shows under "Ungrouped"; "Ungrouped" is always last (explicit, not via U+FFFF). Data unchanged. |
+| D1 | 06 §8 D1, BUILD-072, A10, REPO-131…134 | Saved Lists sections are keyed by group **Id** (equal names stay separate); a dangling `GroupId` shows under "Ungrouped" and is arranged there too (↑ / ↓ / Move to position / drag treat it as ungrouped; Windows treated it as a group of one); "Ungrouped" is always last (explicit, not via U+FFFF). Data unchanged (pure permutation, `GroupId` kept). |
 | D2 | 06 §8 D2, BUILD-079, 07 VIEW-211 | "Move to group…" preselects the list's current group (or "(No group — ungrouped)"); OK needs a choice, so an empty OK can no longer ungroup by accident. |
 | D3 | 06 §8 D3, BUILD-063, DECISIONS 02 Q-12 | Template editor writes back only when the items changed (no container/file id churn); if the list was deleted meanwhile the user is asked "Save as New List" / "Discard Changes"; in a saved-list step Deadline/Done are shown disabled with "Set when the list is applied". |
 | R1 | 06 §8 R1, ARCH §2.4 | Builders, editors and the procedure checklist re-resolve their owner by id on every read; a vanished owner shows an orphan state instead of editing detached objects. |
-| R3 | 06 §8 R3, §6.3 | "Export ALL (PDF)…" is reachable with no list selected (empty detail state). |
+| R3 | 06 §8 R3, §6.3, §6.5, 11 PDF-022 | "Export ALL (PDF)…" is reachable with no list selected (empty detail state and the tab's overflow menu) and stays enabled with zero lists, so "No saved lists to export." is shown (Windows: the button sat in the disabled-when-empty detail pane). |
 | T-KB-40 | 03 T-KB-40, W-9 | An open template editor registers with `EditorFlushCenter`, so ⌘S, autosave and the quit pipeline write its edits back. |
 | buttons | 06 §6.2 | Yes/No/Cancel boxes use explicit verbs: Replace / Append / Cancel (load a saved list) and Rename… / Delete… / Cancel (manage list / manage group); the Windows sentences are kept verbatim. Destructive confirmations default to Cancel (03 §6.5). |
 | glyphs | ARCH §8.5, DECISIONS P4 | Emoji / "+ " / "..." button prefixes become SF Symbols and the `…` glyph (e.g. "💾 Save as list..." → `square.and.arrow.down` "Save as list…", "+ Item" → `plus` "Item"). ↑/↓ are icon-only buttons with the Windows tooltips. Window titles become sheet headers. |
 | additive | DECISIONS 06 | The subtask editor has a nested "Subtasks" section (add, edit recursively, reorder, delete, open the builder). |
 | additive | 06 §6.2 | Drag-and-drop reorder in the builders (BUILD-A3 with the drop index) and within a Saved Lists group (`SavedListOrder.moveTo`); disabled while Sort A-Z is on. |
 | additive | 06 §6.2 | ⌘↩ Add all; ↩ / double-click Edit…; ⌃⌘↑/↓, ⇧⌘M, ⌫ through the list-command registry; context menus on builder lists, Saved Lists and the item preview. |
+| design | V-DESIGN rules 2/4, 06 BUILD-002/042, 06 §6.2 | Builder button bars are one non-wrapping row: labelled buttons when the row fits, else icon buttons with the Windows tooltips (BUILD-002's "wrapping bar" no longer wraps); the "Saved lists:" strip collapses into a "Saved lists" menu when narrow. Saved Lists: row names regular weight (BUILD-071 "semi-bold"), Rename / Duplicate / Move to group… / Manage groups… / Move to position… / exports in an `ellipsis.circle` overflow menu (same names, also in the row context menu), Sort A-Z is an icon toggle. The procedure banner's exports move under it when the row is narrow. |
 | additive | 06 BUILD-045 | Builder rows show a small badge with the number of deeper subtasks carried by a subtask; the subtask builder footer counts them. |
 | additive | 04 HIER-095 | The step editor shows the step's linked tasks / equipment as read-only chips. |
 | additive | — | Procedure checklist shows "{done} of {n} done" with a progress bar; Link tasks… / Link equipment/area… / Remove / Edit… are disabled without a selected step (Windows: silent no-op); the bulk pane shows "{n} lines ready to add". |
@@ -603,56 +549,15 @@ section. Stored data keeps the Windows shape in every row (no new keys, same `Pa
 
 ---
 
-## W-PLAN — progress record, deviations and P2 fixes
+## W-PLAN — deviations and P2 fixes
 
 Spec 07 (Calendar, Board, Planner, Buckets, Relationship Map) + 02 REPO-031, 05 CONT-050, 06 BUILD-101 / BUILD-145
 B3·B4, 09 CREW-091. Format of the deviation tables: ID · spec reference · one line. Stage V merges them into
 `Docs/DEVIATIONS.md`.
 
-### Progress record (belongs in `Docs/Progress/W-PLAN.md` — see REQ-W-PLAN-01)
+### Progress record
 
-| Count | Value |
-|---|---|
-| Feature IDs assigned (OWNERSHIP §4) | 103 |
-| Done | 103 |
-| Remaining | 0 |
-| Not applicable | 0 |
-| AACoreTests added (Calendar/, Board/) | 63 (`CalendarRowBuilderTests` 19, `PlannerTests` 20, `BoardModelTests` 13, `BucketsModelTests` 5, `MapLayoutTests` 6) |
-| `Scripts/check-placeholders.sh W-PLAN` | empty |
-| `ContractStatus.wPlanImplemented` | `true` |
-
-IDs: VIEW-001–022 (22), VIEW-040–056 (17), VIEW-080–109 (30), VIEW-140–152 (13), VIEW-155, VIEW-170–182 (13),
-VIEW-202, VIEW-207, VIEW-214, REPO-031, CONT-050, BUILD-101, CREW-091.
-
-Vectors covered in-worktree: 07 §8.1 C1–C21, §8.2 B1–B13, §8.3 P1–P23, §8.4 K1–K5 / K8 (K6 is F1's migration,
-K7 is W-QUICK's picker, VIEW-213), §8.5 M1–M7, A.7 R6 (map positions), SL1 / SL3, §8.7 JSON checks (as amended by
-DECISIONS Q-6), 06 BUILD-101 display vector, 03 T-KB-06 (title/strings), T-KB-23 (navigation arithmetic),
-T-KB-26 / T-KB-27 (font steps). §8.6 S1–S8 are F2's services (already tested there).
-
-Snapshots checked (light and dark, `Fixtures/ui/w-plan/sample-data.json`, with `Ui.SelectedMainTabIndex` set to the
-section rendered and `AA_SNAPSHOT_CACHE_DISPLAY=1` — see REQ-W-PLAN-03): Calendar Day / Week / Month / All Upcoming /
-Agenda, Board, Planner Day / Week / Month, Buckets (selected / none), Relationship Map, saved-list picker and
-bucket-category sheets (28 PNGs).
-
-Independent audit (2026-10-02): gate re-run from a clean `.build` (green, 462 tests); all 103 IDs re-checked against
-spec 07 (incl. the A.1 erratum / VIEW-208…216 rows that name W-PLAN), 02 REPO-031, 05 CONT-050, 06 BUILD-101 /
-BUILD-145 B3·B4, 09 CREW-091 and the C# sources. Fixed in the audit:
-* the four split pages (Calendar, Planner, Buckets, Map) used `HSplitView`, whose NSSplitView ignores the main
-  window's bottom `safeAreaInset`: the panes ran under the shortcut strip (Buckets' status line and the strip text
-  overlapped). They now use `CalSplitView` (pure SwiftUI: 6-pt splitter with hairline, resize cursor, drag, double-click
-  resets, VoiceOver adjustable; panes clipped to their bounds);
-* Planner Day/Week: day header and due strip moved into the pinned section header of the hour body's vertical scroll
-  view, so the columns stay aligned when legacy (always-visible) scrollers take width (they were offset by half a
-  scroller); the initial 07:00 scroll is retried until the body has laid out (it sometimes stayed at 00:00);
-* Planner pool rows: the name truncates and the `   ·   {dur}` part stays visible (it was cut off at the default width);
-* Calendar: default sidebar 264 pt and column ideals 56 / 216 / 112 / 340 / 110 so all five columns fit a 1440-pt
-  window (Recurrence was scrolled off);
-* Buckets: a new bucket is scrolled into view as well as selected (VIEW-147).
-
-Post-merge (Stage V): editor sheets opened from Calendar / Planner / Board / Buckets (W-BUILD's
-`TaskItemEditorSheet`, `ChecklistStepEditorSheet`), the batch context-menu items (W-HIER's
-`BatchContextMenuItems` / `BatchActions`), Board "Open all files" through W-PERSIST's `AttachmentOpener`,
-interactive drag and drop (not exercisable by the snapshot hook).
+Moved to `Docs/Progress/W-PLAN.md` (REQ-W-PLAN-01).
 
 ### P2 defect fixes (data stays readable by Windows with the same meaning)
 
@@ -703,8 +608,16 @@ interactive drag and drop (not exercisable by the snapshot hook).
 | VIEW-141 | Buckets list context menu (Rename / Set category... / Delete) and empty states for the members pane; members show kind glyphs. |
 | VIEW-170 | Map: dot-grid canvas, zoom (buttons, pinch, 35–250 %), Fit, Center, drag-to-pan, hover highlight of a node's edges, double-click / context menu "Show in {Section}", "Open in New Window", "Focus Here"; animated recentre (nodes glide, edges interpolate); a colour key. |
 | ⌥⌘F | Board Find, Planner Search jobs..., Map Inspect search are published through `SectionCommands.focusSearchField` (REQ-W-PLAN-02). |
-| VIEW-001 / 083 / 140 / 170 | The 6-wide GridSplitter is `CalSplitView` (resizable, width not persisted, double-click restores the default). Default leading widths: Calendar 264 (Windows 320; the graphical month picker needs ~160, and the five columns then fit a 1440-pt window), Planner 230, Buckets 340, Map 260. |
-| VIEW-084 | Pool row: the `{JobName}` part truncates, the `   ·   {DurFmt}` part never does (same string, tooltip shows it whole). |
+| VIEW-001 / 083 / 140 / 170 | The 6-wide GridSplitter is `CalSplitView` (resizable, width not persisted, double-click restores the default). Default leading widths: Calendar 232 (Windows 320; the graphical month picker needs ~160; in a narrow pane the selected day moves under the Today button), Planner 256, Buckets 340, Map 260. |
+| VIEW-011 | Calendar column ideal widths 40 / 150 / 92 / 160 / 88 (Windows 56 / 210 / 120 / 420 / 110): all five columns are visible from a 1100-pt window up (incl. the default 1280 × 820) and every column grows with a wider pane; cells wrap as on Windows. Below ~1100 pt the table scrolls horizontally (the five minimum widths do not fit). Rows have no zebra stripes (hairline separators, V-DESIGN rule 5); the Task name is regular weight (V-DESIGN rule 2; Windows semi-bold). |
+| VIEW-004 / 017 | Page header controls (Text: A- / A+, the five view-mode segments, Board Find / Hide done / buttons) sit beside the title when they fit; otherwise they flow onto their own lines under it (`CalFlowLayout`), and in a very narrow Calendar pane the five segments become a pop-up with the same five choices and tooltips. Nothing is clipped. |
+| VIEW-012 | Status column shows the friendly labels "To Do", "In Progress", "Blocked", "Done" (Windows: enum names `Todo`, `InProgress`, …) and Recurrence the friendly label (same words) — DECISIONS 04 Q-G / 08 OQ-10 outrank VIEW-012. Steps / crew items keep "Step" / "Done". Stored integers unchanged. |
+| VIEW-017 | A- / A+ are enabled whenever a click would change the size (`CalFontScale.canStep`), so a stored 10 or 30 (C18) steps back into 11…28 with the buttons as well as ⌘− / ⌘+. |
+| VIEW-043 | Board card meta: the dates, then a red "OVERDUE" status chip (⚠ symbol), then the recurrence with a repeat symbol; each part wraps as a unit, so OVERDUE never lands alone behind a dangling "·". The exact Windows string (`"Due …  ·  OVERDUE   ·   Weekly"`) is the meta line's tooltip and VoiceOver label. |
+| VIEW-052 | Single-card "Delete task" (context menu, ⌘⌫ with one card) flushes open editors after the confirmation, re-resolves and trashes the task, saves, closes its detached item window and drops it from `detachedItemIDs` — the same steps as the multi-card batch path (`BatchActions.confirmAndTrash`); the "Confirm" / "Delete task '{name}'?" text is unchanged. |
+| VIEW-141 | Buckets header: title with the bucket count, then one icon bar — `plus` ("+ New bucket"), `trash` ("Delete"), and a trailing `ellipsis.circle` menu with "Rename" and "Set category..." (tooltip kept) — instead of the Windows wrap panel of text buttons (V-DESIGN rule 4). Bucket names regular weight (Windows semi-bold); members list without zebra stripes. |
+| VIEW-084 | Pool row: the `{JobName}` part wraps to two lines before it truncates; the `   ·   {DurFmt}` part never truncates and sits trailing (same string, tooltip shows it whole). |
+| VIEW-170 | Map Inspect rows: `"[{Kind}] {Name}"` wraps to two lines, then truncates in the middle (string intact, tooltip shows it whole). |
 | ⌘+ / ⌘− | Calendar text size through `SectionCommands.calendarFontScale` / `setCalendarFontScale` (SHELL-605/606, T-KB-26/27); ⌘← / ⇧⌘T / ⌘→ through the planner closures (SHELL-632…634). |
 
 ---
@@ -731,7 +644,7 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 | ID | Spec ref | Behaviour |
 |---|---|---|
 | DECISIONS 02 Q-4 / 08 OQ-1 | QUICK-073, T-QW-13 | Quick-work **Delete** moves the item (whole subtree) to the Trash (undoable with ⌘Z, references kept for a lossless Put Back, pin removed). Confirmation title `Delete`, text `Delete '{name}' and everything under it? This removes it everywhere — it goes to the Trash (put it back from File ▸ Trash…, or undo with ⌘Z).`, buttons Move to Trash / Cancel (default Cancel). The log line is the Trash's `Removed / {KindLabel} / name / moved to Trash` instead of Windows' `Removed / Task|Procedure / name`. |
-| DECISIONS 02 Q-5 | QUICK-173, REPO-078 | Trash buttons `Put Back` (tooltip starts "Restore:"), `Delete Immediately…`, `Empty Trash…`, `Close`; in-sheet keys ⌘⌫ / ⌥⌘⌫ / ⇧⌘⌫ (03 SHELL-675). Messages keep the Windows text. An empty Trash shows "The Trash is empty." (additive). |
+| DECISIONS 02 Q-5 | QUICK-173, REPO-078 | Trash buttons `Put Back` (tooltip starts "Restore:"), `Delete Immediately…`, `Empty Trash…`, `Close`; in-sheet keys ⌘⌫ / ⌥⌘⌫ / ⇧⌘⌫ (03 SHELL-675). Messages keep the Windows text. An empty Trash shows "The Trash is empty." with the line "Items you delete land here. Put them back from this window, or undo the last delete with ⌘Z." (additive). The Name column shows the raw `Name` like the WPF list (an empty name is an empty cell, REPO-078 / T-TR-15). In a read-only copy the three Trash commands are disabled with "Not available in a read-only copy of AA." (01 DATA-174). |
 | DECISIONS 08 OQ-2 | QUICK-100 | The quick switcher is a floating Open-Quickly panel (borderless, 620×480, centred over the main window), not a modal window; it closes on ⎋ / ⌘W / resign-key; ↑ ↓ ↩ as Windows; single click selects, double click opens. |
 | DECISIONS 08 OQ-3 | QUICK-120, QUICK-150 | Search and Activity log reuse one window each (F3 scenes); ⌘F re-focuses the query and selects it. |
 | DECISIONS 08 OQ-8 / REQ-F2-02 | QUICK-103/105 | Switcher rows are built with `QuickSwitcherScoring.rows(store:isGated: env.locks.isGated)`: a description of an item still locked this session never ranks. |
@@ -743,6 +656,8 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 | Mac buttons | 03 §6.5.1.5, 01 MP | `Import (Overwrite)` (title case, as 03 §6.5.1.5 and 01 MP.5 write it); Insert-saved-list question uses Replace / Append / Cancel buttons and the body names them (`Replace = …`, `Append = …`, `Cancel = do nothing`) instead of Yes / No; ellipsis glyph `…` on buttons that open a dialog (`Export (.csv)…`, `Sort into Buckets…`, `Edit…`, …). |
 | Mac grace | 08 §6.2 | SF Symbols replace the WPF glyphs (due-row icons, tile header, bucket header — the 🪣 text stays in `QuickWorkGroup.header` for accessibility); hover states; animated tick-off; collapsible Pinned header; drag reorder (`.onMove`) of children in addition to ↑/↓; a `{done}/{total} done` hint in the children builder; a red subtitle for overdue rows in the quick-work list; Added/Removed capsules in the Activity log. |
 | 08 §6.5 | QUICK-002 | The due-dates panel is `.floating` + full-screen auxiliary; above a full-screen app in another Space it cannot appear (OS limit). Both panels are excluded from the Window menu (no taskbar on the Mac). |
+| V-DESIGN (FIX-W-QUICK) | QUICK-102, QUICK-124 | The switcher kind chip keeps `KindLabel` (`Equipment/Area`, `Task`, `Procedure`, `Vessel`, radius 3, padding 6/1, 11 pt) but uses the per-kind pastel fill with black text and a hairline border (the `AAKindBadge` look, DECISIONS 07 Q-10, V-DESIGN rule 8) instead of a `PanelAlt` chip with `Accent` text; the selected row uses `AASelBg/AASelFg`. The Search window's Where column adds a compact `AAKindBadge` before the owner header (additive; the header text is unchanged). |
+| V-DESIGN (FIX-W-QUICK) | QUICK-042, QUICK-044, QUICK-010, QUICK-152 | Restyle only, every command / string / tooltip kept: the quick-work list controls are one icon bar — the All / Tasks / Procedures filter, a `plus` menu button (click = `+ Task`; its menu lists `+ Task` and `+ Procedure` with their tooltips) and an `ellipsis.circle` menu holding `Sort into Buckets…` / `Remove from Buckets` (tooltips kept; both also stay in the row context menu) — instead of two rows of text buttons; the list header shows the item count (muted, trailing). Row titles (quick-work list, due panel) are regular-weight brand mono instead of bold / semi-bold (V-DESIGN rule 2: bold is for headers only); tiles keep their bold name. Tables (Search, Trash, Activity log) and the children list have no zebra stripes (03 §6.6.5) and show `AAEmptyState` instead of an empty table. The Activity log's Name column takes the flexible width (ideal 214 pt, wraps to 2 lines) inside the 900-pt window. |
 
 ---
 
@@ -761,9 +676,9 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 | 09 Q8 | §8 Q8, 06 D6 | Only ASCII digits are digits (resolver, `NormTime`); other digits never crash and are not read. |
 | 09 Q9 | §8 Q9 | A two-digit-year month-name date whose expansion lands on 29 Feb of a non-leap year (`29-Feb-00` future-likely → 2100) is unreadable with the note `'…' is not a real date` (Error flag) instead of aborting the import. |
 | 09 Q10 | §8 Q10 | The table separator is used verbatim (built from components; a backslash is literal). |
-| 09 Clear all | CREW-061, DECISIONS 09 | Clear all moves every member to the Trash as one batch (F2 `trashAllCrew`, one ⌘Z restores all). The confirmation keeps `Remove ALL crew from the roster?` and adds a line saying the batch goes to the Trash. |
+| 09 Clear all | CREW-061, DECISIONS 09 | Clear all moves every member to the Trash as one batch (F2 `trashAllCrew`, one ⌘Z restores all). The confirmation keeps `Remove ALL crew from the roster?` and adds a line saying the batch goes to the Trash. Buttons `Clear All` (Return, as the Windows Yes default) / `Cancel` (⎋), like the Move to Trash confirmation. |
 | 06 log | DECISIONS 06 ("log the unlogged actions"), 06 D8 | Schedule add / delete log `Added`/`Removed` · `Schedule entry` · title · crew name; schedule apply logs `Added` · `Schedule` · template name · `{n} entr{y|ies} applied to {crew}` (+ ` (replaced)`). |
-| 06 R1 | DECISIONS 06 | The editor commits by id; if the member vanished (deleted / reloaded) Save shows a warning and writes nothing. |
+| 06 R1 | DECISIONS 06 | The editor commits by id; if the member vanished (deleted / reloaded) Save shows a warning and writes nothing. A reload that keeps the member (ids survive in data.json) while the editor is open re-bases the draft on `store.dataReplaced`: untouched rows show the reloaded values, edited rows keep the user's text, and a note says so. Save writes an untouched row only while its stored value is still the one the form was filled with (`CrewEditorForm.apply(_:original:to:)`), so a stale pre-reload value is never written back; without a reload Save is the Windows apply-all (trim / date normalisation of every row). |
 
 ### Sanctioned Mac presentation (P4) — no data effect
 
@@ -773,10 +688,10 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 | ⌘Z | CREW-060, 09 §6.4 | The delete confirmation says `undo with ⌘Z`; buttons `Move to Trash` / `Cancel`. |
 | apply | BUILD-122 | The Yes/No/Cancel apply question uses `Replace` / `Append` / `Cancel` buttons; the message keeps the legend lines. |
 | export | CREW-105, 09 §6.4 | `Export complete` offers `Open` / `Show in Finder` / `Done` (superset of Yes/No). |
-| table | CREW-100…104 | The table is the `crew-table` Window scene (non-modal) and reflects the live roster in the current sort order. The chooser also supports drag-to-reorder, Space toggles, ⌃⌘↑/↓, and a `Columns` menu bound to the same state; Contract Status / Days cells are tinted with the roster colours. Choices are written on every rebuild; the store is marked dirty only when a value actually changed. |
-| roster | CREW-010…017, 09 §6.4 | Row context menu (Edit…, Open Checklist…, Open Schedule…, Move to Trash…), double-click = Edit…, ⌘⌫ / ⌫ = Move to Trash (with the confirmation), ⌥⌘F focuses the search field (placeholder shown), an expiring-count capsule beside the title, empty states. Day counts refresh when the tab is selected and at `NSCalendarDayChanged` (09 §8 Q15). |
-| card | CREW-020…025 | The subtitle runs under the name across the full card width (not beside the Edit… button). Section glyphs are SF Symbols (`person.text.rectangle`, `ferry`, `book.closed`, `cross.case`, `ruler`, `person.2`); values are selectable; banner and checklist box carry symbols. |
-| editor | CREW-070…076 | Sheet with a segmented Details / Checklist / Schedule switch; Esc = Cancel (Windows had none); date rows use `OptionalDatePicker` + the 130-pt text box with the same one-way sync. The label column is 200 pt (170 px on Windows) so the monospaced `Sign-off date  (contract)` label stays on one line; empty text rows show an empty box (no placeholder). |
+| table | CREW-100…104 | The table is the `crew-table` Window scene (non-modal) and reflects the live roster in the current sort order. On open the window grows (never past the screen) so the shown columns fit at their starting widths — with the defaults, Sign-Off Date and Contract Status are in view (WPF auto-sized the grid). A data reload while it is open re-reads the four CrewTable* Ui keys instead of writing the pre-reload choices back. No alternating row stripes. The chooser also supports drag-to-reorder, Space toggles, ⌃⌘↑/↓, and a `Columns` menu bound to the same state; Contract Status / Days cells are tinted with the roster colours. Choices are written on every rebuild; the store is marked dirty only when a value actually changed. |
+| roster | CREW-010…017, 09 §6.4 | Header = one row (`Crew`, expiring capsule, member count) and ONE icon bar (design rule 4): `Import COMPAS…` (`square.and.arrow.down.on.square`), `Delete` (`trash`) │ Sort menu (`arrow.up.arrow.down`, the five modes), `Expiring Only` toggle, `Contract Expiries` … overflow `ellipsis.circle` with `Table View…` and `Clear All…`. Every icon carries the spec tooltip as help and the spec name as accessibility label; the WPF wrapping text-button rows are gone. Row name in regular weight (bold for headers only). The in-window Import COMPAS… buttons are disabled with `Not available in a read-only copy of AA.` in a read-only copy or while editing is stopped (DATA-174, the Tools-menu predicate). Row context menu (Edit…, Open Checklist…, Open Schedule…, Move to Trash…), double-click = Edit…, ⌘⌫ / ⌫ = Move to Trash (with the confirmation), ⌥⌘F focuses the search field (placeholder shown), an expiring-count capsule beside the title, empty states. Day counts refresh when the tab is selected and at `NSCalendarDayChanged` (09 §8 Q15). |
+| card | CREW-020…025 | The subtitle runs under the name across the full card width (not beside the Edit… button). Section glyphs are SF Symbols (`person.text.rectangle`, `ferry`, `book.closed`, `cross.case`, `ruler`, `person.2`); values are selectable; banner and checklist box carry symbols. Design rules: name in aaMono 16 bold (not 22), Edit… / Open Checklist… as small bordered buttons, field labels aaMono 13 muted trailing-aligned in the 170-pt column, values aaMono 13. |
+| editor | CREW-070…076 | Sheet with a BuilderSheetHeader (heading + rank/nationality/vessel subtitle), a segmented Details / Checklist / Schedule switch and a 44-pt footer; Esc = Cancel (Windows had none); date rows use `OptionalDatePicker` + the 130-pt text box with the same one-way sync. The label column is 212 pt, muted, trailing-aligned (170 px on Windows) so the monospaced `Sign-off date  (contract)` label stays on one line; empty text rows show an empty box (no placeholder). The sheet is 640 pt wide (spec) and grows to 860 pt on the Checklist tab so W-BUILD's builder (780-pt minimum, as its own sheets) lays out without wrapping. |
 | schedule | BUILD-111/112/117, 06 §6.5 | Visible placeholders `HH:mm` and `What... (or pick an item)`; hover-revealed ✎/✕; context menu on entries. The vessel bar is one row when it fits, else the vessel link above the four buttons; the add row is two deliberate lines (date · time · kind, then title · Pick item… · + Add). Kind glyphs ✓ / 📋 / ⚙ / • are SF Symbols (`checkmark.circle`, `list.clipboard`, `gearshape`, a small dot) with the kind name as tooltip and accessibility label. |
 | busy | CREW-030 | The workbook is parsed off the main actor behind `AAProgressOverlay`; Import is disabled while running. |
 
@@ -796,7 +711,7 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 | Q7 / VESSEL-121 | 10 §9 Q7, DECISIONS 10 Q7, ARCH §7.7 / §9.3 | `WorkOrderNotifications.runDigest` posts one system notification per vessel with flagged (`Notify`), active, overdue jobs, only when `NotificationsEnabled`, deduplicated per vessel/job/day (`aa.vessel.notified`). Unbundled runs fall back to the status line. Text is Mac-only: title `AA — work orders overdue`, body `{Vessel}: {n} flagged work order(s) overdue — {JobNo} (overdue {d}d), …`; click opens the vessel's item window. |
 | Q8 / VESSEL-251 | 10 §9 Q8, DECISIONS 10 Q8 | Ports Database row count pluralised: `1 visit` / `{n} visits`. The other `(s)` strings stay verbatim. |
 | Q6 / VESSEL-045 | 10 §9 Q6 | "Explorer" → "Finder": tooltip `Reference a folder (opens in Finder).`, panel message `Link a folder (opens in Finder)`. |
-| Q4 / VESSEL-025 | 10 §9 Q4, ARCH §9.4 | Targets open through `AttachmentOpener` (path-mapping table, UNC → `smb://`). An unmapped Windows path shows `Not found:\n{path}` plus a Mac-only line pointing to Settings ▸ File Links and an "Open File Links Settings…" button. |
+| Q4 / VESSEL-025 | 10 §9 Q4, §6.2, §6.9, ARCH §9.4, W-PERSIST-13 | Targets open through `AttachmentOpener` (path-mapping table, `/Volumes/<share>` for UNC). An existing folder target opens the folder itself in Finder (`NSWorkspace.open`, Explorer parity), not its parent with the folder selected. An unmapped Windows path shows `Open failed` / `Not found:\n{path}` plus a Mac-only remedy line, with the shared recovery: `Connect to Server…` (UNC only, default; Finder mounts `smb://server/share`, the open is retried as soon as the path resolves, up to 15 s, else a status line), `Locate…` (stores the inferred mapping, then retries), `Open File Links Settings…`, `Cancel`. |
 | Q5 / VESSEL-005 | 10 §9 Q5, DECISIONS 10 Q5 | Panels take a `vesselID` and render that vessel in any window (never another vessel's data). |
 | Q11 | 10 §9 Q11 | The search placeholders stored in `Tag` on Windows are shown (`Search job no / title / function...`, `Search port / country / UN-LOCODE...`). |
 | VESSEL-004 | 10 VESSEL-004 | Defensive gate in each panel: a locked, not-unlocked vessel shows a "Locked" placeholder (the host W-HIER also overlays its lock gate). |
@@ -812,10 +727,14 @@ Format: ID · spec reference · one line. Stage V merges this file into `Docs/DE
 | VESSEL-103 / 205 export styling | 10 §4.4–4.5 | Exports use F1's `XlsxWriter.write(to:sheet:)`: the bold header cells also carry a light grey fill (F1 style 1/3), widths are the auto-fit approximation `chars × 1.1 + 2` (cap 100) and empty strings are written as empty cells. Cell values, types, `@` columns, sheet names and the re-import result are unchanged. |
 | VESSEL-318 | 10 §X.3 | Shippalm and ports imports append the Mac-only hint `{n} formula cell(s) had no saved result; …` to the success status line when the file had formula cells without cached values. |
 | VESSEL-001 / 002 | 10 §A, OWNERSHIP W-HIER card | The vessel detail tab strip (order Quick Cards, Work Orders, Ports, Container, Relationships; Quick Cards selected on vessel selection) is hosted by W-HIER; W-VESSEL supplies `VesselTab`, the three panels and `VesselActions.menuActions(selectTab:)`. Verified post-merge (Stage V "vessel tabs"). |
-| VESSEL-040 | 10 §6.3 | The editor is a sheet (no title bar), so the Windows window title `Quick card` is shown as the sheet's bold header row. Sheet 660×620. |
+| VESSEL-040 | 10 §6.3 | The editor is a sheet (no title bar), so the Windows window title `Quick card` is shown in the standard `BuilderSheetHeader` (symbol tile + mono title); footer = Divider + 44-pt bar. Field labels keep bold (mono). Sheet 660×620. |
 | X.7.3 / VESSEL-101, 201 (additive) | 10 X.7.3 | Dropping a Finder workbook on the Work Orders or Ports panel runs the same import as the toolbar button (same VESSEL-301 gate, busy state, different-vessel prompt, hints and error boxes); the drop target is highlighted in the system accent. |
 | VESSEL-100 (layout) | 10 §6.4 | Toolbar in two wrapping rows: Import, Export, search, then Mark completed / Mark active / Delete; then the Status / Category / Rank / Completion pickers, the two toggles, then shown ON / shown OFF. Same controls, words and tooltips as Windows. |
 | VESSEL-103 / 205 (save panel) | 10 §6.4 | The save panels carry the Windows dialog title as the panel message too (a sheet shows no title). |
+| DATA-174 / VESSEL-101, 201, 044 (write gate) | 01 DATA-174, DATA-180 | While the write gate is closed (read-only copy, or Stop Editing Here) the in-panel `Import Shippalm (.xlsx)…` / `Import ports (.xlsx)…` buttons and the editor's `Import a copy` are disabled with the help `Not available in a read-only copy of AA.`; the workbook drops and the quick-card canvas drag-in accept nothing; a gated import reached any other way shows that text in an `Import` box and does nothing. |
+| VESSEL-109 / 207 (wrapping, widths) | 10 VESSEL-109, 207; design rules 2/5 | The wrapped columns (Title, Due, Function; Port Facility, Special measures) wrap on the native `Table` (variable row heights). Cells use the brand mono at 12 pt (the crew-table cell size); to fit the mono font some ideal widths are narrower than the Windows px widths (Ports: Port 130, Country 110, UN/LOCODE 80, Arrival/Departure 124, Sec P/V 48, SSP 42, Facility 170; Work Orders: Job No. 100, Title 230, Due 190, Responsible 110, Function 200). Work Orders still scrolls horizontally in narrow panes, as on Windows. No alternating stripes; an empty vessel shows the empty state instead of an empty table. |
+| VESSEL-250…253 (type) | 10 VESSEL-250, 251, 253; design rule 2 | Ports Database text uses the brand mono: page title 16 bold accent (Windows 15), visits header 13 semibold (Windows 17 bold), port rows 13 regular (Windows semi-bold), counts 11 muted. The empty port list shows an empty state (`No ports yet` / `No matching ports`). |
+| VESSEL-012 (empty state) | 10 VESSEL-012; design rule 12 | The empty canvas shows the VESSEL-012 text as a standard empty state: its first line is the title, its second the message. |
 
 ---
 
@@ -835,7 +754,7 @@ Windows behaviour is kept wherever this list says nothing (DECISIONS P1/P3).
 | DEV-07 | 11 §6.4 | CoreText cascade fallback renders glyphs missing from the chosen font (emoji, CJK) instead of tofu. |
 | DEV-08 | 11 §3.2 rule 8 | A table row (or MergeDown group) taller than a page is split at line boundaries across pages, heading rows repeated; normal rows stay atomic. |
 | DEV-09 | 11 PDF-003 | Item export/print flushes **every** editor (`env.flushAllEditors()`, incl. detached item windows) before `FlushIfDirty`. |
-| DEV-10 | 11 PDF-022 | "Export ALL (PDF)…" never needs a selection (`PdfSavedListsExportButtons`); "No saved lists to export." kept for the empty case. |
+| DEV-10 | 11 PDF-022 | "Export ALL (PDF)…" never needs a selection: W-BUILD's `SavedListsTabView` shows it in the detail card and under the no-selection empty state (always enabled), both calling `PdfExportFlows.exportSavedLists(.all)`; "No saved lists to export." kept for the empty case. |
 | DEV-11 | 11 PDF-071, §7.2 | A formal link's target is the trimmed `NavigateUri` (www. → https://), not .NET `Uri.ToString()`; strings Foundation rejects are percent-encoded; a target that is still not a URL gets no annotation (the text stays blue/underlined). |
 | DEV-12 | 11 PDF-025 | A failure to *open* the saved-lists PDF is ignored (never reported as "Could not export the PDF"). |
 | DEV-13 | 11 PDF-101 | CRLF and lone CR become LF before `\n` splitting everywhere text enters the PDF. |
@@ -853,6 +772,7 @@ Windows behaviour is kept wherever this list says nothing (DECISIONS P1/P3).
 | table position | 11 §3.2 rule 8 | Tables are shifted left by their left padding, so cell text aligns with body text (MigraDoc's placement). |
 | file names | ARCHITECTURE.md §1.2 vs §12.2 | The §1.2 tree's file names (PdfDOM, PdfStyles, FontResolver, LinkScanner, RichTextToPdf, ItemPdfBuilder, …) are implemented with the mandatory `Pdf` prefix: `PdfDOM`, `PdfStyles`, `PdfFontResolver`, `PdfLinkScanner`, `PdfRichText`, `PdfItemBuilder`, `PdfListBuilders` (saved lists + checklist), `PdfChecklistXlsx`, `PdfLayoutEngine`, `PdfRenderer`, `PdfSnapshots`, `PdfExport`. |
 | PDF-027 order | 11 PDF-027 | Group order of Export ALL comes from F2's `SavedListOrder.allEntries` (REPO-136: culture comparison of the lower-cased name, ungrouped last, stable) — the same order the Windows `OrderBy` produces; the spec's "code-point" remark only concerns the `￿` sentinel, which is not used. |
+| D1 exports | 06 §8 D1 (DECISIONS 06: D1–D7 accepted), 11 PDF-021, PDF-022/027, BUILD-092/093 | A list whose `GroupId` points at a deleted group is **ungrouped in both exports**, as the Saved Lists tab shows it: "Export group (PDF)…" on it (or on any ungrouped list) prints "Ungrouped lists" = every list with a null **or** dangling `GroupId`, arranged order (Windows: null only, so the selected list was missing); "Export ALL (PDF)…" prints it under the trailing "Ungrouped" heading in arranged order (Windows: key `""`, printed first with no heading). `PdfExport.ungroupedEntries` / `allEntriesResolved`; F2's `SavedListOrder` unchanged. An existing group with an empty name keeps PDF-052 (no heading, sorts first). |
 | checklist lock | 11 PDF-010 | Checklist-only exports are not lock-checked (parity; unreachable while gated). |
 | KWN + orphans | 11 §3.2 rules 7 + widow control, §7.16 #6 | A KeepWithNext chain reserves the lines the next paragraph's orphan control needs (2, or all of a ≤ 3-line paragraph), so a heading is never left alone at a page bottom while its paragraph moves on. |
 | save-panel title | 11 PDF-004, PDF-011, PDF-024, §6.2 | The save panel runs as a sheet, which has no title bar, so the Windows dialog title (`Export to PDF`, `Export checklist to PDF` / `to Excel`, `Export saved lists to PDF`) is also set as the panel's message (visible text); additive. |
@@ -956,6 +876,8 @@ wire protocol v1 or what a well-formed peer sends; every file written stays read
 | DEV-FLASH-35 | 13 §8 Q-13, FLASH-130 | An incoming `DarkMode` takes effect immediately (the reload re-applies the appearance). |
 | DEV-FLASH-36 | 13 §3.14 | `AAFlashSyncInterop` prints `Swift …` where the C# harness prints `C# …`, writes LF frame files, splits frame files on bytes (CRLF safe), and answers missing arguments with the usage line (exit 2) instead of an exception. Change sets use `From = "Windows"` and 2026-09-27 12:00:00 like the C# harness, so outputs compare byte for byte. |
 | DEV-FLASH-37 | 13 §6.6 | Applying is refused in a read-only instance (another AA owns the data folder), with the safe-mode message. |
+| DEV-FLASH-38 | 13 §6.6 point 3 | The refresh when the window becomes key and is idle is skipped when nothing changed since the last prepare: the editors are flushed, nothing is dirty, and the data file, settings.json and the baseline carry the same path/size/modification date/inode (`FlashSourceFingerprint`). Returning from the window's own alerts or from the main window therefore no longer rebuilds the whole payload (and keeps the same session). Any change, or a failed last prepare, still re-prepares. |
+| DEV-FLASH-39 | 13 §6.4 step 1, DEV-FLASH-26 | The camera permission is re-read on **Rescan** and whenever the window becomes key, so after the user allows the camera in System Settings the denied text clears and **Start camera** enables without reopening the window (and a revoked permission shows the text again). |
 
 ### Not shipped
 
@@ -980,6 +902,7 @@ Files written stay readable by the Windows build with the same meaning (DECISION
 ### Sanctioned deviations (DECISIONS 14 / spec 14 §8 recommendations)
 
 - Q-1 · 14 §3.1.5 · `files.list` requests `nextPageToken,files(…)`, so the intended ≤ 10-page whole-Drive scan works (Windows reads only the first 200 results). Identical results with ≤ 200 matches.
+- Q-3 · 14 §3.1.10, DECISIONS 14 ("Q-3 harden EnsureFolder: yes") · `EnsureFolder` asks `mimeType='application/vnd.google-apps.folder' and name='{name}' and 'me' in owners and trashed=false` with `fields=files(id,name,capabilities/canAddChildren)`; it picks the first match Drive reports as `canAddChildren`, else the first whose capability is not reported (Windows' first result), else creates a new folder in My Drive root. A shared, hand-made or other-app `AA Backups` / `AA Sync` that `drive.file` cannot write into is no longer chosen. Vector 7.6-7 pins the new query and fields; `ensureFolderHardened` covers the pick.
 - Q-6 · TOOLS-019 · downloads pass `supportsAllDrives=true` (shared-drive files that are listed can also be downloaded).
 - Q-7 · TOOLS-008, §6.3 · interactive sign-in shows a "Waiting for Google sign-in in your browser…" sheet with Cancel (status `Google sign-in cancelled.`) and times out after 5 minutes; Windows waits forever.
 - Q-8 · §4.5 · a Drive 400 while `aaIdentity` exceeds the 124-byte appProperty limit is reported as "App identity is too long for Google Drive metadata…" followed by Drive's own message.
@@ -988,6 +911,7 @@ Files written stay readable by the Windows build with the same meaning (DECISION
 - Q-16 · TOOLS-069 · Date calculator computes in Int64 and shows `Result is out of range.` instead of crashing for results outside 0001-01-01…9999-12-31 (incl. the `n × 7` overflow).
 - Q-17 · §6.2, §6.7 · a stored `GoogleDriveFolder` / `FolderBuilderBase` that is not an absolute POSIX path (e.g. `G:\My Drive` from a copied Windows settings file) is treated as unset and left untouched until a new folder is chosen.
 - Q-18 · §6.5 · a background check is skipped while a push or another check is running; the review sheet goes through the window's dialog queue, so a background prompt never stacks on another sheet. Upload / Load / Check are disabled while one of them is in flight (router reads `inFlight`).
+- DATA-174 · TOOLS-002/003/007/014/015/023 · in a read-only copy (or after DATA-180 "Stop Editing Here") the Settings ▸ Sync Drive buttons that match the router's `readOnlyDisabled` rows (Choose… folder, Save a Copy to Google Drive, Choose client_secret.json…, Check for Newer Save, Upload Backup…, Load Backup…) are disabled with the tooltip `Not available in a read-only copy of AA.`; the six `DriveActions` entry points refuse with that status text when reached anyway, and the newer-save check (background or after turning sync on) does not run. Sign Out and the sync-on-save toggle stay available, as in the menu.
 - Q-21 · TOOLS-002/014 · in safe mode the synced-folder copy and the OAuth upload refuse with the "Safe mode — not saving" alert instead of bundling an unreadable file.
 - TOOLS-034 · Drive / OAuth errors show Google's own message in the .NET client's wording (`The service drive has thrown an exception. HttpStatusCode is Forbidden. …`, `Error:"access_denied", Description:"…", Uri:""`) and append the setup hint for `access_denied`, `invalid_client`, `unauthorized_client` and `insufficientPermissions`.
 - TOOLS-012, §6.3 · token at rest = `AAKCGCM1` + AES-256-GCM (combined) with the key in the Keychain item `AA` / `google-token-key` (DATA-215, OC-34); a copied Windows `AADPAPI1` file never counts as a token (re-consent notice shows instead); a legacy plaintext JSON token is read and re-stored encrypted (DATA-073). The token JSON is Mac-private (keys as Windows, STJ escaping).
@@ -996,7 +920,7 @@ Files written stay readable by the Windows build with the same meaning (DECISION
 
 ### Kept quirks (P3)
 
-- Q-2 listing creates `AA Backups`; Q-3 EnsureFolder may pick a folder AA did not create (error surfaced); Q-4 duplicate `AA Sync` folders; Q-5 best-remote key mixes local-wall-clock stamps with UTC Drive times (vector 7.6-1 asserts it); Q-9 a new client keeps the old token; Q-10 upload text always says `AA Backups`; Q-11 Load cancel keeps the "listing backups…" status; Q-19 re-consent notice on every launch; Q-20 fallback wording; 3.4.1 negative day counts in the Y/M/D line.
+- Q-2 listing creates `AA Backups`; Q-4 duplicate `AA Sync` folders; Q-5 best-remote key mixes local-wall-clock stamps with UTC Drive times (vector 7.6-1 asserts it); Q-9 a new client keeps the old token; Q-10 upload text always says `AA Backups`; Q-11 Load cancel keeps the "listing backups…" status; Q-19 re-consent notice on every launch; Q-20 fallback wording; 3.4.1 negative day counts in the Y/M/D line.
 
 ### Mac additions (P4, additive)
 

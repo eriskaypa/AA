@@ -54,10 +54,18 @@ import AACore
 
     /// SHELL-185 / BD.3.7: `.aaz` / `.zip` documents from Finder (double-click, Open With, Dock drop, forwarded by a
     /// second launch) — the Import Data Folder (ZIP) flow without its open panel, one review per file, in order.
+    /// DATA-173: a forwarded or Finder-opened `.json` database goes to Import Database (DATA-034) without its open
+    /// panel; a read-only copy ignores it (importing would replace the active data file).
     static func openDocuments(_ urls: [URL], env: AppEnvironment) async {
-        for url in urls where ShellXDataFlows.isBundleDocument(url) {
-            env.showMainWindow()
-            await importBundle(url, env: env, dialogs: env.mainDialogs)
+        for url in urls {
+            if ShellXDataFlows.isBundleDocument(url) {
+                env.showMainWindow()
+                await importBundle(url, env: env, dialogs: env.mainDialogs)
+            } else if url.pathExtension.lowercased() == "json" {
+                env.showMainWindow()
+                guard !env.isReadOnlyInstance else { continue }
+                await importDatabase(url, env: env, dialogs: env.mainDialogs)
+            }
         }
     }
 
@@ -95,6 +103,11 @@ import AACore
         let picked = await dialogs.openPanel(OpenPanelConfig(allowedTypes: [.json], directory: env.dataStore.appFolder,
                                                              allFilesAccessory: true))
         guard let url = picked.first else { return }
+        await importDatabase(url, env: env, dialogs: dialogs)
+    }
+
+    /// DATA-034 after the file is chosen: shared by File ▸ Import from File… and DATA-173 forwarded documents.
+    static func importDatabase(_ url: URL, env: AppEnvironment, dialogs: DialogPresenter) async {
         env.flushAllEditors()
         let incoming: AppData
         do {
@@ -337,10 +350,24 @@ import AACore
     private static func setPassword(_ env: AppEnvironment, _ dialogs: DialogPresenter) async {
         let mode: PasswordSheetMode = env.passwords.hasPassword ? .changeExisting : .setNew
         guard case .ok(let password, let current) = await dialogs.password(mode) else { return }
+        // 01 §8.1 D-5: re-salting orphans legacy `enc:` bodies no candidate password decrypts — confirm first.
+        if env.passwords.hasPassword,
+           let w = LegacyBodyMigration.orphanWarning(
+               count: env.passwords.undecryptableLegacyBodyCount(in: env.store, current: current)),
+           !(await dialogs.confirm(ShellXText.passwordFailedTitle, w + " Change the password anyway?",
+                                   confirm: "Change Password", destructive: true, defaultIsCancel: true)) {
+            return
+        }
         do {
-            if try ShellXDataFlows.setPassword(password, current: current, passwords: env.passwords) {
-                env.status.post(ShellXText.passwordUpdated)
+            if let r = try ShellXDataFlows.setPassword(password, current: current, passwords: env.passwords,
+                                                       store: env.store) {
+                var status = ShellXText.passwordUpdated
+                if r.migrated > 0 { status += " \(r.migrated) older encrypted note(s) were decrypted and saved." }
+                env.status.post(status)
                 postIfSettingsUnwritable(env)
+                if let w = LegacyBodyMigration.orphanWarning(count: r.undecryptable) {
+                    await dialogs.warning(ShellXText.passwordFailedTitle, w)
+                }
             }
         } catch {
             await dialogs.error(ShellXText.passwordFailedTitle, error.message)

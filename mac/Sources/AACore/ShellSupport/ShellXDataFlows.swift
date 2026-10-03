@@ -91,12 +91,13 @@ public enum ShellXDataFlows {
 
     /// The password sheet's OK: an empty password does nothing (Windows `IsNullOrEmpty → return`, returns false);
     /// otherwise `PasswordService.setPassword` (fresh salt, PBKDF2, one joint settings write, session unlocked),
-    /// which requires the current password when one exists. Returns true when a password was set.
+    /// which requires the current password when one exists. With `store`, legacy `enc:` bodies are migrated first
+    /// (01 §8.1 D-5). Returns the migration result when a password was set, nil when nothing was done.
     @discardableResult
-    public static func setPassword(_ new: String, current: String?, passwords: PasswordService) throws(PasswordError) -> Bool {
-        guard !new.isEmpty else { return false }
-        try passwords.setPassword(new, current: current)
-        return true
+    public static func setPassword(_ new: String, current: String?, passwords: PasswordService,
+                                   store: AppStore? = nil) throws(PasswordError) -> LegacyBodyMigration? {
+        guard !new.isEmpty else { return nil }
+        return try passwords.setPassword(new, current: current, migratingLegacyBodiesIn: store)
     }
 
     /// Forgets the app-password session and every per-item unlock; returns the status line. Views observing

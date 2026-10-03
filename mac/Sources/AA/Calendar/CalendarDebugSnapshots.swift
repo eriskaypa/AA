@@ -1,6 +1,7 @@
 // Spec: ARCHITECTURE.md §9.6 — W-PLAN's debug sheets for the snapshot hook (`--sheet w-plan.<name>`): the saved-list
 //       → tasks picker of 07 VIEW-202 / VIEW-214 over the loaded data, and the Board / Buckets prompts with their exact
 //       texts (VIEW-053, VIEW-147, VIEW-149). The five tabs themselves are snapshotted by SectionID.
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -31,3 +32,4 @@ extension SnapshotRegistry {
         }
     }
 }
+#endif

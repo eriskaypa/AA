@@ -86,7 +86,7 @@ struct EditorPane: View {
     /// The paper is presented as a page: inset from the pane, rounded, hairline border, a soft shadow in dark mode
     /// (V-DESIGN rule 9). Its colour stays #FCFCFC in both appearances (CONT-010).
     static let paperInset: CGFloat = AASpacing.s
-    static let paperRadius: CGFloat = AARadius.boardCard
+    static let paperRadius: CGFloat = AARadius.paper
 
     var body: some View {
         VStack(spacing: 0) {

@@ -1,6 +1,7 @@
 // Spec: ARCHITECTURE.md §9.6 — W-PDF's debug sheets for the snapshot hook: the list-style prompt (PDF-023,
 //       CONT-049) with one and several lists, the busy sheet (PDF-005), and a preview of the first page of the
 //       item PDF of the first item in the loaded data folder (the whole snapshot → DOM → layout → PDF pipeline).
+#if DEBUG
 import AppKit
 import CoreGraphics
 import SwiftUI
@@ -61,3 +62,4 @@ private struct PdfDebugPreview: View {
         return NSImage(cgImage: cg, size: NSSize(width: box.width, height: box.height))
     }
 }
+#endif

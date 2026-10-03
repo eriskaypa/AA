@@ -1,6 +1,7 @@
 // Spec: ARCHITECTURE.md §9.6 — W-QUICK's debug sheets for the snapshot hook (`--sheet w-quick.<name>`), built from the
 //       loaded fixture (`Tests/AACoreTests/Fixtures/ui/w-quick/`). The windows themselves are snapshot targets
 //       (`quick-work`, `due`, `switcher`, `search`, `activity-log`); `--select <uuid>` pre-selects a quick-work item.
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -63,3 +64,4 @@ extension SnapshotRegistry {
                                     otherData: DataDiff.compareOtherData(current: current, incoming: incoming))
     }
 }
+#endif

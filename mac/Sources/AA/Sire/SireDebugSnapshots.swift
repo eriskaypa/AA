@@ -1,6 +1,7 @@
 // Spec: ARCHITECTURE.md §9.6 — W-SIRE's debug sheets for the snapshot hook (`--sheet w-sire.<name>`): the candidate
 //       picker (SIRE-030), the kind picker (SIRE-034), the export sheet (SIRE-036/037, §6.8), the Gemini key prompt
 //       (SIRE-038) and the Settings ▸ AI section. Synthetic task texts only (no bank content).
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -39,3 +40,4 @@ extension SnapshotRegistry {
         }
     }
 }
+#endif

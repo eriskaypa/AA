@@ -1,6 +1,7 @@
 // Contract: ARCHITECTURE.md §9.6 — W-VESSEL's debug snapshot registrations (`--sheet w-vessel.<name>`). The three
 // vessel panels are hosted by W-HIER's vessel detail tabs in the real app; here they are shown in a sheet at a
 // realistic size so they can be verified in isolation (fixture data: Tests/AACoreTests/Fixtures/ui/w-vessel/).
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -58,3 +59,4 @@ private struct VesselSnapshotFrame<Content: View>: View {
         .background(AAColor.bg)
     }
 }
+#endif

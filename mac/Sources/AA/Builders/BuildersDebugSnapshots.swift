@@ -2,6 +2,7 @@
 //       acceptance (snapshots of every builder host and editor). Fixture data: Tests/AACoreTests/Fixtures/ui/w-build/.
 // Each registration resolves its target from the loaded data folder by position, so any data folder works (an empty
 // one shows the orphan / empty states).
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -80,3 +81,4 @@ struct BuilderSnapshotFrame<Content: View>: View {
         .aaSheet(.closeType)
     }
 }
+#endif

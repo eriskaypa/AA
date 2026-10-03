@@ -1,6 +1,7 @@
 // Spec: ARCHITECTURE.md §9.6 (W-CONT debug sheets for the snapshot hook: ids "w-cont.<name>"), OWNERSHIP W-CONT
 //       acceptance (snapshots of the editor in both appearances). The previews build the attributed text directly so
 //       the format bar, paper, lists, table, link and lock look can be checked before W-RICH's reader is merged.
+#if DEBUG
 import AppKit
 import SwiftUI
 import AACore
@@ -294,3 +295,4 @@ struct EditorSelfTestView: View {
         return out
     }
 }
+#endif

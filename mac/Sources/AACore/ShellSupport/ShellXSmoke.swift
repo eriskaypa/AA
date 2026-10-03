@@ -50,10 +50,10 @@ public enum ShellXSmoke {
     // MARK: Expectations
 
     public static func expectedTitle(identity: String) -> String { "AA — \(identity)" }
-    /// `Loaded — {AppFolder}/data.json`, with the path standardised the way `DataStore` reports the active file
-    /// (`/private/tmp/…` → `/tmp/…`).
+    /// `Loaded — {AppFolder}/data.json`, with the path as given (symlinks unresolved, like DataStore, which keeps a
+    /// `/private/…` spelling).
     public static func expectedStatus(appFolder: URL) -> String {
-        "Loaded — \(appFolder.appending(path: "data.json").standardizedFileURL.path)"
+        "Loaded — \(DataStore.lexical(appFolder.appending(path: "data.json")).path)"
     }
     public static let splashExpectation = "2.3 ≤ splashSeconds ≤ 2.9"
     public static func splashOK(_ seconds: Double) -> Bool { splashRange.contains(seconds) }

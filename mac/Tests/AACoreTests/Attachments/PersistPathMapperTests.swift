@@ -66,7 +66,8 @@ struct PersistPathMapperTests {
 
     @Test("The table persists per Mac in UserDefaults aa.pathMappings")
     func persistence() {
-        let prefs = MacPreferences(defaults: UserDefaults(suiteName: "persist-map-\(UUID().uuidString)")!)
+        let temp = TempDefaults("persist-map"); defer { temp.remove() }
+        let prefs = temp.preferences
         let a = PathMapper(preferences: prefs)
         a.mappings = [PathMapping(windowsPrefix: "Z:", macPath: "/Volumes/Ship")]
         let b = PathMapper(preferences: prefs)

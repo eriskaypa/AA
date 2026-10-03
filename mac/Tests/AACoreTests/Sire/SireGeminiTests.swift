@@ -160,7 +160,7 @@ final class SireStubURLProtocol: URLProtocol, @unchecked Sendable {
 @MainActor private final class SireKeyEnv {
     let folder = TempFolder("aa-sire-key")
     let secrets = InMemorySecretStore()
-    let suite = "aa-sire-tests-\(UUID().uuidString)"
+    let temp = TempDefaults("aa-sire-tests")
     let settings: SettingsStore
     let prefs: MacPreferences
     let store: GeminiKeyStore
@@ -169,11 +169,11 @@ final class SireStubURLProtocol: URLProtocol, @unchecked Sendable {
         if let settingsJSON { try folder.write("settings-under-test.json", settingsJSON) }
         settings = SettingsStore(fileURL: folder.file("settings-under-test.json"), secrets: secrets)
         settings.reload()
-        prefs = MacPreferences(defaults: UserDefaults(suiteName: suite)!)
+        prefs = temp.preferences
         store = GeminiKeyStore(secrets: secrets, settings: settings, preferences: prefs)
     }
 
-    isolated deinit { UserDefaults().removePersistentDomain(forName: suite) }
+    isolated deinit { temp.remove() }
 }
 
 @MainActor @Suite struct GeminiKeyStoreTests {

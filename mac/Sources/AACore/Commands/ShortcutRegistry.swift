@@ -101,7 +101,7 @@ public enum ShortcutRegistry {
           help: "Restore items you deleted, or remove them for good. Deletes go here instead of vanishing — ⌘Z undoes the last one."),
         r("SHELL-551", .encryptLocalData, "Encrypt Local Data File (This Mac)", "", file,
           "Encr_ypt local data file (this PC)", "APP", "CMD", symbol: "lock.doc",
-          help: "Encrypt this Mac's data file at rest with the macOS Keychain (tied to your user account on this Mac). Shared, exported and Google Drive copies stay portable plaintext, so sync between machines is unaffected."),
+          help: "Encrypt this Mac's data file at rest with a key kept in your macOS Keychain. Shared, exported and Google Drive copies stay portable plaintext, so sync between machines is unaffected."),
         r("SHELL-552", .setSharedSaveFile, "Set Shared Save File…", "", shared, "Set s_hared save file...", "APP", "CMD",
           help: "Use ONE save file at a location you choose (e.g. a network drive or a synced folder). AA autosaves there every minute and auto-reloads when another copy of AA updates it — point every computer at the same file to keep them in sync."),
         r("SHELL-553", .stopSharedSaveFile, "Stop Shared Save File", "", shared, "Stop shared save file", "APP", "CMD",

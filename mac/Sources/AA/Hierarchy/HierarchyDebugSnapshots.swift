@@ -1,6 +1,7 @@
 // Spec: ARCHITECTURE.md §9.6 — W-HIER's debug sheets for the snapshot hook (`--sheet w-hier.<name>`). The pages
 // themselves are snapshotted with `--snapshot TabEquipment|TabTasks|TabProcedures|TabVessels [--select <uuid>]` and the
 // item window with `--snapshot item --select <uuid>` (fixture: Tests/AACoreTests/Fixtures/ui/w-hier/).
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -29,3 +30,4 @@ extension SnapshotRegistry {
         }
     }
 }
+#endif

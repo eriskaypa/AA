@@ -136,9 +136,9 @@ import Testing
         let m = make()
         let passwords = PasswordService(settings: m.dataStore.settings)
         #expect(!passwords.hasPassword)
-        #expect(try ShellXDataFlows.setPassword("", current: nil, passwords: passwords) == false)   // empty → nothing
+        #expect(try ShellXDataFlows.setPassword("", current: nil, passwords: passwords) == nil)   // empty → nothing
         #expect(!passwords.hasPassword)
-        #expect(try ShellXDataFlows.setPassword("abcd", current: nil, passwords: passwords))
+        #expect(try ShellXDataFlows.setPassword("abcd", current: nil, passwords: passwords) != nil)
         #expect(passwords.hasPassword && passwords.isUnlocked)
         #expect(passwords.verify("abcd"))
 
@@ -152,10 +152,10 @@ import Testing
         #expect(throws: PasswordError.tooShort) {
             try ShellXDataFlows.setPassword("abc", current: "abcd", passwords: passwords)
         }
-        #expect(try ShellXDataFlows.setPassword("wxyz", current: "abcd", passwords: passwords))
+        #expect(try ShellXDataFlows.setPassword("wxyz", current: "abcd", passwords: passwords) != nil)
         #expect(passwords.verify("wxyz") && !passwords.verify("abcd"))
         // The master password is accepted as the current one (DECISIONS 01 Q-1).
-        #expect(try ShellXDataFlows.setPassword("efgh", current: PasswordHashing.masterPassword, passwords: passwords))
+        #expect(try ShellXDataFlows.setPassword("efgh", current: PasswordHashing.masterPassword, passwords: passwords) != nil)
         let text = try String(contentsOf: m.dataStore.settingsFile, encoding: .utf8)
         #expect(text.contains("\"PasswordHash\":") && text.contains("\"PasswordSalt\":"))
         #expect(ShellXText.passwordUpdated == "App password updated.")

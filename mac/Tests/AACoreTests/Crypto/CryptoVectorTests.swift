@@ -2,6 +2,7 @@
 //     verify table, hint trimming, dialog validation, gate transitions), 01 §6.11 (Base64 / constant time),
 //     01 DATA-080…084, DATA-090…094.
 import Foundation
+import Security
 import Testing
 @testable import AACore
 
@@ -407,6 +408,14 @@ private enum CryptoFixture {
         #expect(try s.read(service: "a", account: "c") == Data([2]))
         s.failAll = true
         #expect(throws: SecretStoreError.self) { try s.read(service: "a", account: "c") }
+    }
+
+    // SecretStoreError carries the Security framework's message as its localizedDescription (W-SIRE request).
+    @Test func secretStoreErrorDescribesItself() {
+        let e: Error = SecretStoreError.keychain(errSecItemNotFound)
+        #expect(!e.localizedDescription.isEmpty)
+        #expect(!e.localizedDescription.contains("couldn’t be completed"))
+        #expect(!e.localizedDescription.contains("couldn't be completed"))
     }
 
     // TV: 01 DATA-215 Keychain registry names

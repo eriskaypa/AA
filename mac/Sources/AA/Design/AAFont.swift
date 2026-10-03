@@ -41,5 +41,7 @@ enum AASpacing {
 
 enum AARadius {
     static let control: CGFloat = 4, boardCard: CGFloat = 6, tile: CGFloat = 8, quickCard: CGFloat = 10,
-               floatingPanel: CGFloat = 12, sidebarTile: CGFloat = 5
+               floatingPanel: CGFloat = 12, sidebarTile: CGFloat = 5,
+               /// The rich-text paper inset as a page (V-DESIGN rule 9).
+               paper: CGFloat = 6
 }

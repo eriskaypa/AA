@@ -4335,7 +4335,7 @@ safe mode (DATA-021) plus the rules below.
 * **Disabled** (greyed-out menu items and toolbar buttons, with the tooltip/help text `"Not available in a read-only copy of AA."`):
   * Import Database (JSON)… and Import Bundle…;
   * Encrypt Local Data File;
-  * Shared Save File ▸ Set… and Stop Using;
+  * Shared Save ▸ Set Shared Save File… and Stop Shared Save File (final titles per 03 §X-13);
   * Set / Change App Password…, and per-item Lock / Change lock / Remove lock;
   * Trash ▸ Restore, Delete Permanently and Empty Trash;
   * undo of the last delete (⌘Z for deletions);
@@ -4557,7 +4557,7 @@ Evidence (any one is enough):
 
 The warning is a dismissible banner, remembered per canonical folder in the `UserDefaults` key
 `AA.SharedWithWindowsWarned.<sha256hex>`:
-`"This data folder also seems to be used by AA on Windows. Two copies of AA must not edit one data folder — they overwrite each other's changes. Give each computer its own data folder and connect them with a shared save file (File ▸ Shared Save File ▸ Set…)."`
+`"This data folder also seems to be used by AA on Windows. Two copies of AA must not edit one data folder — they overwrite each other's changes. Give each computer its own data folder and connect them with a shared save file (File ▸ Shared Save ▸ Set Shared Save File…)."`
 Buttons: `"Show Me How"` (opens the Help anchor `shared-save-setup`) and `"Don't Show Again"`.
 
 Problems the user will otherwise run into (documented, not fixed):

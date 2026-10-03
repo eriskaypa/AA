@@ -1,5 +1,6 @@
 // Debug snapshot registrations of W-DRIVE (ARCHITECTURE.md §9.6; sheet ids "w-drive.<name>"): the sign-in waiting
 // sheet, Settings ▸ Sync's Drive section, and the three tools with realistic state (14 §7.3–7.5 vectors).
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -35,3 +36,4 @@ extension SnapshotRegistry {
         }
     }
 }
+#endif

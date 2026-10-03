@@ -63,6 +63,8 @@ final class SceneOpener {
             if let env = LaunchCoordinator.shared.env { DueDatesPanelController.shared.show(env: env) }
         case .switcher:
             if let env = LaunchCoordinator.shared.env { QuickSwitcherPanelController.shared.show(env: env) }
+        case .splash:
+            SplashPanelController.shared.show()
         case .bootstrap, .item, .unitConverter:
             if id == .unitConverter { open(.unitConverter, value: UUID()) }
         default:
@@ -82,6 +84,7 @@ final class SceneOpener {
     }
 
     func dismiss(_ id: SceneID) {
+        if id == .splash { SplashPanelController.shared.close(); return }
         guard ready else { return }
         dismissWindowAction?(id: id.rawValue)
     }

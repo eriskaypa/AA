@@ -2,6 +2,7 @@
 //       w-flash.review-changeset, w-flash.review-snapshot, w-flash.review-bare-snapshot (FLASH-044/132/135).
 //       The window itself is `--snapshot flash-sync`; DEBUG-only environment switches: AA_FLASH_DEBUG_TAB=receive,
 //       AA_FLASH_DEBUG_AUTOSTART=1 (starts flashing so the plate shows a live code).
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -34,3 +35,4 @@ enum FlashDebugFixtures {
                                    carriesSettings: withSettings)
     }
 }
+#endif

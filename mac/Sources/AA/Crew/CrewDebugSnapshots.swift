@@ -3,6 +3,7 @@
 //   AA --data-dir <dir> --snapshot CrewTab --out roster.png [--appearance dark]
 //   AA --data-dir <dir> --snapshot crew-table --out table.png
 //   AA --data-dir <dir> --snapshot CrewTab --sheet w-crew.editor --out editor.png   (also .editor-checklist / .editor-schedule)
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -33,3 +34,4 @@ extension SnapshotRegistry {
         }
     }
 }
+#endif

@@ -2,6 +2,7 @@
 //       About, Keyboard Shortcuts) are scenes the hook renders directly (`--snapshot settings|about|shortcuts`; DEBUG
 //       runs pick the Settings tab with `AA_SETTINGS_TAB=<general|security|sync|fileLinks|ai>`); the sheets below are
 //       the W-SHELL prompts and every Settings tab presented as a sheet on the main window.
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -20,3 +21,4 @@ extension SnapshotRegistry {
         register("w-shell.about") { _ in AnyView(AboutView()) }
     }
 }
+#endif

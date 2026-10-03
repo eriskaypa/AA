@@ -1,6 +1,7 @@
 // Spec: ARCHITECTURE.md §9.6 — W-PERSIST's debug sheets (ids "w-persist.<name>"): the DATA-180 sheet in its three
 //       variants, the DATA-181 conflict-copies list (reads the scratch data folder's conflicts/), the File Links
 //       settings with an in-memory table, and the DATA-174/175/180/184 banners.
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -75,3 +76,4 @@ struct PersistBannerGallery: View {
         .frame(width: 900, height: 420, alignment: .top)
     }
 }
+#endif

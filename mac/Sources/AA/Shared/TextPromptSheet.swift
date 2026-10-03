@@ -83,7 +83,8 @@ struct ShellRawSingleLineField: NSViewRepresentable {
         let field: NSTextField = secure ? NSSecureTextField() : NSTextField()
         field.stringValue = text
         field.delegate = context.coordinator.delegate
-        field.isBezeled = true                                      // native rounded bezel (never isBordered)
+        field.isBordered = false                                    // V-DESIGN rule 7: no square frame
+        field.isBezeled = true                                      // native rounded bezel
         field.bezelStyle = .roundedBezel
         field.lineBreakMode = .byClipping
         field.usesSingleLineMode = true

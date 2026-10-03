@@ -14,7 +14,7 @@ Windows behaviour is kept wherever this list says nothing (DECISIONS P1/P3).
 | DEV-07 | 11 §6.4 | CoreText cascade fallback renders glyphs missing from the chosen font (emoji, CJK) instead of tofu. |
 | DEV-08 | 11 §3.2 rule 8 | A table row (or MergeDown group) taller than a page is split at line boundaries across pages, heading rows repeated; normal rows stay atomic. |
 | DEV-09 | 11 PDF-003 | Item export/print flushes **every** editor (`env.flushAllEditors()`, incl. detached item windows) before `FlushIfDirty`. |
-| DEV-10 | 11 PDF-022 | "Export ALL (PDF)…" never needs a selection: W-BUILD's `SavedListsTabView` shows it in the detail card and under the no-selection empty state (disabled only when there are no lists), both calling `PdfExportFlows.exportSavedLists(.all)`; "No saved lists to export." kept for the empty case. |
+| DEV-10 | 11 PDF-022 | "Export ALL (PDF)…" never needs a selection: W-BUILD's `SavedListsTabView` shows it in the detail card and under the no-selection empty state (always enabled), both calling `PdfExportFlows.exportSavedLists(.all)`; "No saved lists to export." kept for the empty case. |
 | DEV-11 | 11 PDF-071, §7.2 | A formal link's target is the trimmed `NavigateUri` (www. → https://), not .NET `Uri.ToString()`; strings Foundation rejects are percent-encoded; a target that is still not a URL gets no annotation (the text stays blue/underlined). |
 | DEV-12 | 11 PDF-025 | A failure to *open* the saved-lists PDF is ignored (never reported as "Could not export the PDF"). |
 | DEV-13 | 11 PDF-101 | CRLF and lone CR become LF before `\n` splitting everywhere text enters the PDF. |

@@ -103,8 +103,6 @@ public enum HierText {
     public static var tagsHelp: String {
         MacKeyStrings.render("Comma- or space-separated tags. Used for filtering, global search and the quick switcher (Ctrl+O).")
     }
-    public static let exportPDF = "Export PDF…"
-    public static let exportPDFHelp = "Export this item, its hierarchy and relationships to an A4 PDF."
     public static let containerTab = "Container"
     public static let relationshipsTab = "Relationships"
     public static let quickCardsTab = "Quick Cards"

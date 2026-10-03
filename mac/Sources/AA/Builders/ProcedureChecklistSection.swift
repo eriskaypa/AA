@@ -115,11 +115,12 @@ struct ProcedureChecklistSection: View {
                 await PdfExportFlows.exportChecklistPDF(procedureID: procedureID, env: env, dialogs: dialogs)
             }
         } label: {
-            Label("Export checklist (PDF)", systemImage: "doc.richtext").lineLimit(1)
+            Label(PdfExportCommand.checklistPDF.title, systemImage: PdfExportCommand.checklistPDF.symbol).lineLimit(1)
         }
         .controlSize(.large)
         .fixedSize()
-        .help("Export ONLY the checklist (no notes, no relationships) as a printable A4 PDF.")
+        .help(PdfExportCommand.checklistPDF.help ?? "")
+        .accessibilityLabel(PdfExportCommand.checklistPDF.accessibilityLabel)
     }
 
     private var exportXLSXButton: some View {
@@ -130,11 +131,12 @@ struct ProcedureChecklistSection: View {
                 await PdfExportFlows.exportChecklistXLSX(procedureID: procedureID, env: env, dialogs: dialogs)
             }
         } label: {
-            Label("Export checklist (Excel)", systemImage: "tablecells").lineLimit(1)
+            Label(PdfExportCommand.checklistXLSX.title, systemImage: PdfExportCommand.checklistXLSX.symbol).lineLimit(1)
         }
         .controlSize(.large)
         .fixedSize()
-        .help("Export ONLY the checklist as an Excel workbook (.xlsx).")
+        .help(PdfExportCommand.checklistXLSX.help ?? "")
+        .accessibilityLabel(PdfExportCommand.checklistXLSX.accessibilityLabel)
     }
 
     /// HIER-094 / HIER-095 / BUILD-032…037 buttons: one row (labels when they fit, else icons) — never wrapped.

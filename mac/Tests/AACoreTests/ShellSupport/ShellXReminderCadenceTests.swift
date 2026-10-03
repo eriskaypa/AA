@@ -169,9 +169,9 @@ import Testing
     // MARK: Per-device digest store
 
     @Test func deviceDigestStoreRecordsPerDataFile() {
-        let suite = "aa.tests.shellx.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
+        let temp = TempDefaults("aa.tests.shellx")
+        defer { temp.remove() }
+        let defaults = temp.defaults
         let store = ShellXDeviceDigestStore(prefs: MacPreferences(defaults: defaults))
         let a = URL(fileURLWithPath: "/Users/u/Library/Application Support/AA/data.json")
         let b = URL(fileURLWithPath: "/Volumes/STICK/AA Data/data.json")

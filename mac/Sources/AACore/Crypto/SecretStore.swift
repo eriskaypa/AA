@@ -3,10 +3,14 @@
 import Foundation
 import Security
 
-public enum SecretStoreError: Error, Sendable, Equatable, CustomStringConvertible {
+public enum SecretStoreError: Error, Sendable, Equatable, CustomStringConvertible, LocalizedError {
     case keychain(OSStatus)
     public var description: String { "Keychain error \(self.status)" }
     var status: OSStatus { if case .keychain(let s) = self { return s }; return 0 }
+    /// The Security framework's own text, so `localizedDescription` in an alert says what went wrong.
+    public var errorDescription: String? {
+        (SecCopyErrorMessageString(status, nil) as String?) ?? description
+    }
 }
 
 public protocol SecretStore: Sendable {
