@@ -12,10 +12,11 @@ struct ShellMainToolbar: CustomizableToolbarContent {
         ToolbarItem(id: "shared", placement: .navigation) {
             SharedSaveIndicator()
         }
-        ToolbarItem(id: "status", placement: .automatic, showsByDefault: true) {
+        // Status-only items sit with the shared-save capsule in the leading group, never between the actions.
+        ToolbarItem(id: "status", placement: .navigation, showsByDefault: true) {
             ShellStatusHistoryButton()
         }
-        ToolbarItem(id: "drive", placement: .automatic, showsByDefault: true) {
+        ToolbarItem(id: "drive", placement: .navigation, showsByDefault: true) {
             ShellDriveSyncIndicator()
         }
         ToolbarItem(id: "due", placement: .primaryAction) {

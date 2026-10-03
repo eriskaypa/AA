@@ -196,8 +196,11 @@ public enum CommandRouterCore {
         // G1 — phase
         if ctx.phase != .main && !phaseExempt.contains(c) { return CommandDecision(enabled: false, title: title) }
         if ctx.phase != .main { return CommandDecision(enabled: true, title: title, effect: .run) }
-        // G2 — sheet / modal key window
-        if ctx.keyWinIsSheetOrModal && !modalExempt.contains(c) && !listScoped.contains(c) && !moveCommand(c) {
+        // G2 — sheet / modal key window, or the quick switcher (SHELL-505: the switcher is non-modal on the Mac,
+        // DECISIONS 08 OQ-2, but while it is key every APP / MAIN command stays disabled; ⌘W still closes it).
+        let switcherKey = ctx.keyWin == .switcher && c != .close
+        if (ctx.keyWinIsSheetOrModal || switcherKey) && !modalExempt.contains(c) && !listScoped.contains(c)
+            && !moveCommand(c) {
             return CommandDecision(enabled: false, title: title)
         }
         // G3 — DATA-174 write gate

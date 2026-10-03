@@ -75,13 +75,13 @@ struct AAApp: App {
             .defaultLaunchBehavior(.suppressed)
             .restorationBehavior(.disabled)
             .commandsRemoved()
-            .defaultSize(width: 860, height: 620)
+            .defaultSize(width: 900, height: 640)                     // QUICK-120
 
         Window("Activity log", id: SceneID.activityLog.rawValue) { ActivityLogView().aaWindowRoot(.activityLog) }
             .defaultLaunchBehavior(.suppressed)
             .restorationBehavior(.disabled)
             .commandsRemoved()
-            .defaultSize(width: 900, height: 600)
+            .defaultSize(width: 860, height: 620)                     // QUICK-150
 
         WindowGroup("Unit converter", id: SceneID.unitConverter.rawValue, for: UUID.self) { $session in
             UnitConverterView(sessionID: session ?? UUID()).aaWindowRoot(.unitConverter)

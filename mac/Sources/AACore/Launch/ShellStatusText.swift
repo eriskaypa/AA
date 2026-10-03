@@ -24,10 +24,51 @@ public enum ShellStatusText {
     /// `AA — {identity}` (SHELL-020).
     public static func windowTitle(identity: String) -> String { "AA — \(identity)" }
 
+    /// The main window subtitle's display form of a status message (V-DESIGN rule 3): an absolute path in it (from the
+    /// first " /" or a leading "/" to the end) is shown with `~` for the home folder and middle-truncated to about
+    /// `limit` characters. The message itself (status history, `.help`, SmokeTest's "Loaded — " prefix) is unchanged.
+    public static func subtitleDisplay(_ message: String, home: String = NSHomeDirectory(), limit: Int = 60) -> String {
+        let start: String.Index
+        if message.hasPrefix("/") {
+            start = message.startIndex
+        } else if let r = message.range(of: " /") {
+            start = message.index(after: r.lowerBound)
+        } else {
+            return message
+        }
+        var path = String(message[start...])
+        let h = home.hasSuffix("/") ? String(home.dropLast()) : home
+        if !h.isEmpty, path == h || path.hasPrefix(h + "/") { path = "~" + path.dropFirst(h.count) }
+        if path.count > limit, limit > 8 {
+            let tail = (limit - 1) * 3 / 5
+            let head = limit - 1 - tail
+            path = String(path.prefix(head)) + "…" + String(path.suffix(tail))
+        }
+        return String(message[..<start]) + path
+    }
+
     // MARK: Dialogs owned by the shell (A.3)
 
     public static let safeModeTitle = "Data file unreadable — safe mode"                              // D1
-    public static let safeModeMessage = "Your data file is present but could not be read — it may be locked by another program, still being written, corrupt, or (if you enabled local encryption) created under a different user account or on another computer.\n\nAA opened in READ-ONLY safe mode and will NOT save over it, so nothing already on disk is lost. Close AA, restore a copy if needed (File ▸ Trash or a backup), then reopen."
+    public static let safeModeMessage = "Your data file is present but could not be read — it may be locked by another program, still being written, corrupt, or (if you enabled local encryption) created under a different user account or on another computer (a file encrypted by AA on Windows can only be opened on that PC — export a bundle there and import it here).\n\nAA opened in READ-ONLY safe mode and will NOT save over it, so nothing already on disk is lost. Close AA, restore a copy if needed (File ▸ Trash or a backup), then reopen."
+    /// D1 with the cause the load reported (01 §6.5, DECISIONS 01 DPAPI): a Windows-encrypted file or a missing Mac
+    /// Keychain key leads with its own clear sentence, every other cause gets the generic text.
+    public static func safeModeMessage(cause: DataLoadError?) -> String {
+        switch cause {
+        case .windowsEncrypted?, .macKeyUnavailable?:
+            return (cause?.errorDescription ?? "") + "\n\n" + safeModeMessage
+        default:
+            return safeModeMessage
+        }
+    }
+    /// The status line in safe mode, naming a Windows-encrypted file or a missing Keychain key.
+    public static func safeModeStatus(cause: DataLoadError?) -> String {
+        switch cause {
+        case .windowsEncrypted?: return safeModeStatus + " The file was encrypted by AA on Windows."
+        case .macKeyUnavailable?: return safeModeStatus + " The Keychain key for this Mac's encrypted file is unavailable."
+        default: return safeModeStatus
+        }
+    }
     public static let newerFormatTitle = "Newer data format"                                          // D2
     public static func newerFormatMessage(version: Int, current: Int) -> String {
         "This data file was saved by a newer version of AA (format v\(version); this build understands v\(current)).\n\nYou can keep working — newer fields are preserved — but update AA on this Mac to avoid missing new features' data."

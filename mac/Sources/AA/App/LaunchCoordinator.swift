@@ -137,7 +137,17 @@ final class LaunchCoordinator {
         // watcher for an editor outside safe mode, and the read-only session — once, after the first load.
         PersistUIBridge.shared.attach(env)
         if let w = mainWindow { env.restoreWindowGeometry(w) }
-        env.startAutosaveTimer()
+        // DATA-174: a read-only copy starts no 5-minute autosave (and so no Drive newer-save check); "Edit Here"
+        // starts it (PersistUIBridge.editHere).
+        if !env.isReadOnlyInstance { env.startAutosaveTimer() }
+        // The window opens with the section sidebar focused, never a page's Name box in edit mode (HIER-025: Windows
+        // focuses the Name box only on F2 / click).
+        Task { @MainActor [weak self] in
+            for delay in [100, 400] {
+                try? await Task.sleep(for: .milliseconds(delay))
+                ShellFocus.leaveHiddenSection(in: self?.mainWindow)
+            }
+        }
         if snapshotMode { return }
         Task { @MainActor in
             await Task.yield()
@@ -148,12 +158,16 @@ final class LaunchCoordinator {
     /// Steps 15–19, deferred until the window rendered: dialogs, Drive, shared check first, then housekeeping.
     private func afterMainShown(_ env: AppEnvironment) async {
         if env.isSafeMode {
-            await env.mainDialogs.warning(ShellStatusText.safeModeTitle, ShellStatusText.safeModeMessage)
+            await env.mainDialogs.warning(ShellStatusText.safeModeTitle,
+                                          ShellStatusText.safeModeMessage(cause: env.dataStore.lastLoadError))
         } else if let v = env.dataStore.loadedNewerSchema {
             await env.mainDialogs.info(ShellStatusText.newerFormatTitle,
                                        ShellStatusText.newerFormatMessage(version: v, current: DataStore.currentSchemaVersion))
         }
-        await env.driveSync.startupChecks()
+        // SHELL-011/122, TOOLS-011: CheckRemoteNewer(false) is fire-and-forget on Windows — the shared-save start and
+        // the housekeeping below run while the Drive request is in flight. Only the modal re-consent box is awaited.
+        // DATA-174: a read-only copy runs no Drive check at all.
+        if !env.isReadOnlyInstance { await startDriveChecks(env) }
         if !env.isReadOnlyInstance {
             env.sharedSave.start()
             if !NetText.isBlank(env.settings.values.sharedSaveFile) { await env.sharedSave.checkForUpdate() }
@@ -169,10 +183,23 @@ final class LaunchCoordinator {
         drainDocuments()
     }
 
+    /// The startup half of `DriveSyncCoordinator.startupChecks()` without awaiting the network: the background
+    /// newer-save check runs detached; the D3 re-consent info box (modal on Windows) is still awaited.
+    private func startDriveChecks(_ env: AppEnvironment) async {
+        let ds = env.dataStore
+        if env.settings.values.syncOnSave && GoogleTokenStore.isConfigured(ds) && GoogleTokenStore.hasToken(ds) {
+            Task { @MainActor in await env.driveSync.checkRemoteNewer(interactive: false) }
+        } else {
+            await env.driveSync.startupChecks()
+        }
+    }
+
     // MARK: Documents opened from Finder (BD.3.7, SHELL-185 — the import flow is W-SHELL's)
 
     func enqueueDocuments(_ urls: [URL]) {
-        pendingDocuments.append(contentsOf: urls.filter { ["aaz", "zip"].contains($0.pathExtension.lowercased()) })
+        // DATA-173: bundles (.aaz / .zip) go to Import with preview, a .json database to Import Database (W-SHELL's
+        // `ShellFlows.openDocuments` routes each kind).
+        pendingDocuments.append(contentsOf: urls.filter { ["aaz", "zip", "json"].contains($0.pathExtension.lowercased()) })
         drainDocuments()
     }
 

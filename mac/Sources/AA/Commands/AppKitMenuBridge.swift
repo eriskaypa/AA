@@ -11,7 +11,6 @@ final class AppKitMenuBridge: NSObject, NSMenuItemValidation {
     static let shared = AppKitMenuBridge()
 
     private var observers: [NSObjectProtocol] = []
-    private var viewMenuProxy: ShellMenuDelegateProxy?
     private var scheduled = false
     private var applying = false
 
@@ -46,18 +45,70 @@ final class AppKitMenuBridge: NSObject, NSMenuItemValidation {
             guard let menu = top.submenu else { continue }
             decorate(menu, path: [top.title == ProcessInfo.processInfo.processName ? "AA" : top.title])
         }
-        if let view = main.items.first(where: { $0.title == "View" })?.submenu {
-            if !(view.delegate is ShellMenuDelegateProxy) {
-                let proxy = ShellMenuDelegateProxy(original: view.delegate) { [weak self] m in self?.orderViewMenu(m) }
-                viewMenuProxy = proxy
-                view.delegate = proxy
-            }
-            orderViewMenu(view)
-        }
+        if let view = main.items.first(where: { $0.title == "View" })?.submenu { orderViewMenu(view) }
+        insertions(main)
+        // §6.5.1.13: SwiftUI rebuilds a menu's items in `menuNeedsUpdate` (on open and while matching key
+        // equivalents), which drops every inserted item. Each SwiftUI-driven menu (Edit, Format ▸ Font, Tools, View, …)
+        // gets a proxy delegate that re-applies the fix-ups right after the rebuild.
+        installProxies(main)
+    }
+
+    /// The idempotent insertions (Paste and Match Style, hidden aliases, text submenus, Enter Full Screen, Crew badge,
+    /// Window separators).
+    private func insertions(_ main: NSMenu) {
         insertPasteAndMatchStyle(main)
         insertAliases(main)
         insertTextSubmenus(main)
+        insertFullScreen(main)
+        collapseSeparators(main.items.first(where: { $0.title == "Window" })?.submenu)
         updateCrewBadge(main)
+    }
+
+    /// Wraps the delegate of `menu` and of every submenu (recursively) once.
+    private func installProxies(_ menu: NSMenu) {
+        if let d = menu.delegate, !(d is ShellMenuDelegateProxy) {
+            let proxy = ShellMenuDelegateProxy(original: d) { [weak self] m in self?.afterRebuild(m) }
+            objc_setAssociatedObject(menu, &AppKitMenuBridge.proxyKey, proxy, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+            menu.delegate = proxy
+        }
+        for item in menu.items { if let sub = item.submenu { installProxies(sub) } }
+    }
+
+    nonisolated(unsafe) private static var proxyKey: UInt8 = 0
+
+    /// Runs after a SwiftUI rebuild of `menu` (inside its `menuNeedsUpdate`).
+    private func afterRebuild(_ menu: NSMenu) {
+        guard let main = NSApp.mainMenu else { return }
+        let wasApplying = applying
+        applying = true
+        defer { applying = wasApplying }
+        if menu.title == "View" || menu === main.items.first(where: { $0.title == "View" })?.submenu { orderViewMenu(menu) }
+        insertions(main)
+        installProxies(menu)
+    }
+
+    // MARK: Enter Full Screen (SHELL-640) and Window separators (SHELL-660)
+
+    private func insertFullScreen(_ main: NSMenu) {
+        guard let view = main.items.first(where: { $0.title == "View" })?.submenu,
+              !view.items.contains(where: { $0.action == #selector(NSWindow.toggleFullScreen(_:)) }) else { return }
+        let item = NSMenuItem(title: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
+        item.keyEquivalentModifierMask = [.control, .command]          // NSWindow retitles it "Exit Full Screen"
+        item.identifier = NSUserInterfaceItemIdentifier("aa.cmd.toggleFullScreen")
+        let at = view.items.firstIndex(where: { $0.title == "Shortcut Bar" }) ?? view.items.count
+        view.insertItem(item, at: at)
+    }
+
+    /// Removes doubled, leading and trailing separators.
+    private func collapseSeparators(_ menu: NSMenu?) {
+        guard let menu else { return }
+        var i = 0
+        while i < menu.items.count {
+            let sep = menu.items[i].isSeparatorItem
+            let prevSep = i == 0 || menu.items[i - 1].isSeparatorItem
+            if sep && prevSep { menu.removeItem(at: i) } else { i += 1 }
+        }
+        while let last = menu.items.last, last.isSeparatorItem { menu.removeItem(last) }
     }
 
     // MARK: Identifiers and tooltips
@@ -98,12 +149,16 @@ final class AppKitMenuBridge: NSObject, NSMenuItemValidation {
         guard let anchor = view.items.firstIndex(where: { $0.title == "Shortcut Bar" }) else { return }
         let standard = view.items.enumerated().filter { _, item in
             ["Show Toolbar", "Hide Toolbar", "Customize Toolbar…", "Show Sidebar", "Hide Sidebar"].contains(item.title)
+                || item.action == #selector(NSWindow.toggleFullScreen(_:))
         }
         guard let firstStandard = standard.first?.offset, firstStandard < anchor - standard.count else { return }
         // Keep sidebar before toolbar (Show/Hide Sidebar, Hide/Show Toolbar, Customize Toolbar…).
         let ordered = standard.map(\.element).sorted { a, b in
-            func rank(_ t: String) -> Int { t.contains("Sidebar") ? 0 : (t.contains("Customize") ? 2 : 1) }
-            return rank(a.title) < rank(b.title)
+            func rank(_ i: NSMenuItem) -> Int {
+                if i.action == #selector(NSWindow.toggleFullScreen(_:)) { return 3 }
+                return i.title.contains("Sidebar") ? 0 : (i.title.contains("Customize") ? 2 : 1)
+            }
+            return rank(a) < rank(b)
         }
         for item in ordered { view.removeItem(item) }
         guard var at = view.items.firstIndex(where: { $0.title == "Shortcut Bar" }) else { return }
@@ -111,13 +166,7 @@ final class AppKitMenuBridge: NSObject, NSMenuItemValidation {
             view.insertItem(item, at: at)
             at += 1
         }
-        // Collapse separators that ended up doubled or leading.
-        var i = 0
-        while i < view.items.count {
-            let sep = view.items[i].isSeparatorItem
-            let prevSep = i == 0 || view.items[i - 1].isSeparatorItem
-            if sep && prevSep { view.removeItem(at: i) } else { i += 1 }
-        }
+        collapseSeparators(view)
     }
 
     // MARK: Paste and Match Style (SHELL-578; SwiftUI's pasteboard group omits it)

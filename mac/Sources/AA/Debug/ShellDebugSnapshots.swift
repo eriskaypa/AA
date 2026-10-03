@@ -1,6 +1,7 @@
 // Spec: ARCHITECTURE.md §9.6 (F3's own debug sheets: the shared dialogs of §7.5, the tab-colours sheet and a design
 //       system gallery of §8.6), OWNERSHIP F3 acceptance ("shared dialogs demo sheets registered in the snapshot
 //       registry").
+#if DEBUG
 import SwiftUI
 import AACore
 
@@ -123,3 +124,4 @@ struct ShellDesignGallery: View {
          ("danger", AAColor.Status.danger), ("ok", AAColor.Status.ok), ("due", AAColor.Status.dueSoon)]
     }
 }
+#endif

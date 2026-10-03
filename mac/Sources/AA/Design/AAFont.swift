@@ -41,5 +41,5 @@ enum AASpacing {
 
 enum AARadius {
     static let control: CGFloat = 4, boardCard: CGFloat = 6, tile: CGFloat = 8, quickCard: CGFloat = 10,
-               floatingPanel: CGFloat = 12
+               floatingPanel: CGFloat = 12, sidebarTile: CGFloat = 5
 }

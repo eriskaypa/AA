@@ -40,21 +40,31 @@ public enum CrashLog {
         return nil
     }
 
+    /// 01 DATA-183: `open(O_WRONLY|O_APPEND|O_CREAT|O_CLOEXEC, 0644)` and the whole block in ONE `write`, so blocks
+    /// from several processes (a read-only copy and the editor) never overwrite each other.
     static func appendText(_ text: String, to url: URL) -> Bool {
-        let fm = FileManager.default
         do {
-            try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if !fm.fileExists(atPath: url.path) {
-                guard fm.createFile(atPath: url.path, contents: nil) else { return false }
-            }
-            let h = try FileHandle(forWritingTo: url)
-            defer { try? h.close() }
-            try h.seekToEnd()
-            try h.write(contentsOf: Data(text.utf8))
-            return true
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         } catch {
             return false
         }
+        let fd = open(url.path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0o644)
+        guard fd >= 0 else { return false }
+        defer { close(fd) }
+        let bytes = Array(text.utf8)
+        guard !bytes.isEmpty else { return true }
+        var written = 0
+        while written < bytes.count {
+            let n = bytes.withUnsafeBytes { buf in
+                write(fd, buf.baseAddress!.advanced(by: written), bytes.count - written)
+            }
+            if n < 0 {
+                if errno == EINTR { continue }
+                return false
+            }
+            written += n
+        }
+        return true
     }
 
     /// The SHELL-001 / BD.3.5 dialog body.
@@ -133,7 +143,7 @@ private enum CrashSignalState {
 private func crashSignalHandler(_ sig: Int32) {
     if let path = CrashSignalState.path, sig > 0, Int(sig) < CrashSignalState.maxSignal,
        let p = CrashSignalState.texts[Int(sig)] {
-        let fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        let fd = open(path, O_WRONLY | O_APPEND | O_CREAT | O_CLOEXEC, 0o644)
         if fd >= 0 {
             _ = write(fd, p, CrashSignalState.lengths[Int(sig)])
             close(fd)
