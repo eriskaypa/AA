@@ -37,16 +37,17 @@ Done (where):
 ## Gate and checks
 
 * `swift build -j 3 -Xswiftc -warnings-as-errors` — clean.
-* `swift test -j 3 -Xswiftc -warnings-as-errors` — green; W-CONT: 84 tests in 15 suites under
+* `swift test -j 3 -Xswiftc -warnings-as-errors` — green; W-CONT: 87 tests in 15 suites under
   `Tests/AACoreTests/Editor/` (2 of them gated on W-RICH and skipped here).
 * `Scripts/check-placeholders.sh W-CONT` — empty; `EditorContractStatus` = true.
 * `Scripts/check-ownership.sh` — passes except `Docs/Progress/W-CONT.md` (unmapped in the script; REQ-W-CONT-01).
 * Snapshots (DEBUG hook, both appearances) in the session scratchpad `snapshots/W-CONT/`: editor (wide and narrow),
-  withheld, legacy-locked with Unlock…, locked-hint notice, real container + file bank, Insert Saved List, Insert
+  withheld, legacy-locked with Unlock…, locked-hint notice, real container + file bank, live self-test (20 AppKit-path
+  checks: lock gate, undo, table, link, alignment, Tab, size step — all ✓), Insert Saved List, Insert
   hyperlink (valid / invalid), colour pop-overs and table grid. Sheet ids: `w-cont.editor`, `w-cont.editor-narrow`,
   `w-cont.editor-withheld`, `w-cont.editor-legacy`, `w-cont.editor-notice`, `w-cont.container`,
-  `w-cont.insert-saved-list`, `w-cont.insert-link`, `w-cont.insert-link-invalid`, `w-cont.palettes`; fixture data in
-  `Tests/AACoreTests/Fixtures/ui/w-cont/`.
+  `w-cont.selftest`, `w-cont.insert-saved-list`, `w-cont.insert-link`, `w-cont.insert-link-invalid`, `w-cont.palettes`;
+  fixture data in `Tests/AACoreTests/Fixtures/ui/w-cont/`.
 
 ## Post-merge (Stage V)
 

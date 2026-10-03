@@ -588,12 +588,14 @@ final class EditorController: NSObject {
         case .showColors:
             colorTarget = .text
             focusText()
+            NSColorPanel.shared.showsAlpha = false          // CONT-025: alpha is always 255
             NSApp.orderFrontColorPanel(nil)
         case .highlight(let argb):
             applyChar(.highlight(argb.map(Self.color(from:))), name: "Highlight")
         case .highlightOther:
             colorTarget = .highlight
             focusText()
+            NSColorPanel.shared.showsAlpha = false          // CONT-025: alpha is always 255
             NSApp.orderFrontColorPanel(nil)
         case .alignLeft: setAlignment(.left)
         case .center: setAlignment(.center)
@@ -713,6 +715,7 @@ final class EditorController: NSObject {
     func openColorPanel(highlight: Bool) {
         colorTarget = highlight ? .highlight : .text
         focusText()
+        NSColorPanel.shared.showsAlpha = false          // CONT-025: alpha is always 255
         NSApp.orderFrontColorPanel(nil)
     }
 
