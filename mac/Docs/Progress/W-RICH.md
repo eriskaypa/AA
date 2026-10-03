@@ -31,7 +31,7 @@ Acceptance (OWNERSHIP §3 W-RICH, in-worktree): all met.
 * Rendering checked visually (TextKit 1 `NSTextView` → PNG: lists, tables, SIRE chips, locks, pasted HTML/Excel) —
   `RichRenderSnapshotTests` (PNG export with `RICH_SNAPSHOT_DIR`).
 
-Counts: Swift 6.4k lines in `Sources/AACore/RichText` (15 files), 2.0k lines of tests (10 files, 160 tests);
+Counts: Swift 6.4k lines in `Sources/AACore/RichText` (15 files), 2.2k lines of tests (11 files, 167 tests);
 gate green (556+ tests in the package).
 
 Post-merge (Stage V): §7.7 item 10 (every Mac output loads in Windows `TextRange.Load`) needs the W-GOLD Windows
