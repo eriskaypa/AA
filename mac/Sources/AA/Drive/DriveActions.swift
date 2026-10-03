@@ -2,16 +2,34 @@
 //       TOOLS-013 (sign out), TOOLS-014/015 (OAuth upload / load with the backup picker = VIEW-212 row 1, review gate,
 //       smart import), TOOLS-020 (sync toggle), TOOLS-023 (interactive check), TOOLS-031 (text-only governs Drive),
 //       TOOLS-035 (temp hygiene), §6.2 (NSOpenPanel with can-create, "Show in Finder" addition), Q-12 (flush all editors),
-//       Q-21 (safe mode refuses the synced copy and upload); 03 SHELL-073…080; ARCHITECTURE.md §7.7, §7.8, §7.9.
+//       Q-21 (safe mode refuses the synced copy and upload); 01 DATA-174 (read-only copy: the Drive commands of
+//       `CommandRouterCore.readOnlyDisabled` are disabled in Settings too, and refuse when reached); 03 SHELL-073…080;
+//       ARCHITECTURE.md §7.7, §7.8, §7.9.
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 import AACore
 
 @MainActor enum DriveActions {
+    // MARK: DATA-174 write gate
+
+    /// The router's G3 condition (`CommandRouter` context `writeGated`): a read-only copy, or DATA-180 "Stop Editing
+    /// Here". The Drive commands in `CommandRouterCore.readOnlyDisabled` are unavailable while it holds.
+    static func isWriteGated(_ env: AppEnvironment) -> Bool {
+        env.isReadOnlyInstance || env.dataFileGuard?.state.mode == .stoppedEditing
+    }
+
+    /// Defence in depth for callers that bypass the router (Settings buttons): posts the DATA-174 text and refuses.
+    private static func refusedWhenGated(_ env: AppEnvironment) -> Bool {
+        guard isWriteGated(env) else { return false }
+        env.driveSync.post(PersistReadOnlyText.disabledHelp)
+        return true
+    }
+
     // MARK: Synced folder (TOOLS-002…004)
 
     static func saveCopyToSyncedFolder(env: AppEnvironment, dialogs: DialogPresenter) async {
+        if refusedWhenGated(env) { return }
         if env.isSafeMode {                                                       // Q-21
             await dialogs.warning(ShellStatusText.safeModeSaveTitle, ShellStatusText.safeModeSaveMessage)
             return
@@ -37,6 +55,7 @@ import AACore
     }
 
     static func setDriveFolder(env: AppEnvironment, dialogs: DialogPresenter) async {
+        if refusedWhenGated(env) { return }
         _ = await resolveDriveFolder(forcePick: true, env: env, dialogs: dialogs)
     }
 
@@ -85,6 +104,7 @@ import AACore
     // MARK: OAuth client (TOOLS-007)
 
     static func setOAuthClient(env: AppEnvironment, dialogs: DialogPresenter) async {
+        if refusedWhenGated(env) { return }
         _ = await chooseClientSecret(env: env, dialogs: dialogs)
     }
 
@@ -121,6 +141,7 @@ import AACore
     // MARK: Upload (TOOLS-014)
 
     static func uploadBackup(env: AppEnvironment, dialogs: DialogPresenter) async {
+        if refusedWhenGated(env) { return }
         guard await ensureConfigured(env: env, dialogs: dialogs) else { return }
         if env.isSafeMode {                                                       // Q-21
             await dialogs.warning(ShellStatusText.safeModeSaveTitle, ShellStatusText.safeModeSaveMessage)
@@ -159,6 +180,7 @@ import AACore
     // MARK: Load (TOOLS-015)
 
     static func loadBackup(env: AppEnvironment, dialogs: DialogPresenter) async {
+        if refusedWhenGated(env) { return }
         guard await ensureConfigured(env: env, dialogs: dialogs) else { return }
         let sync = env.driveSync
         let ds = env.dataStore
@@ -236,6 +258,7 @@ import AACore
     }
 
     static func checkForNewer(env: AppEnvironment, dialogs: DialogPresenter) async {
+        if refusedWhenGated(env) { return }
         await env.driveSync.checkRemoteNewer(interactive: true, dialogs: dialogs)
     }
 }
@@ -256,6 +279,8 @@ struct DriveSettingsSection: View {
         let hasToken = GoogleTokenStore.hasToken(ds)
         let reconsent = GoogleTokenStore.needsReconsentForWholeDrive(ds)
         let folder = DriveLocalFolder.usableStored(env.settings.values.googleDriveFolder)
+        // DATA-174: the same Drive commands the router disables in a read-only copy (`readOnlyDisabled`).
+        let gated = DriveActions.isWriteGated(env)
         Section {
             LabeledContent("Synced folder") {
                 HStack(spacing: AASpacing.s) {
@@ -267,18 +292,19 @@ struct DriveSettingsSection: View {
                         Text("Not set — detected automatically on first use").foregroundStyle(.secondary)
                     }
                     Button("Choose\u{2026}") { run { await DriveActions.setDriveFolder(env: env, dialogs: dialogs) } }
-                        .help("Choose which local folder is your Google Drive (the one Google Drive for desktop syncs).")
+                        .disabled(gated)
+                        .help(gatedHelp(gated, "Choose which local folder is your Google Drive (the one Google Drive for desktop syncs)."))
                 }
             }
             HStack {
                 Spacer()
                 Button("Save a Copy to Google Drive") { run { await DriveActions.saveCopyToSyncedFolder(env: env, dialogs: dialogs) } }
-                    .help("Save a timestamped backup ZIP into your Google Drive desktop folder, which syncs it to the cloud.")
+                    .disabled(gated)
+                    .help(gatedHelp(gated, "Save a timestamped backup ZIP into your Google Drive desktop folder, which syncs it to the cloud."))
             }
+            DriveSettingsHelp("Backups go to “AA Backups” inside that folder; Google Drive for desktop uploads them.")
         } header: {
             Text("Google Drive for desktop")
-        } footer: {
-            AAHelpText("Backups go to “AA Backups” inside that folder; Google Drive for desktop uploads them.")
         }
 
         Section {
@@ -288,7 +314,8 @@ struct DriveSettingsSection: View {
                                        symbol: configured ? "checkmark.seal.fill" : "seal",
                                        color: configured ? AAColor.Status.ok : AAColor.Status.neutral)
                     Button("Choose client_secret.json\u{2026}") { run { await DriveActions.setOAuthClient(env: env, dialogs: dialogs) } }
-                        .help("Load the client_secret.json you downloaded from Google Cloud Console (OAuth 'Desktop app' client).")
+                        .disabled(gated)
+                        .help(gatedHelp(gated, "Load the client_secret.json you downloaded from Google Cloud Console (OAuth 'Desktop app' client)."))
                 }
             }
             LabeledContent("Google sign-in") {
@@ -327,23 +354,25 @@ struct DriveSettingsSection: View {
             HStack(spacing: AASpacing.s) {
                 Spacer()
                 Button("Check for Newer Save") { run { await DriveActions.checkForNewer(env: env, dialogs: dialogs) } }
-                    .disabled(sync.inFlight.contains(.check))
-                    .help("Ask Google Drive whether a newer save state exists, and offer to load it.")
+                    .disabled(gated || sync.inFlight.contains(.check))
+                    .help(gatedHelp(gated, "Ask Google Drive whether a newer save state exists, and offer to load it."))
                 Button("Upload Backup\u{2026}") { run { await DriveActions.uploadBackup(env: env, dialogs: dialogs) } }
-                    .disabled(!sync.inFlight.isDisjoint(with: [.upload, .load, .check]))
-                    .help("Upload a backup directly to Google Drive via the Drive API (no desktop client needed). Requires a Google OAuth client.")
+                    .disabled(gated || !sync.inFlight.isDisjoint(with: [.upload, .load, .check]))
+                    .help(gatedHelp(gated, "Upload a backup directly to Google Drive via the Drive API (no desktop client needed). Requires a Google OAuth client."))
                 Button("Load Backup\u{2026}") { run { await DriveActions.loadBackup(env: env, dialogs: dialogs) } }
-                    .disabled(!sync.inFlight.isDisjoint(with: [.upload, .load, .check]))
-                    .help("Download a backup from your Google Drive and (after a newer/older check) replace your current data with it.")
+                    .disabled(gated || !sync.inFlight.isDisjoint(with: [.upload, .load, .check]))
+                    .help(gatedHelp(gated, "Download a backup from your Google Drive and (after a newer/older check) replace your current data with it."))
             }
+            DriveSettingsHelp("AA reads your whole Drive to find backups (including iPhone .aaz files) but can only change files it created. Keep the Google Cloud consent screen in Testing with your account added as a test user.")
         } header: {
             Text("Google Drive (OAuth)")
-        } footer: {
-            AAHelpText("AA reads your whole Drive to find backups (including iPhone .aaz files) but can only change files it created. Keep the Google Cloud consent screen in Testing with your account added as a test user.")
         }
     }
 
     private func run(_ body: @escaping @MainActor () async -> Void) { Task { @MainActor in await body() } }
+
+    /// The router's G3 tooltip for a gated command (`PersistReadOnlyText.disabledHelp`), else the command's own.
+    private func gatedHelp(_ gated: Bool, _ help: String) -> String { gated ? PersistReadOnlyText.disabledHelp : help }
 
     static func indicatorColor(_ s: DriveIndicatorState) -> Color {
         switch s {
@@ -352,6 +381,16 @@ struct DriveSettingsSection: View {
         case .synced: return AAColor.Status.ok
         case .failed: return AAColor.Status.danger
         }
+    }
+}
+
+/// A help line inside a Settings ▸ Sync section — the same proportional, muted, wrapping style as the Shared Save
+/// File and Exports help rows of that pane (Settings is system-font chrome, design rule 2).
+struct DriveSettingsHelp: View {
+    let text: String
+    init(_ text: String) { self.text = text }
+    var body: some View {
+        Text(text).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
     }
 }
 

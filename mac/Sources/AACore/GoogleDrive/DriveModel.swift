@@ -1,6 +1,7 @@
 // Spec: 14 §3.1.1 (constants), §3.1.3 (BundleNameQuery), §3.1.9 / §3.1.10 / §3.1.12 / §3.1.13 (exact query strings),
 //       §4.5 (Drive metadata), TOOLS-018 (DriveBackup.Display), TOOLS-034 (error surfaces + setup hint, Mac addition),
-//       Q-8 (long identity message). Source: AA/Services/GoogleDriveUploader.cs.
+//       Q-8 (long identity message), Q-3 (hardened EnsureFolder query, DECISIONS 14). Source:
+//       AA/Services/GoogleDriveUploader.cs.
 import Foundation
 
 /// The constants of `GoogleDriveUploader` (14 §3.1.1).
@@ -42,10 +43,15 @@ public enum DriveQuery {
         return "\(bundleNames) and trashed=false and mimeType!='application/vnd.google-apps.folder'"
     }
 
-    /// §3.1.10 `EnsureFolderAsync`.
+    /// §3.1.10 `EnsureFolderAsync`, hardened per DECISIONS 14 Q-3: only folders the signed-in account owns
+    /// (`'me' in owners`), so a folder shared with the user is never picked (Windows: no owner clause).
     public static func folder(named name: String) -> String {
-        "mimeType='application/vnd.google-apps.folder' and name='\(literal(name))' and trashed=false"
+        "mimeType='application/vnd.google-apps.folder' and name='\(literal(name))' and 'me' in owners and trashed=false"
     }
+
+    /// §3.1.10 `fields`, hardened per Q-3: Windows asks for `files(id,name)`; the Mac also reads whether AA may add
+    /// children (false for a folder made by hand or by another app, which `drive.file` cannot write into).
+    public static let folderFields = "files(id,name,capabilities/canAddChildren)"
 
     /// §3.1.12 `GetBestRemoteAsync` (two concatenated literals: note the space before `and (name=`).
     public static let bestRemote = "trashed=false and mimeType!='application/vnd.google-apps.folder' "
@@ -67,11 +73,13 @@ public struct DriveFile: Sendable, Equatable {
     public var modifiedTime: String?
     public var appProperties: [String: String]
     public var webViewLink: String?
+    /// `capabilities.canAddChildren` when requested (14 §8 Q-3); nil when Drive did not send it.
+    public var canAddChildren: Bool?
 
     public init(id: String, name: String, mimeType: String? = nil, modifiedTime: String? = nil,
-                appProperties: [String: String] = [:], webViewLink: String? = nil) {
+                appProperties: [String: String] = [:], webViewLink: String? = nil, canAddChildren: Bool? = nil) {
         self.id = id; self.name = name; self.mimeType = mimeType; self.modifiedTime = modifiedTime
-        self.appProperties = appProperties; self.webViewLink = webViewLink
+        self.appProperties = appProperties; self.webViewLink = webViewLink; self.canAddChildren = canAddChildren
     }
 
     init(json o: JSONObject) {
@@ -80,6 +88,7 @@ public struct DriveFile: Sendable, Equatable {
         mimeType = o["mimeType"]?.stringValue
         modifiedTime = o["modifiedTime"]?.stringValue
         webViewLink = o["webViewLink"]?.stringValue
+        canAddChildren = o["capabilities"]?.objectValue?["canAddChildren"]?.boolValue
         var props: [String: String] = [:]
         if let p = o["appProperties"]?.objectValue {
             for (k, v) in p { if let s = v.stringValue { props[k] = s } }

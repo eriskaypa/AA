@@ -6,6 +6,7 @@ Files written stay readable by the Windows build with the same meaning (DECISION
 ## Sanctioned deviations (DECISIONS 14 / spec 14 §8 recommendations)
 
 - Q-1 · 14 §3.1.5 · `files.list` requests `nextPageToken,files(…)`, so the intended ≤ 10-page whole-Drive scan works (Windows reads only the first 200 results). Identical results with ≤ 200 matches.
+- Q-3 · 14 §3.1.10, DECISIONS 14 ("Q-3 harden EnsureFolder: yes") · `EnsureFolder` asks `mimeType='application/vnd.google-apps.folder' and name='{name}' and 'me' in owners and trashed=false` with `fields=files(id,name,capabilities/canAddChildren)`; it picks the first match Drive reports as `canAddChildren`, else the first whose capability is not reported (Windows' first result), else creates a new folder in My Drive root. A shared, hand-made or other-app `AA Backups` / `AA Sync` that `drive.file` cannot write into is no longer chosen. Vector 7.6-7 pins the new query and fields; `ensureFolderHardened` covers the pick.
 - Q-6 · TOOLS-019 · downloads pass `supportsAllDrives=true` (shared-drive files that are listed can also be downloaded).
 - Q-7 · TOOLS-008, §6.3 · interactive sign-in shows a "Waiting for Google sign-in in your browser…" sheet with Cancel (status `Google sign-in cancelled.`) and times out after 5 minutes; Windows waits forever.
 - Q-8 · §4.5 · a Drive 400 while `aaIdentity` exceeds the 124-byte appProperty limit is reported as "App identity is too long for Google Drive metadata…" followed by Drive's own message.
@@ -14,6 +15,7 @@ Files written stay readable by the Windows build with the same meaning (DECISION
 - Q-16 · TOOLS-069 · Date calculator computes in Int64 and shows `Result is out of range.` instead of crashing for results outside 0001-01-01…9999-12-31 (incl. the `n × 7` overflow).
 - Q-17 · §6.2, §6.7 · a stored `GoogleDriveFolder` / `FolderBuilderBase` that is not an absolute POSIX path (e.g. `G:\My Drive` from a copied Windows settings file) is treated as unset and left untouched until a new folder is chosen.
 - Q-18 · §6.5 · a background check is skipped while a push or another check is running; the review sheet goes through the window's dialog queue, so a background prompt never stacks on another sheet. Upload / Load / Check are disabled while one of them is in flight (router reads `inFlight`).
+- DATA-174 · TOOLS-002/003/007/014/015/023 · in a read-only copy (or after DATA-180 "Stop Editing Here") the Settings ▸ Sync Drive buttons that match the router's `readOnlyDisabled` rows (Choose… folder, Save a Copy to Google Drive, Choose client_secret.json…, Check for Newer Save, Upload Backup…, Load Backup…) are disabled with the tooltip `Not available in a read-only copy of AA.`; the six `DriveActions` entry points refuse with that status text when reached anyway, and the newer-save check (background or after turning sync on) does not run. Sign Out and the sync-on-save toggle stay available, as in the menu.
 - Q-21 · TOOLS-002/014 · in safe mode the synced-folder copy and the OAuth upload refuse with the "Safe mode — not saving" alert instead of bundling an unreadable file.
 - TOOLS-034 · Drive / OAuth errors show Google's own message in the .NET client's wording (`The service drive has thrown an exception. HttpStatusCode is Forbidden. …`, `Error:"access_denied", Description:"…", Uri:""`) and append the setup hint for `access_denied`, `invalid_client`, `unauthorized_client` and `insufficientPermissions`.
 - TOOLS-012, §6.3 · token at rest = `AAKCGCM1` + AES-256-GCM (combined) with the key in the Keychain item `AA` / `google-token-key` (DATA-215, OC-34); a copied Windows `AADPAPI1` file never counts as a token (re-consent notice shows instead); a legacy plaintext JSON token is read and re-stored encrypted (DATA-073). The token JSON is Mac-private (keys as Windows, STJ escaping).
@@ -22,7 +24,7 @@ Files written stay readable by the Windows build with the same meaning (DECISION
 
 ## Kept quirks (P3)
 
-- Q-2 listing creates `AA Backups`; Q-3 EnsureFolder may pick a folder AA did not create (error surfaced); Q-4 duplicate `AA Sync` folders; Q-5 best-remote key mixes local-wall-clock stamps with UTC Drive times (vector 7.6-1 asserts it); Q-9 a new client keeps the old token; Q-10 upload text always says `AA Backups`; Q-11 Load cancel keeps the "listing backups…" status; Q-19 re-consent notice on every launch; Q-20 fallback wording; 3.4.1 negative day counts in the Y/M/D line.
+- Q-2 listing creates `AA Backups`; Q-4 duplicate `AA Sync` folders; Q-5 best-remote key mixes local-wall-clock stamps with UTC Drive times (vector 7.6-1 asserts it); Q-9 a new client keeps the old token; Q-10 upload text always says `AA Backups`; Q-11 Load cancel keeps the "listing backups…" status; Q-19 re-consent notice on every launch; Q-20 fallback wording; 3.4.1 negative day counts in the Y/M/D line.
 
 ## Mac additions (P4, additive)
 

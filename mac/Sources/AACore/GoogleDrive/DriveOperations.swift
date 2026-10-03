@@ -1,5 +1,5 @@
 // Spec: 14 TOOLS-014/016/019/022/025, §3.1.8 UploadAsync, §3.1.9 ListBackupsAsync (creates `AA Backups` as a side
-//       effect, Q-2), §3.1.10 EnsureFolderAsync (first result; null on any error → Drive root; Q-3/Q-4 kept),
+//       effect, Q-2), §3.1.10 EnsureFolderAsync (null on any error → Drive root; Q-3 hardened, Q-4 kept),
 //       §3.1.12 GetBestRemoteAsync (tick comparison, first wins on ties, Kind-mixing quirk Q-5 kept), §3.1.13
 //       PushSyncAsync (overwrite in place, appProperties replaced key-wise), §3.2.10 (7-digit tick precision),
 //       Q-1 (fields include nextPageToken). Source: AA/Services/GoogleDriveUploader.cs.
@@ -17,16 +17,26 @@ public struct DriveOperations: Sendable {
 
     public init(api: DriveAPI, identity: String) { self.api = api; self.identity = identity }
 
-    /// §3.1.10: the first non-trashed folder with that name, else a new one in My Drive root; nil on any error.
+    /// §3.1.10: a non-trashed folder with that name that the account owns, else a new one in My Drive root; nil on
+    /// any error. Q-3 hardening (DECISIONS 14): the query adds `'me' in owners` and the pick prefers a folder Drive
+    /// reports as `canAddChildren`, so a hand-made / other-app folder AA cannot write into is skipped.
     public func ensureFolder(_ name: String) async -> String? {
         do {
-            let found = try await api.list(q: DriveQuery.folder(named: name), fields: "files(id,name)", orderBy: nil,
-                                           pageSize: nil, wholeDrive: false, maxPages: 1)
-            if let first = found.first, !first.id.isEmpty { return first.id }
+            let found = try await api.list(q: DriveQuery.folder(named: name), fields: DriveQuery.folderFields,
+                                           orderBy: nil, pageSize: nil, wholeDrive: false, maxPages: 1)
+            if let id = DriveOperations.pickFolder(found) { return id }
             return try await api.createFolder(name: name)
         } catch {
             return nil
         }
+    }
+
+    /// Q-3 pick: the first folder with `canAddChildren == true`, else the first whose capability is unknown (Drive
+    /// did not send it — Windows' "first result"), else nil (every match is read-only to AA → create a new one).
+    public static func pickFolder(_ found: [DriveFile]) -> String? {
+        let usable = found.filter { !$0.id.isEmpty }
+        if let writable = usable.first(where: { $0.canAddChildren == true }) { return writable.id }
+        return usable.first(where: { $0.canAddChildren == nil })?.id
     }
 
     /// §3.1.8 — uploads `file` (named after its basename) into `AA Backups` (root when the folder is unavailable).

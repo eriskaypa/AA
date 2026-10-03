@@ -11,6 +11,9 @@ final class DriveMockAPI: DriveAPI, @unchecked Sendable {
     var downloads: [String: Data] = [:]                 // id → bytes
     var calls: [String] = []
     var listQueries: [String] = []
+    var listFields: [String] = []
+    /// Explicit `EnsureFolder` matches per name (Q-3 tests); `folders` answers otherwise.
+    var folderCandidates: [String: [DriveFile]] = [:]
     var created: [(name: String, parents: [String]?, props: [String: String])] = []
     var updated: [(id: String, props: [String: String])] = []
     var failPrepare: DriveError?
@@ -25,10 +28,11 @@ final class DriveMockAPI: DriveAPI, @unchecked Sendable {
 
     func list(q: String, fields: String, orderBy: String?, pageSize: Int?, wholeDrive: Bool, maxPages: Int) async throws -> [DriveFile] {
         record("list")
-        lock.withLock { listQueries.append(q) }
+        lock.withLock { listQueries.append(q); listFields.append(fields) }
         if let failList { throw failList }
         if q.hasPrefix("mimeType='application/vnd.google-apps.folder' and name='") {
             let name = String(q.dropFirst("mimeType='application/vnd.google-apps.folder' and name='".count).prefix { $0 != "'" })
+            if let candidates = folderCandidates[name] { return candidates }
             return folders[name].map { [DriveFile(id: $0, name: name, mimeType: DriveConstants.folderMimeType)] } ?? []
         }
         if q.contains("name='AA-sync.zip' and trashed=false") {
