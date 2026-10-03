@@ -350,9 +350,12 @@ public enum PersistSharedText {
 
     // MARK: Adopt / stop (DATA-050/051 outcomes; the menu flows are W-SHELL's)
 
-    /// Persists `url` as the shared file; `useItsContents` (and the file exists) → import it (data + attachments),
-    /// reload and mark in sync; otherwise push our data over it (creating it). Then starts sync. On failure the
-    /// setting is cleared and the error rethrown.
+    /// The D28 outcomes (ARCH §6.6 as amended post-wave, REQ-W-SHELL-01). Refused while the data folder is
+    /// write-gated (DATA-174). Persists `url` as `SharedSaveFile`; `useItsContents` and the file exists →
+    /// `ImportSharedBundle` (data + attachments), `host.reloadAfterSharedImport(identity:)` (so `store.generation`
+    /// changes) and both stamps = the loaded `LastModified`; otherwise pushes our data over it synchronously
+    /// (creating it; a failed push is reported by the indicator, not thrown). Then **starts** the sync — callers do
+    /// not call `start()`. On failure it stops, clears the setting and rethrows.
     public func adoptSharedFile(_ url: URL, useItsContents: Bool) async throws {
         try PersistWriteGate.check(ds)                                              // DATA-174, §MP.3.5
         host?.flushAllEditors()
@@ -386,7 +389,7 @@ public enum PersistSharedText {
         }
     }
 
-    /// Stops the timers and watcher, clears the setting and hides the indicator.
+    /// Stops the timers and watcher, clears `SharedSaveFile` and hides the indicator (callers clear nothing).
     public func stopUsing() {
         stop()
         ds.settings.setSharedSaveFile(nil)

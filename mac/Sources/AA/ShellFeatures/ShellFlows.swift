@@ -211,20 +211,14 @@ import AACore
             }
         }
         // (Create on an existing file = the user confirmed the replace in the save panel = D28 "Overwrite It".)
-        let generation = env.store.generation
+        // ARCH §6.6 as amended (REQ-W-SHELL-01): the coordinator persists the path, imports + reloads (Use Its
+        // Contents) or pushes (Overwrite It / Create), starts the sync, and clears the setting itself on failure.
         do {
             try await env.sharedSave.adoptSharedFile(url, useItsContents: useItsContents)
-            // REQ-W-SHELL-01: reload here only if the coordinator did not already replace the data.
-            if useItsContents, env.store.generation == generation {
-                env.loadDataAndInitUI(reason: .sharedSavePull, status: nil)
-            }
-            env.sharedSave.start()
             env.status.post(ShellXText.sharedSet(url.path))
             postIfSettingsUnwritable(env)
             await dialogs.info(ShellXText.sharedSaveFileTitle, ShellXText.sharedSetInfo(path: url.path))
         } catch {
-            env.sharedSave.stop()
-            env.settings.setSharedSaveFile(nil)
             await dialogs.error(ShellXText.setSharedFailedTitle, error.localizedDescription)
         }
     }
@@ -239,8 +233,7 @@ import AACore
                              buttons: [AlertButton(title: ShellXText.stopSharedButton, role: .default),
                                        AlertButton(title: "Cancel", role: .cancel)])
         guard await dialogs.alert(spec) == 0 else { return }
-        env.sharedSave.stopUsing()
-        if !NetText.isBlank(env.settings.values.sharedSaveFile) { env.settings.setSharedSaveFile(nil) }
+        env.sharedSave.stopUsing()                                  // stops sync and clears the setting (§6.6)
         env.status.post(ShellXText.sharedStopped)
         postIfSettingsUnwritable(env)
     }
