@@ -104,11 +104,49 @@ public enum LockRules {
         s.endEditing()
     }
 
-    /// CONT-061 data effect: clears the lock from every whole locked stretch touching `range` (other backgrounds are
-    /// untouched; a block-level sentinel is removed from its paragraph or container). Returns the stretches unlocked.
+    /// The lock source of a locked character (`.aaLockSource`, else a sentinel highlight = `inlineRun`).
+    static func source(_ s: NSAttributedString, at i: Int) -> XamlLockSource? {
+        guard isLocked(s, at: i) else { return nil }
+        if let raw = s.attribute(.aaLockSource, at: i, effectiveRange: nil) as? String, let v = XamlLockSource(rawValue: raw) {
+            return v
+        }
+        return .inlineRun
+    }
+
+    /// CONT-061 granularity — the element carrying the sentinel around character `i`: for `inlineRun` the Run (the
+    /// longest stretch of identical attributes, which the writer emits as one `Run`), for `inlineAncestor` the lock
+    /// `Span` (the contiguous characters it locks), for `block` the whole locked block.
+    public static func lockedElement(_ s: NSAttributedString, at i: Int) -> NSRange? {
+        guard let src = source(s, at: i) else { return nil }
+        var a = i, b = i + 1
+        while source(s, at: a - 1) == src { a -= 1 }
+        while source(s, at: b) == src { b += 1 }
+        let stretch = NSRange(location: a, length: b - a)
+        guard src == .inlineRun else { return stretch }
+        var run = NSRange(location: 0, length: 0)
+        _ = s.attributes(at: i, longestEffectiveRange: &run, in: stretch)
+        return run
+    }
+
+    /// CONT-061 data effect: clears the lock from every locked *element* the range touches — every position of the
+    /// selection (an empty range: the character at or before the caret), exactly as `Unlock_Click` walks the
+    /// selection and clears each `LockedAncestor` once: unlocking part of a locked run unlocks the whole run, while a
+    /// separately locked neighbour outside the selection stays locked. Other backgrounds are untouched; a block-level
+    /// sentinel is removed from its paragraph or container. Returns the element ranges unlocked.
     @discardableResult
     public static func unlock(_ s: NSMutableAttributedString, range: NSRange) -> [NSRange] {
-        let stretches = lockedRanges(s, touching: range)
+        guard s.length > 0 else { return [] }
+        var lo = max(0, range.location), hi = min(s.length, NSMaxRange(range))
+        if hi <= lo {
+            if isLocked(s, at: lo) { hi = lo + 1 } else if isLocked(s, at: lo - 1) { lo -= 1; hi = lo + 1 } else { return [] }
+        }
+        var stretches: [NSRange] = []
+        var i = lo
+        while i < hi {
+            guard let unit = lockedElement(s, at: i) else { i += 1; continue }
+            if stretches.last.map({ NSIntersectionRange($0, unit).length == 0 }) ?? true { stretches.append(unit) }
+            i = max(i + 1, NSMaxRange(unit))
+        }
         guard !stretches.isEmpty else { return [] }
         s.beginEditing()
         var blockParagraphs: [NSRange] = []
@@ -124,9 +162,17 @@ public enum LockRules {
                 }
                 if (a[.aaLockSource] as? String) == XamlLockSource.block.rawValue {
                     blockParagraphs.append(ns.paragraphRange(for: one))
+                    s.removeAttribute(.aaLockSource, range: one)
+                    s.removeAttribute(.aaLocked, range: one)
+                } else if blockSentinelRemains(a) {
+                    // Windows clears only the nearest sentinel (`LockedAncestor`); a locked block around it still
+                    // locks the text until it is unlocked in turn.
+                    s.addAttribute(.aaLockSource, value: XamlLockSource.block.rawValue, range: one)
+                    s.addAttribute(.aaLocked, value: true, range: one)
+                } else {
+                    s.removeAttribute(.aaLockSource, range: one)
+                    s.removeAttribute(.aaLocked, range: one)
                 }
-                s.removeAttribute(.aaLockSource, range: one)
-                s.removeAttribute(.aaLocked, range: one)
             }
         }
         // Block sentinel: drop it from the paragraph model and from the containers on the paragraph's path.
@@ -135,6 +181,19 @@ public enum LockRules {
         }
         s.endEditing()
         return stretches
+    }
+
+    /// Does the paragraph or one of its block containers still carry the sentinel `Background`?
+    static func blockSentinelRemains(_ a: [NSAttributedString.Key: Any]) -> Bool {
+        let model = (a[.richParagraphModel] as? [String: String]) ?? [:]
+        if model["Background"].flatMap(XamlValues.parseBrush).map({ XamlValues.isSentinel($0) }) == true { return true }
+        if RichAttributeCoding.decode(a[.aaParagraphAttrs]).contains(where: {
+            $0.qualifiedName == "Background" && XamlValues.isSentinel(XamlValues.parseBrush($0.value))
+        }) { return true }
+        return RichAttributeCoding.decodePath(a[.richContainerPath]).contains { info in
+            info.carried.contains { $0.qualifiedName == "Background" && XamlValues.isSentinel(XamlValues.parseBrush($0.value)) }
+                || info.model["Background"].flatMap(XamlValues.parseBrush).map({ XamlValues.isSentinel($0) }) == true
+        }
     }
 
     private static func clearBlockSentinel(_ s: NSMutableAttributedString, paragraph pr: NSRange) {

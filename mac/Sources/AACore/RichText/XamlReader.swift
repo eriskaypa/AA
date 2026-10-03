@@ -38,14 +38,17 @@ public enum XamlReadOutcome {
     /// CONT-161: a fragment (HTML paste output, AA clipboard XAML, an inserted table or list) resolved in the
     /// destination context. A root without the presentation namespace is accepted here (it gets one).
     public static func readFragment(_ xaml: String, destinationContext: XamlContext) -> NSAttributedString? {
-        guard !NetText.isBlank(xaml) else { return nil }
-        var result = XamlDOM.parse(xaml)
-        if case .failure(.wrongRootNamespace(nil)) = result, let fixed = injectNamespace(xaml) {
-            result = XamlDOM.parse(fixed)
+        guard let blocks = fragmentTree(xaml, destinationContext: destinationContext) else { return nil }
+        let out = RichRenderer.render(RichDoc(blocks: blocks))
+        // WPF merges a pasted fragment's last paragraph with the text after the caret (CONT-161), so a fragment that
+        // ends with an ordinary paragraph carries no final paragraph break: pasting "word" (an in-app copy or an
+        // inline web selection) inserts no new line. A fragment ending with a list, table, section or opaque block
+        // keeps it — the structure stays a block of its own.
+        if case .para(let last)? = blocks.last, !last.isOpaqueBlock, out.length > 0,
+           (out.string as NSString).character(at: out.length - 1) == 0x0A {
+            out.deleteCharacters(in: NSRange(location: out.length - 1, length: 1))
         }
-        guard case .success(let doc) = result else { return nil }
-        var b = XamlReaderBuilder(doc: doc, context: destinationContext, fragment: true)
-        return b.run()
+        return out
     }
 
     /// XD.2.8 "Typing attributes": the projection of the document's root context (an empty or cleared body keeps
@@ -68,7 +71,7 @@ public enum XamlReadOutcome {
         return a
     }
 
-    private static func injectNamespace(_ xaml: String) -> String? {
+    static func injectNamespace(_ xaml: String) -> String? {
         guard let lt = xaml.firstIndex(of: "<") else { return nil }
         var i = xaml.index(after: lt)
         while i < xaml.endIndex, !" \t\r\n/>".contains(xaml[i]) { i = xaml.index(after: i) }
@@ -133,6 +136,11 @@ struct XamlReaderBuilder {
     }
 
     mutating func run() -> NSAttributedString {
+        RichRenderer.render(RichDoc(blocks: readTree()))
+    }
+
+    /// The block tree of the document (a document ending with a table gets the §6.4 synthetic paragraph after it).
+    mutating func readTree() -> [RichNode] {
         let root = doc[doc.root]
         if !root.isImplicit { rootAttributes = root.namespaceDeclarations + root.rawAttributes }
         var blocks = readBlocks(root.children)
@@ -142,7 +150,7 @@ struct XamlReaderBuilder {
                              carried: [], model: ["Synthetic": "1"])
             blocks.append(.para(p))
         }
-        return RichRenderer.render(RichDoc(blocks: blocks))
+        return blocks
     }
 
     // MARK: - Attribute classes (CONT-163)

@@ -251,6 +251,7 @@ final class RichDoc {
                                 carried: RichAttributeCoding.decode(first[.aaParagraphAttrs]),
                                 model: (first[.richParagraphModel] as? [String: String]) ?? [:])
             para.minimumLineHeight = style?.minimumLineHeight ?? 0
+            if first[.richParagraphModel] == nil, path.isEmpty, let st = style { adoptNativeIndents(st, into: para) }
             para.oldStart = r.start; para.oldContentStart = cs; para.oldEnd = r.end
             let isContinuation = (first[.aaListContinuation] as? Bool) == true
             // Nest by container ids.
@@ -273,6 +274,22 @@ final class RichDoc {
             appendNode(.para(para))
         }
         return doc
+    }
+
+    /// An AppKit-native paragraph (RTF from Word, Pages or TextEdit; no W-RICH model on its characters) at the document
+    /// level keeps its indents the way WPF's RTF converter keeps them: `headIndent` → `Margin.Left`,
+    /// `-tailIndent` → `Margin.Right`, `firstLineHeadIndent − headIndent` → `TextIndent` (05 §6.4 "Paragraph", read in
+    /// reverse; top/bottom stay `Auto`). Paragraphs W-RICH rendered always carry `.richParagraphModel` or sit at zero
+    /// indent, so they never pass through here with a non-zero indent.
+    static func adoptNativeIndents(_ st: NSParagraphStyle, into p: RichPara) {
+        guard st.textLists.isEmpty, st.textBlocks.isEmpty else { return }
+        let head = Double(st.headIndent), first = Double(st.firstLineHeadIndent), tail = Double(st.tailIndent)
+        let right = tail < 0 ? -tail : 0
+        if head > 0 || right > 0 {
+            p.model["Margin"] = XamlValues.formatThickness(XamlThickness(left: max(0, head), top: .nan,
+                                                                         right: right > 0 ? right : .nan, bottom: .nan))
+        }
+        if first - head != 0, first >= 0 { p.model["TextIndent"] = XamlValues.formatLength(first - head) }
     }
 
     /// Length of an AppKit-native `\t{marker}\t` prefix, or 0.

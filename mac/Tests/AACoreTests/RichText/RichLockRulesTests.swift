@@ -106,6 +106,44 @@ import Testing
         #expect(!XamlWriter.write(ec, metadata: mc, context: .containerEditor).contains("FFE699"))
     }
 
+    /// CONT-061: the unit is the element carrying the sentinel (`LockedAncestor`, cleared once per element) — a
+    /// separately locked neighbour outside the selection stays locked; every element the selection touches unlocks.
+    @Test func unlockGranularityIsTheLockedElement() {
+        let xaml = RichTest.doc(##"<Paragraph><Run FontWeight="Bold" Background="#FFFFE699">AB</Run><Run Background="#FFFFE699">CD</Run><Run>ef</Run></Paragraph>"##)
+        let (s, m) = RichTest.read(xaml)
+        #expect(LockRules.lockedElement(s, at: 1) == NSRange(location: 0, length: 2))
+        #expect(LockRules.lockedElement(s, at: 2) == NSRange(location: 2, length: 2))
+        #expect(LockRules.lockedElement(s, at: 4) == nil)
+        let e = NSMutableAttributedString(attributedString: s)
+        #expect(LockRules.unlock(e, range: NSRange(location: 1, length: 1)) == [NSRange(location: 0, length: 2)])
+        #expect(!LockRules.isLocked(e, at: 0) && LockRules.isLocked(e, at: 2) && LockRules.isLocked(e, at: 3))
+        #expect(RichTest.body(XamlWriter.write(e, metadata: m, context: .containerEditor))
+                == ##"<Paragraph><Run FontWeight="Bold">AB</Run><Run Background="#FFFFE699">CD</Run><Run>ef</Run></Paragraph>"##)
+        // A selection across both elements unlocks both.
+        let both = NSMutableAttributedString(attributedString: s)
+        #expect(LockRules.unlock(both, range: NSRange(location: 1, length: 2)) == [NSRange(location: 0, length: 2), NSRange(location: 2, length: 2)])
+        #expect(!LockRules.hasAnyLock(both))
+        // A caret (empty range) unlocks the element at or just before it.
+        let caret = NSMutableAttributedString(attributedString: s)
+        #expect(LockRules.unlock(caret, range: NSRange(location: 4, length: 0)) == [NSRange(location: 2, length: 2)])
+        #expect(LockRules.unlock(caret, range: NSRange(location: 5, length: 0)).isEmpty)
+    }
+
+    /// Windows clears only the nearest sentinel: a locked run inside a locked paragraph stays locked by the paragraph.
+    @Test func unlockingARunInsideALockedBlockLeavesTheBlockLock() {
+        let (s, m) = RichTest.read(RichTest.doc(##"<Paragraph Background="#FFFFE699"><Run Background="#FFFFE699">ab</Run><Run>cd</Run></Paragraph>"##))
+        let e = NSMutableAttributedString(attributedString: s)
+        #expect(e.attribute(.aaLockSource, at: 0, effectiveRange: nil) as? String == "inlineRun")
+        LockRules.unlock(e, range: NSRange(location: 0, length: 1))
+        #expect(LockRules.isLocked(e, at: 0) && e.attribute(.aaLockSource, at: 0, effectiveRange: nil) as? String == "block")
+        #expect(RichTest.body(XamlWriter.write(e, metadata: m, context: .containerEditor))
+                == ##"<Paragraph Background="#FFFFE699"><Run>abcd</Run></Paragraph>"##)
+        // The second unlock removes the block sentinel.
+        LockRules.unlock(e, range: NSRange(location: 0, length: 1))
+        #expect(!LockRules.hasAnyLock(e))
+        #expect(RichTest.body(XamlWriter.write(e, metadata: m, context: .containerEditor)) == "<Paragraph><Run>abcd</Run></Paragraph>")
+    }
+
     @Test func highlightPickedAsTheSentinelIsALock() {
         let s = NSMutableAttributedString(string: "gold\n", attributes: RichEditTree.defaultCharacterAttributes)
         s.addAttribute(.backgroundColor, value: NSColor(srgbRed: 1, green: 230.0 / 255, blue: 153.0 / 255, alpha: 1),
