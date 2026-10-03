@@ -278,11 +278,18 @@ enum SnapshotHook {
         return out
     }
 
-    /// Split-view item wrappers (sidebar, content, inspector columns).
+    /// The window's own split-view item wrappers (the `NavigationSplitView` sidebar / content / inspector columns).
+    /// A section's internal split views (`HSplitView`, nested `NavigationSplitView`s) are NOT collected — the walk
+    /// stops at the first wrapper on each path — and invisible subtrees (hidden, alpha 0, e.g. section roots kept
+    /// alive at opacity 0 by `SectionContentHost`) are skipped (REQ-W-CREW-02, REQ-W-PLAN-03, REQ-W-SIRE-02).
     private static func splitItems(in root: NSView) -> [NSView] {
         var out: [NSView] = []
         func walk(_ v: NSView) {
-            if String(describing: type(of: v)).contains("SplitViewItemViewWrapper") { out.append(v) }
+            if v.isHidden || v.alphaValue == 0 || (v.layer.map { $0.opacity == 0 } ?? false) { return }
+            if String(describing: type(of: v)).contains("SplitViewItemViewWrapper") {
+                out.append(v)
+                return
+            }
             for s in v.subviews { walk(s) }
         }
         walk(root)
