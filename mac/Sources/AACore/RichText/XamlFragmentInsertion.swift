@@ -24,12 +24,45 @@ public extension XamlReader {
     static func insertFragment(_ xaml: String, into storage: NSTextStorage, replacing range: NSRange,
                                base: XamlContext) -> NSRange? {
         guard !NetText.isBlank(xaml) else { return nil }
+        return insertBlocks(into: storage, replacing: range, base: base) { fragmentTree(xaml, destinationContext: $0) }
+    }
+
+    /// Pastes foreign rich text (RTF / RTFD from Word, Pages, TextEdit, Safari, after the caller's sanitising) the
+    /// same way: `text` is written to XAML in `base` (AppKit-native `textLists` / `textBlocks` become Lists and
+    /// Tables, RICH-I03; every element gets a fresh id, so a pasted copy never fuses with its source) and inserted with
+    /// `insertFragment(_:into:replacing:base:)`. A fragment that ends with a paragraph mark after ordinary text keeps
+    /// that break: the text after the caret starts a paragraph of its own, as WPF's RTF paste of whole paragraphs
+    /// does (a fragment ending with a list or table always leaves the text after the caret in its own paragraph,
+    /// so a table pasted at the end of a note is followed by an ordinary paragraph, §6.4). Returns nil when `text`
+    /// holds nothing the writer stores (the caller falls back to plain text, CONT-035).
+    @discardableResult
+    static func insertFragment(attributed text: NSAttributedString, into storage: NSTextStorage, replacing range: NSRange,
+                               base: XamlContext) -> NSRange? {
+        guard text.length > 0 else { return nil }
+        let xaml = XamlWriter.write(text, metadata: RichTextMetadata(context: base), context: base)
+        guard !NetText.isBlank(xaml) else { return nil }
+        let last = (text.string as NSString).character(at: text.length - 1)
+        let endsWithBreak = last == 0x0A || last == 0x0D || last == 0x2029
+        return insertBlocks(into: storage, replacing: range, base: base) { context in
+            guard var blocks = fragmentTree(xaml, destinationContext: context) else { return nil }
+            if endsWithBreak, case .para(let p)? = blocks.last, !p.isOpaqueBlock {
+                let landing = p.copy()
+                landing.content = NSMutableAttributedString()
+                blocks.append(.para(landing))
+            }
+            return blocks
+        }
+    }
+
+    /// The shared insertion: `makeFragment` resolves the fragment's blocks in the destination paragraph's context.
+    private static func insertBlocks(into storage: NSTextStorage, replacing range: NSRange, base: XamlContext,
+                                     _ makeFragment: (XamlContext) -> [RichNode]?) -> NSRange? {
         let clamped = NSIntersectionRange(range, NSRange(location: 0, length: storage.length))
         let caret = min(range.location, storage.length)
         let work = NSMutableAttributedString(attributedString: storage)
         if clamped.length > 0 { work.deleteCharacters(in: clamped) }
         let context = destinationContext(in: work, at: caret, base: base)
-        guard let fragment = fragmentTree(xaml, destinationContext: context) else { return nil }
+        guard let fragment = makeFragment(context) else { return nil }
         let tree = RichEditTree(RichDoc.build(from: work))
         var blocks = fragment
         // A fragment's trailing empty paragraph after a structure is only the caret's landing place in its source.
