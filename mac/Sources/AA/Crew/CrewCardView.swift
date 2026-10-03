@@ -83,6 +83,7 @@ struct CrewCardView: View {
                     .textSelection(.enabled)
                 Spacer(minLength: AASpacing.s)
                 Button(action: edit) { Label("Edit…", systemImage: "pencil") }
+                    .fixedSize()
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .help("Edit this crew member's details (including the sign-off / contract date).")
@@ -98,7 +99,8 @@ struct CrewCardView: View {
         }
     }
 
-    // CREW-022
+    // CREW-022 — the button beside the summary while the summary keeps a readable width; in a narrow card (V2-J5)
+    // it moves under the summary so it is never pushed out of the pane.
     private func checklistBox(_ m: CrewMember) -> some View {
         HStack(alignment: .top, spacing: AASpacing.m) {
             Image(systemName: "checklist")
@@ -106,19 +108,17 @@ struct CrewCardView: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(AAColor.Status.crewAccent)
                 .frame(width: 24)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("Checklist").font(.aaMono(AAType.body, weight: .semibold)).foregroundStyle(AAColor.accent)
-                Text(CrewRoster.checklistSummary(m))
-                    .font(.aaMono(AAType.caption))
-                    .monospacedDigit()
-                    .foregroundStyle(AAColor.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: AASpacing.m) {
+                    checklistText(m)
+                        .frame(minWidth: 180, idealWidth: 240, maxWidth: .infinity, alignment: .leading)
+                    openChecklistButton
+                }
+                VStack(alignment: .leading, spacing: AASpacing.s) {
+                    checklistText(m)
+                    openChecklistButton
+                }
             }
-            Spacer(minLength: AASpacing.s)
-            Button(action: openChecklist) { Label("Open Checklist…", systemImage: "list.bullet.clipboard") }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .help("Build this crew member's checklist — items with a due date show in the due-dates window and Calendar.")
         }
         .padding(.horizontal, AASpacing.m)
         .padding(.vertical, 10)
@@ -126,14 +126,35 @@ struct CrewCardView: View {
         .overlay(RoundedRectangle(cornerRadius: AARadius.control, style: .continuous).strokeBorder(AAColor.border, lineWidth: 1))
     }
 
+    private func checklistText(_ m: CrewMember) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text("Checklist").font(.aaMono(AAType.body, weight: .semibold)).foregroundStyle(AAColor.accent)
+            Text(CrewRoster.checklistSummary(m))
+                .font(.aaMono(AAType.caption))
+                .monospacedDigit()
+                .foregroundStyle(AAColor.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var openChecklistButton: some View {
+        Button(action: openChecklist) { Label("Open Checklist…", systemImage: "list.bullet.clipboard") }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .fixedSize()
+            .help("Build this crew member's checklist — items with a due date show in the due-dates window and Calendar.")
+    }
+
     // CREW-024
     private func reviewNotes(_ m: CrewMember) -> some View {
         AACard(padding: 10) {
             VStack(alignment: .leading, spacing: 6) {
-                Label(CrewRoster.reviewNotesTitle(m.flags.count), systemImage: "flag")
+                // One flag: the SF Symbol plus the title without its ⚑ glyph (the glyph text stays the label).
+                Label(CrewRoster.reviewNotesLabel(m.flags.count), systemImage: "flag")
                     .font(.aaMono(AAType.body, weight: .semibold))
                     .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(AAColor.fg)
+                    .accessibilityLabel(CrewRoster.reviewNotesTitle(m.flags.count))
                 ForEach(Array(m.flags.enumerated()), id: \.offset) { _, f in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "circle.fill")

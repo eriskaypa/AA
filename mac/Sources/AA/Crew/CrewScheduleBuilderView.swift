@@ -110,6 +110,7 @@ struct CrewScheduleBuilderView: View {
             HStack(spacing: 6) {
                 Text(CrewScheduleText.add).font(.aaMono(AAType.small, weight: .bold))
                 OptionalDatePicker(value: $addDate)
+                    .environment(\.locale, Locale(identifier: "en_CA"))   // ISO yyyy-MM-dd (DECISIONS, Stage V ruling)
                 TextField(CrewScheduleText.timePlaceholder, text: $time)
                     .textFieldStyle(.roundedBorder)
                     .font(.aaMono(AAType.small))
@@ -170,18 +171,20 @@ struct CrewScheduleBuilderView: View {
     // MARK: BUILD-116…120 timeline
 
     private func timeline(_ crew: CrewMember) -> some View {
-        let groups = CrewScheduleTimeline.groups(crew.schedule, today: env.clock.today())
-        let byID = Dictionary(uniqueKeysWithValues: crew.schedule.map { ($0.id, $0) })
+        let entries = crew.schedule
+        let groups = CrewScheduleTimeline.groups(entries, today: env.clock.today())
         return List {
             ForEach(groups) { g in
                 Section {
-                    ForEach(g.entryIDs, id: \.self) { id in
-                        if let e = byID[id] {
-                            CrewScheduleRow(entry: e,
-                                            toggle: { e.done.toggle(); env.store.markDirty() },
-                                            edit: { Task { await edit(e) } },
-                                            delete: { delete(e, from: crew) })
-                        }
+                    // Rows resolve by position and are identified by object (V2-COMPAT): two entries sharing an Id —
+                    // possible in a hand-edited or foreign data.json, harmless on Windows — never trap or merge.
+                    let rows = g.entryOffsets.filter { entries.indices.contains($0) }.map { CrewScheduleRowRef(entry: entries[$0]) }
+                    ForEach(rows) { ref in
+                        let e = ref.entry
+                        CrewScheduleRow(entry: e,
+                                        toggle: { e.done.toggle(); env.store.markDirty() },
+                                        edit: { Task { await edit(e) } },
+                                        delete: { delete(e, from: crew) })
                     }
                 } header: {
                     HStack(spacing: 6) {
@@ -362,4 +365,10 @@ struct CrewScheduleRow: View {
             Button(role: .destructive, action: delete) { Label("Delete Entry", systemImage: "trash") }
         }
     }
+}
+
+/// A timeline row's identity: the entry object itself (WPF binds by reference), not its `Id`.
+private struct CrewScheduleRowRef: Identifiable {
+    let entry: ScheduleEntry
+    var id: ObjectIdentifier { ObjectIdentifier(entry) }
 }

@@ -17,10 +17,17 @@ struct CrewTabView: View {
         // The shell lays the shortcut strip out below the section (REQ-W-CREW-01), so the panes need no inset.
         HSplitView {
             CrewRosterPane(model: model)
-                .frame(minWidth: 290, idealWidth: 340, maxWidth: 520)
+                .frame(minWidth: CrewLayout.rosterMinWidth, idealWidth: CrewLayout.rosterIdealWidth,
+                       maxWidth: CrewLayout.rosterMaxWidth)
             CrewCardPane(model: model)
-                .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+                .frame(minWidth: CrewLayout.cardMinWidth, maxWidth: .infinity, maxHeight: .infinity)
         }
+        // V2-J5: an HSplitView that runs under the floating sidebar hands the sidebar's leading safe-area inset to
+        // EACH pane's hosting view, so its minimum width grew by twice the sidebar (290 + 420 + 2 × 228 = 1167 pt) and
+        // the section overflowed — and was clipped on both sides — in any window narrower than ~1170 pt. A leading
+        // padding lays the split view out inside the safe area (as the Ports section's padding does), so its minimum is
+        // just the two panes. The 1-pt edge sits under the sidebar's own shadow.
+        .padding(.leading, CrewLayout.splitLeadingInset)
         .overlay {
             if model.importing { AAProgressOverlay(text: "Importing the COMPAS crew report…") }
         }
