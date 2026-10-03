@@ -39,7 +39,7 @@ struct FileBacklinksSection: View {
             ForEach(model.rows) { r in
                 row(r)
                     .tag(r.id)
-                    .onDrag { FileBankTable.provider(r.dragURL, web: r.isWeb) ?? NSItemProvider() }
+                    .onDrag { FileBankTable.provider(r.dragURL, web: r.isWeb, name: r.dragName) ?? NSItemProvider() }
             }
             ForEach(Array(model.locked.enumerated()), id: \.offset) { _, label in
                 HStack(spacing: 8) {
@@ -156,6 +156,7 @@ struct FileBankBacklinkRow: Identifiable {
         }
     }
     var isWeb: Bool { if case .web = visual.state { return true }; return false }
+    @MainActor var dragName: String? { FileBankDrag.exportName(link.file, visual: visual) }
 }
 
 /// Backlinks of one item for one render; files in password-gated owners collapse to one "locked" line per owner.

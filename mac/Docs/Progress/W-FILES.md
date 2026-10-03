@@ -78,3 +78,42 @@ Counts: 1 finding (polish, 2 parts) · 2 fixed · 0 not fixed · 0 cross-owner r
 
 Gate: `swift build` and `swift test` (-j 3, warnings as errors) green — 1,586 tests / 234 suites;
 `check-ownership.sh --owner W-FILES` OK.
+
+## FIX2-W-FILES — round 2 verification findings (2026-10-03)
+
+Counts: 7 findings · 7 fixed · 0 not fixed · 0 rejected · 0 cross-owner requests · 9 regression tests
+(`Tests/AACoreTests/FileBank/FileBankRound2Tests.swift`).
+
+* **smb:// mappings (V2-J4, major).** `FileBankResolve.State` gains `.remote(URL)`: a Windows path mapped to
+  `smb://` / `afp://` is never treated as a local path (`fileURL` nil, `target` = the URL, no "missing"). Open hands
+  it to `AttachmentOpener.open` (NSWorkspace → Finder mounts the share); Show in Finder opens the containing folder
+  URL; Quick Look / thumbnails / the missing badge skip it. Journey test `smbMappingThroughFileBank` adopted as given.
+* **Locate… (V2-J4, major).** `FileBankOpening.reportUnmapped` (file bank, viewer, backlinks) now offers the shared
+  recovery: UNC → Connect to Server… (mounts the share ROOT via `PathMapper.smbShareURL`, retries up to 15 s, else a
+  status line), Locate… (open panel → `PathMapper.inferredMapping` → `PathMapper.shared.upsert` → status → retry),
+  File Links Settings…, Cancel; drive letters start at Locate…. Order and titles from
+  `FileBankResolve.recoveryChoices(for:)`; OC-12 alert texts unchanged. Implemented in W-FILES (PersistOpenFlow's
+  `recover` is private to W-PERSIST; the flow and texts match W-PERSIST-13 / the quick cards).
+* **Drag-out / ⌘C name (V2-J4, minor).** New `FileBankExport` (AACore): the stored file is cloned (APFS
+  copy-on-write, a copy elsewhere) into a private staging folder on the same volume, named `FileItem.Name` (extension
+  of the stored file kept, `/` `:` replaced, ≤ 255 bytes); drags, ⌘C providers and the pasteboard mirror carry the
+  staged URL, so Finder / Mail get "Main engine manual (rev 3).pdf", not the `<32hex>_leaf`. Folders and files whose
+  name already matches leave as themselves.
+* **Drop from another bank (V2-J4, polish).** Staged exports remember their origin: the importer maps them back to
+  the stored file (still referenced, not re-copied) and keeps the source entry's Name; links in place link the real
+  file under that name. A `files/` leaf dropped from Finder takes the Name an existing entry gives it
+  (`FileBankImporter.storedNames`), else the leaf without its prefix. Drop-on-own-bank dedup maps staged URLs back too.
+* **Viewer paper (V2-DESIGN, minor).** `ContainerViewerSheet` (also the saved-list viewer) puts the read-only text on
+  the editor's page: inset `EditorPane.paperInset` on `AAColor.panelAlt`, radius `AARadius.paper`, 1-pt border,
+  dark-mode shadow.
+* **Viewer Path / URL column (V2-DESIGN, polish).** Name ideal 220 (max 320), Path / URL flexible (min 160, ideal 260):
+  the four columns fit the 820-pt sheet with a visible trailing edge. Path cells (viewer and file bank) show `~` for
+  the home folder (`FileBankDisplay.shortPath`), full path in the tooltip.
+* **Bank bar accent (V2-DESIGN, polish).** No prominent buttons in the bank bar: Link in Place and Open All are neutral
+  bordered like the rest (DEVIATIONS W-FILES "Bank bar accent").
+* Snapshots (this worktree's binary, scratch copies of `snapdata-full`, light + dark) under scratchpad
+  `snapshots/fix2-W-FILES/`: viewer, viewer-empty, file-bank sheet, Equipment section. Checked: paper inset with
+  visible border in light and dark, files table ends inside the sheet, bank bar has no accent-filled buttons.
+
+Gate: `swift build` and `swift test` (-j 3, warnings as errors) green — 1,663 tests / 246 suites;
+`check-ownership.sh` OK.

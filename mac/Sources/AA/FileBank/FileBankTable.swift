@@ -137,7 +137,9 @@ struct FileBankTable: View {
         } rows: {
             ForEach(rows) { r in
                 TableRow(r)
-                    .itemProvider { [url = r.dragURL, web = r.isWeb] in FileBankTable.provider(url, web: web) }
+                    .itemProvider { [url = r.dragURL, web = r.isWeb, name = r.dragName] in
+                        FileBankTable.provider(url, web: web, name: name)
+                    }
             }
         }
         .tableStyle(.inset)
@@ -177,19 +179,27 @@ struct FileBankTable: View {
 
     private func providers(for files: [FileItem]) -> [NSItemProvider] {
         let ids = selection
-        let urls = rows.filter { ids.contains($0.id) }.compactMap { r -> (URL, Bool)? in r.dragURL.map { ($0, r.isWeb) } }
+        let urls = rows.filter { ids.contains($0.id) }.compactMap { r -> (URL, Bool, String?)? in
+            r.dragURL.map { ($0, r.isWeb, r.dragName) }
+        }
         DispatchQueue.main.async {
             MainActor.assumeIsolated {
                 if !files.isEmpty { FileBankClipboard.shared.mirroredPasteboardChangeCount = NSPasteboard.general.changeCount }
             }
         }
-        return urls.compactMap { FileBankTable.provider($0.0, web: $0.1) }
+        return urls.compactMap { FileBankTable.provider($0.0, web: $0.1, name: $0.2) }
     }
 
-    nonisolated static func provider(_ url: URL?, web: Bool) -> NSItemProvider? {
+    /// A drag / copy item: web links as URLs; local files as file URLs under the entry's display name `name`
+    /// (`FileBankExport` stages a clone named after the entry, so Finder and Mail never see the stored
+    /// `<32hex>_leaf`; 05 §6.9).
+    nonisolated static func provider(_ url: URL?, web: Bool, name: String? = nil) -> NSItemProvider? {
         guard let url else { return nil }
         if web { return NSItemProvider(object: url as NSURL) }
-        return NSItemProvider(contentsOf: url) ?? NSItemProvider(object: url as NSURL)
+        let out = name.map { FileBankExport.exportURL(for: url, displayName: $0) } ?? url
+        let p = NSItemProvider(contentsOf: out) ?? NSItemProvider(object: out as NSURL)
+        p.suggestedName = out.lastPathComponent
+        return p
     }
 
     private func nameCell(_ r: FileBankRow) -> some View {
@@ -213,8 +223,8 @@ struct FileBankTable: View {
     }
 
     private func pathCell(_ path: String) -> some View {
-        Text(path).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted).lineLimit(1).truncationMode(.middle)
-            .help(path)
+        Text(FileBankDisplay.shortPath(path)).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted).lineLimit(1)
+            .truncationMode(.middle).help(path)
     }
 }
 
@@ -274,7 +284,9 @@ struct FileBankGrid: View {
                 if !files.isEmpty { FileBankClipboard.shared.mirroredPasteboardChangeCount = NSPasteboard.general.changeCount }
             }
         }
-        return rows.filter { ids.contains($0.id) }.compactMap { FileBankTable.provider($0.dragURL, web: $0.isWeb) }
+        return rows.filter { ids.contains($0.id) }.compactMap {
+            FileBankTable.provider($0.dragURL, web: $0.isWeb, name: $0.dragName)
+        }
     }
 
     private func tile(_ r: FileBankRow) -> some View {
@@ -313,7 +325,7 @@ struct FileBankGrid: View {
             actions.open([r.id])
         }
         .onTapGesture { click(r) }
-        .onDrag { FileBankTable.provider(r.dragURL, web: r.isWeb) ?? NSItemProvider() }
+        .onDrag { FileBankTable.provider(r.dragURL, web: r.isWeb, name: r.dragName) ?? NSItemProvider() }
         .contextMenu {
             let ids = selection.contains(r.id) ? selection : [r.id]
             FileBankContextMenu(ids: ids, rows: rows, isShared: isShared, actions: actions)

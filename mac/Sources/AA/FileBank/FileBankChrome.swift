@@ -58,7 +58,7 @@ struct FileBankHeaderBar: View {
                 FileBankHeaderButton(title: FileBankText.addFile, symbol: "doc.badge.plus", help: FileBankText.addFileHelp,
                                      showsTitle: d != .iconsOnly, action: actions.addFile)
                 FileBankHeaderButton(title: FileBankText.linkInPlace, symbol: "link.badge.plus",
-                                     help: FileBankText.linkInPlaceHelp, prominent: true, showsTitle: d != .iconsOnly,
+                                     help: FileBankText.linkInPlaceHelp, showsTitle: d != .iconsOnly,
                                      action: actions.linkInPlace)
                 FileBankHeaderButton(title: FileBankText.addFolder, symbol: "folder.badge.plus",
                                      help: FileBankText.addFolderHelp, showsTitle: d != .iconsOnly, action: actions.addFolder)
@@ -86,7 +86,7 @@ struct FileBankHeaderBar: View {
                                      showsTitle: d != .iconsOnly, action: actions.open)
                     .disabled(!hasSelection)
                 FileBankHeaderButton(title: FileBankText.openAll, symbol: "square.stack.3d.up",
-                                     help: FileBankText.openAllHelp, prominent: true, showsTitle: d != .iconsOnly,
+                                     help: FileBankText.openAllHelp, showsTitle: d != .iconsOnly,
                                      action: actions.openAll)
                     .disabled(!hasShown)
             }
@@ -107,16 +107,14 @@ struct FileBankHeaderButton: View {
     let title: String
     let symbol: String
     let help: String
-    var prominent = false
     var showsTitle = true
     let action: () -> Void
 
+    /// Design rule 15: the bank bar is a toolbar inside a window that has its own default action, so every button is
+    /// a neutral bordered button — WPF's AccentButton look on Link in Place / Open All (03 §6.6.5) is not reproduced
+    /// (DEVIATIONS W-FILES "Bank bar accent").
     var body: some View {
-        if prominent {
-            button.buttonStyle(.borderedProminent).fontWeight(.semibold)        // WPF AccentButton (03 §6.6.5)
-        } else {
-            button.buttonStyle(.bordered)
-        }
+        button.buttonStyle(.bordered)
     }
 
     private var button: some View {

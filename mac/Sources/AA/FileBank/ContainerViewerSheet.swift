@@ -37,16 +37,21 @@ struct FileBankViewerContent: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dialogs) private var dialogs
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     @State private var selection: Set<FileBankRow.ID> = []
     @State private var keys = FileBankKeyMonitor()
+
+    /// HIER-136's Name 260 · Kind 80 · Source 70 · Path 380 overflow the 820-pt sheet once the inset table's cell
+    /// padding is added; Name and Path give way (DEVIATIONS W-FILES "Viewer columns").
+    static let nameColumnIdeal: CGFloat = 220
+    static let pathColumnIdeal: CGFloat = 260
 
     var body: some View {
         let rows = viewerRows()
         VStack(spacing: 0) {
             header
             VSplitView {
-                FileBankViewerTextArea(content: FileBankViewerBody.make(xaml: container.richTextXaml),
-                                       openLink: { target in Task { await openLink(target) } })
+                paper
                     .frame(minHeight: 140, maxHeight: .infinity)
                 filesPane(rows)
                     .frame(minHeight: 110, idealHeight: 180, maxHeight: .infinity)
@@ -61,6 +66,20 @@ struct FileBankViewerContent: View {
     }
 
     // MARK: Parts
+
+    /// Design rule 9 (Stage V ruling "paper inset everywhere"): the read-only text is a #FCFCFC page inset
+    /// `EditorPane.paperInset` from its pane, radius `AARadius.paper`, a 1-pt `AAColor.border` and a soft shadow in
+    /// dark mode — the same page as the container editor.
+    private var paper: some View {
+        FileBankViewerTextArea(content: FileBankViewerBody.make(xaml: container.richTextXaml),
+                               openLink: { target in Task { await openLink(target) } })
+            .clipShape(RoundedRectangle(cornerRadius: EditorPane.paperRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: EditorPane.paperRadius, style: .continuous)
+                .strokeBorder(AAColor.border, lineWidth: 1))
+            .shadow(color: .black.opacity(colorScheme == .dark ? 0.45 : 0), radius: 4, y: 1)
+            .padding(EditorPane.paperInset)
+            .background(AAColor.panelAlt)
+    }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -113,19 +132,22 @@ struct FileBankViewerContent: View {
                 }
                 .help(r.file.name)
             }
-            .width(min: 120, ideal: 260)
+            .width(min: 120, ideal: Self.nameColumnIdeal, max: 320)
             TableColumn(FileBankText.columnKind) { r in Text(FileBankDisplay.kindName(r.file.kind)) }
                 .width(min: 50, ideal: 80, max: 120)
             TableColumn(FileBankText.columnSource) { r in FileBankSourceLabel(file: r.file) }
                 .width(min: 70, ideal: 86, max: 120)
             TableColumn(FileBankText.viewerPathColumn) { r in
-                Text(r.file.path).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
+                // Rule 3 / rule 5: `~` for the home folder, middle truncation; the stored path in full in the tooltip.
+                Text(FileBankDisplay.shortPath(r.file.path)).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
                     .lineLimit(1).truncationMode(.middle).help(r.file.path)
             }
-            .width(min: 120, ideal: 380)
+            .width(min: 160, ideal: Self.pathColumnIdeal)          // the flexible column: the four fit the 820-pt sheet
         } rows: {
             ForEach(rows) { r in
-                TableRow(r).itemProvider { [url = r.dragURL, web = r.isWeb] in FileBankTable.provider(url, web: web) }
+                TableRow(r).itemProvider { [url = r.dragURL, web = r.isWeb, name = r.dragName] in
+                    FileBankTable.provider(url, web: web, name: name)
+                }
             }
         }
         .tableStyle(.inset)

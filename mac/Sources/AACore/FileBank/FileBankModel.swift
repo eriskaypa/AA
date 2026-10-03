@@ -138,6 +138,17 @@ public enum FileBankDisplay {
     /// The Kind column shows the enum name (`Document`, `Image`, `Video`, `Link`, `Other`).
     public static func kindName(_ k: FileKind) -> String { k.name }
 
+    /// The Path / URL cell text (design rule 3: chrome never shows the full home path): a POSIX path under the home
+    /// folder starts with `~`; relative `files/…`, Windows paths and URLs are shown as stored. The full stored path
+    /// stays in the cell's tooltip.
+    public static func shortPath(_ stored: String, home: String = NSHomeDirectory()) -> String {
+        guard stored.hasPrefix("/"), !home.isEmpty else { return stored }
+        let h = home.hasSuffix("/") ? String(home.dropLast()) : home
+        if stored == h { return "~" }
+        if stored.hasPrefix(h + "/") { return "~" + stored.dropFirst(h.count) }
+        return stored
+    }
+
     /// Added column: the user's locale short date + time (05 §8 K-17; Windows printed en-US).
     public static func added(_ d: NetDateTime, locale: Locale = .current, zone: TimeZone = .current) -> String {
         added(d, formatter: addedFormatter(locale: locale, zone: zone))
