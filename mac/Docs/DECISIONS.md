@@ -160,3 +160,26 @@ authority for keys and menu placement.
 - REQ-F2-02: accepted — `QuickSwitcherScoring.rows(store:isGated:)` is contract; W-QUICK passes `env.locks.isGated`.
 - REQ-F3-01…04: accepted as written; W-SHELL and W-QUICK implement them, every wave owner follows REQ-F3-04.
 - Stage W builds share one machine (15 cores / 24 GB): always pass `-j 3` to `swift build` / `swift test`.
+
+### Contract amendments (post-wave)
+
+Applied by the lead after the Stage W merge (resolutions recorded in each `Docs/Requests/<id>.md`). ARCHITECTURE.md
+is not rewritten; where it and this list differ, this list wins.
+
+| Request | Contract (ARCH §) | Amended signature / rule | Commit |
+|---|---|---|---|
+| REQ-W-BUILD-01, REQ-W-FILES-01 | §7.7 W-FILES row | `ContainerViewerSheet(title: String, container: Container, subtitle: String? = nil)` — nil/blank = `"Read-only view — click a link to open it. Editing is disabled."`; Saved Lists passes `BuilderSavedLists.viewerSubtitle(listName:)` | 95e9a99 |
+| REQ-W-HIER-02 | §7.7 W-BUILD row | `ProcedureChecklistSection(procedureID: UUID, revealStepID: Binding<UUID?> = .constant(nil))` — a non-nil step id is selected, scrolled to and set back to nil (DECISIONS 02 Q-11) | 5742235 |
+| REQ-W-CONT-02 | §6.7 (consumer rule) | Empty / cleared notes type with `XamlReader.typingAttributes(for: RichTextMetadata)` (W-RICH's additive API; the requested `typingAttributes(context:)` is not added) | 849d2f6 |
+| REQ-W-CONT-03 | §6.7 (consumer rule) | Block-lock data effects go through `LockRules.unlock(_:range:)`, which clears carried container sentinels via `.richContainerPath`; no `unlock(_:metadata:stretches:)` is added | 849d2f6 |
+| REQ-W-PERSIST-01 | §5.4, §6.6 | F3 calls `PersistUIBridge.shared.attach(env)` once after the initial load (installs `statusHandler`, `reloadHandler`, `onModeChange`; starts the watcher for an editor outside safe mode); the quit pipeline calls `env.dataFileGuard?.stop()` in step 1 and a cancelled quit restarts it | 406368f |
+| REQ-W-PERSIST-02 | §6.9 (`CommandContext`, `CommandDecision`), §7.2, §7.6 | `CommandContext.writeGated: Bool` (read-only instance or DATA-180 stopped editing); `CommandRouterCore.readOnlyDisabled: Set<CommandID>` (gate G3, after G2); `CommandDecision.help: String?` (init parameter `help: String? = nil`) carries `PersistReadOnlyText.disabledHelp` and becomes the menu tooltip; `AppEnvironment.doSave()` in a read-only copy presents `PersistUIBridge.presentReadOnlySaveSheet()`; main-window subtitle `"Read-Only"` / `"Read-Only — {status}"`; `ShellXText.settingStatus(_:gated:)` + `AppEnvironment.postSettingStatus(_:)` append `" (this window only — read-only)"` | 406368f |
+| REQ-W-PERSIST-03 | §6.6 | `enum InstanceGuardResult { …, case sameUserNoApp(pid: Int32) }` — blocked alert without "Switch to Running AA" | f15d0b9 |
+| REQ-W-SHELL-01 | §6.6 | `SharedSaveCoordinator.adoptSharedFile(_:useItsContents:)` persists `SharedSaveFile`; Use Its Contents → `ImportSharedBundle` + `host.reloadAfterSharedImport(identity:)` + both stamps = loaded `LastModified`; otherwise a synchronous push (creates/overwrites); then it **starts** the sync; on failure it stops, clears the setting and rethrows. `stopUsing()` stops and clears the setting. Callers neither reload, start nor clear | 891ed61 |
+| REQ-W-SHELL-02 | §7.1 | `MenuBarExtra(isInserted:)` setter: `if coordinator.menuBarExtraVisible \|\| on { coordinator.setMenuBarExtra(on) }` | 192cefc |
+| REQ-W-DRIVE-01 | §7.2 | Main toolbar item `drive` (`ShellDriveSyncIndicator`) over `env.driveSync.indicator` / `lastStatus` | 6ef95ac |
+| REQ-W-DRIVE-02 | §7.1 | Folder builder `.defaultSize(width: 820, height: 660)`; Unit converter `.defaultSize(width: 500, height: 660)` | 1b68635 |
+| REQ-W-CREW-01 | §7.2 | The main window's detail column is `VStack(spacing: 0) { SectionContentHost().safeAreaInset(edge: .top) { ShellBanners() }; ShellBottomBar(…) }` — sections get a frame that excludes the shortcut strip; `HSplitView` panes need no bottom padding | 916cfb9 |
+| REQ-W-CREW-02, REQ-W-PLAN-03, REQ-W-SIRE-02 | §9.6 | Snapshot layer mode redraws only the window's own split-view columns (first wrapper on each path), skipping hidden / alpha-0 subtrees | ee1411b |
+| REQ-F2-02 | §6.5 | `@MainActor QuickSwitcherScoring.rows(store: AppStore, isGated: (HierarchyItem) -> Bool) -> [Row]` is contract (ruled before Stage W); `rows(store:)` stays the conservative default | (pre-wave) |
+| REQ-F3-01 | §7.1, §7.7 | `AAMain` calls `SmokeTest.run(options:)` before `AAApp.main()`: non-zero = refusal, the process exits with it (BD.3.12 exit 3); 0 = harness armed and the normal launch continues | (pre-wave) |

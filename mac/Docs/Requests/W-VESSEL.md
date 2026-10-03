@@ -17,3 +17,5 @@ Notes for the integrator:
 * Quick Look of file cards calls W-FILES' `QuickLookCoordinator.shared.preview` (placeholder here).
 * Work-order notifications post through W-SHELL's `NotificationCenterBridge` (placeholder here; `isAvailable` is false,
   so the digest falls back to the status line until W-SHELL merges).
+
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5)

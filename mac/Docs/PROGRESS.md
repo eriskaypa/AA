@@ -20,32 +20,31 @@ Counts are feature IDs from `Docs/OWNERSHIP.md` §4 (1,583 total).
 ## Feature IDs by owner (OWNERSHIP.md §4; 1,583 IDs)
 
 Done = implemented and verified in the owner's worktree audit (and, after the merge, by the gated tests); N/A = not
-applicable by a DECISIONS / Deviations ruling. Source: the owner's progress record (`Docs/Progress/<id>.md`; W-PLAN and
-W-GOLD keep theirs in `Docs/Deviations/<id>.md`, W-FLASH's was kept outside the repo and is summarised here because
-`check-ownership.sh` refused the path until f556cb5).
+applicable by a DECISIONS / Deviations ruling. Source: the owner's progress record (`Docs/Progress/<id>.md`; W-PLAN's and
+W-GOLD's moved there from `Docs/Deviations/<id>.md`, W-FLASH's was recreated from its report — post-wave resolutions).
 
 | Owner | Done / total | Partial | Not done | N/A | Open items |
 |---|---|---|---|---|---|
 | F1 | 73 / 73 | 0 | 0 | 0 | — |
-| F2 | 112 / 112 | 0 | 0 | 0 | REQ-F2-01, REQ-F2-02 |
-| F3 | 295 / 295 | 0 | 0 | 0 | REQ-F3-01…04; snapshot hook layer-render artefacts with nested split views (REQ-W-PLAN-03, REQ-W-CREW-02, REQ-W-SIRE-02); no XCUITest menu walk |
+| F2 | 112 / 112 | 0 | 0 | 0 | — (REQ-F2-01 rejected, REQ-F2-02 applied) |
+| F3 | 295 / 295 | 0 | 0 | 0 | no XCUITest menu walk (REQ-F3-01…04 applied; snapshot-hook split-view artefacts fixed, ee1411b) |
 | W-SHELL | 58 / 61 | 1 (SHELL-204 — person-only launch checklist steps) | 2 (SHELL-206 cross-version data smoke: needs a Windows-written data folder; SHELL-207 clean-machine / Intel runs: needs another Mac, Rosetta absent) | 0 | REQ-W-SHELL-01, 02, 04 |
-| W-PERSIST | 41 / 49 | 1 (DATA-174 — read-only subtitle, greyed commands, settings suffix live in F3/W-SHELL code, REQ-W-PERSIST-02) | 0 | 7 (DATA-160…166, replaced by the Mac instance model DATA-170…182) | REQ-W-PERSIST-01…04; lease mode not exercised on a real SMB server |
-| W-GOLD | 23 / 27 | 2 (DATA-319, DATA-320 — some must-case reproducers wait on REQ-W-GOLD-01…04) | 2 (DATA-322, DATA-323 — need a person on Windows) | 0 | Windows goldens not generated (no .NET 10 SDK on this Mac): 12 WinFixtures suites skip; `Scripts/fixtures.sh emit-mac-out` to be re-run now W-PERSIST / W-RICH have flipped (adds `mac-out/bundles/`, `mac-out/xaml/`) |
+| W-PERSIST | 41 / 49 | 1 (DATA-174 — menu commands greyed with help, subtitle, ⌘S sheet and settings suffix done (406368f); in-window Trash / lock / file-bank add controls rely on the write-gate refusal instead of greying) | 0 | 7 (DATA-160…166, replaced by the Mac instance model DATA-170…182) | REQ-W-PERSIST-01…04; lease mode not exercised on a real SMB server |
+| W-GOLD | 23 / 27 | 2 (DATA-319, DATA-320 — E09/E11/E13/E15b/X04/X05/X06 reproducers deferred: entry points public, Windows goldens absent; REQ-W-GOLD-04 applied) | 2 (DATA-322, DATA-323 — need a person on Windows) | 0 | Windows goldens not generated (no .NET 10 SDK on this Mac): 12 WinFixtures suites skip; `Scripts/fixtures.sh emit-mac-out` to be re-run now W-PERSIST / W-RICH have flipped (adds `mac-out/bundles/`, `mac-out/xaml/`) |
 | W-RICH | 22 / 23 | 0 | 0 | 1 (CONT-169, reserved range bound) | 05 §7.7 item 10 (Mac output loads in WPF) needs the W-GOLD Windows harness; release-build 1 MB parse budget to re-confirm on an idle machine |
-| W-CONT | 51 / 51 | 0 | 0 | 0 | REQ-W-CONT-02…05; T-KB-07/15/21/28/30/31/48/52 manual checks |
-| W-FILES | 22 / 22 | 0 | 0 | 0 | Quick Look panel with the app frontmost (manual); REQ-W-FILES-01 |
-| W-HIER | 98 / 98 | 0 | 0 | 0 | REQ-W-HIER-02 (W-BUILD) |
-| W-BUILD | 90 / 90 | 0 | 0 | 0 | REQ-W-BUILD-01 |
-| W-PLAN | 103 / 103 | 0 | 0 | 0 | REQ-W-PLAN-02, 03 |
+| W-CONT | 51 / 51 | 0 | 0 | 0 | T-KB-07/15/21/28/30/31/48/52 manual checks |
+| W-FILES | 22 / 22 | 0 | 0 | 0 | Quick Look panel with the app frontmost (manual) |
+| W-HIER | 98 / 98 | 0 | 0 | 0 | — |
+| W-BUILD | 90 / 90 | 0 | 0 | 0 | — |
+| W-PLAN | 103 / 103 | 0 | 0 | 0 | — |
 | W-QUICK | 109 / 109 | 0 | 0 | 0 | live key handling (Trash ⌘⌫, switcher ↑↓↩⎋, Search ↩) checked by snapshot / manual run only |
-| W-CREW | 77 / 77 | 0 | 0 | 0 | REQ-W-CREW-01 (HSplitView ignores the shell's bottom safe-area inset), REQ-W-CREW-02 |
+| W-CREW | 77 / 77 | 0 | 0 | 0 | — |
 | W-VESSEL | 91 / 91 | 0 | 0 | 0 | Quick Look of file cards and work-order notifications: manual checks |
-| W-PDF | 82 / 82 | 0 | 0 | 0 | REQ-W-PDF-02 |
-| W-SIRE | 53 / 53 | 0 | 0 | 0 | REQ-W-SIRE-02 |
+| W-PDF | 82 / 82 | 0 | 0 | 0 | — |
+| W-SIRE | 53 / 53 | 0 | 0 | 0 | — |
 | W-FLASH | 81 / 82 | 0 | 0 | 1 (FLASH-133, screen-capture receive: DECISIONS 13 "no for v1") | camera receive with a real iPhone (manual) |
-| W-DRIVE | 85 / 85 | 0 | 0 | 0 | REQ-W-DRIVE-01, 02; live Google sign-in (manual) |
-| **all** | **1,566 / 1,583** | **4** | **4** | **9** | 49 contract requests filed (`Docs/Requests/`), 17 of them about the progress-record path (settled by the REQ-F1-01 ruling and f556cb5) |
+| W-DRIVE | 85 / 85 | 0 | 0 | 0 | live Google sign-in (manual) |
+| **all** | **1,566 / 1,583** | **4** | **4** | **9** | 49 contract requests resolved post-wave: 45 applied, 1 rejected, 3 deferred (`Docs/Requests/` "Resolution:" lines) |
 
 ## Log
 - 2026-09-29/30 — specs, decisions, architecture committed on `mac-port`.
@@ -63,16 +62,14 @@ W-GOLD keep theirs in `Docs/Deviations/<id>.md`, W-FLASH's was kept outside the 
 - 2026-10-02 — Foundation integrated on `mac-port`: merged `stage/F2` then `stage/F3`; gate green from a clean build after each merge (343 tests / 57 suites after F2; 399 tests / 68 suites after F3); rule-zero diff empty, checksums pass, no F1/F2/F3 placeholders left; main-window snapshots (light, dark) produced by the debug hook.
 - 2026-10-03 — Stage W integrated on `mac-port`: the 16 wave branches merged (`--no-ff`) in OWNERSHIP order (ae7b9cd…47c7463), no file conflicts; W-RICH's post-audit commit (6d0349c: input-mutation fuzzing, root-attribute filtering, carried Foreground cascade) merged last. `check-ownership.sh` maps `Docs/Progress/<id>.md` to its owner (f556cb5). Clean-build gate: 1,582 tests / 234 suites; the one failure was an integration mismatch in W-GOLD's `GoldMacOutTests` — it exported its bundles into the data folder, which W-PERSIST's real `BundleService` refuses (DATA-041 / D-13), and passed `&report.skipped` while its write closure appended to `report` (a Swift exclusivity trap once W-RICH emits `xaml/`); fixed in the test (b8fe439). Placeholders: none left. Rule zero and checksums pass. 64 snapshots of every section and scene (light + dark) from one merged fixture folder; `Docs/DEVIATIONS.md` consolidated from `Docs/Deviations/*.md`.
 
+- 2026-10-03 — Contract requests resolved by the lead on `mac-port` (15 `[LEAD-REQ]` commits, 95e9a99…99e4b14): 49 requests — 45 applied, 1 rejected (REQ-F2-01, pre-wave ruling kept), 3 deferred (REQ-W-GOLD-01…03: reproducers need the Windows goldens). Contract changes listed in DECISIONS "Contract amendments (post-wave)": viewer subtitle, checklist step reveal, DATA-174 write gate in the router (+ help text), ⌘S sheet, Read-Only subtitle, settings suffix, `InstanceGuardResult.sameUserNoApp`, shared-save adopt semantics, MenuBarExtra binding, Drive toolbar indicator, tool window sizes, shortcut strip below the sections, snapshot hook split-view redraw. Requester workarounds removed (⌘S key monitor, banner attach, Crew inset, menu-bar guard, shared-save duplicate reload/clear, W-HIER step discard). Gate green after each change (1,585 tests); snapshots of Equipment and Crew confirm the strip no longer overlaps lists.
+
 ## Known remaining problems (after Stage W integration, 2026-10-03)
 
 Visual (from the integrated snapshots, scratchpad `snapshots/integrated/`):
-- The hierarchy sidebar lists (Equipment/Area, Tasks, Procedures) and the SIRE question list run under the keyboard
-  shortcut bar at the bottom of the main window: the last rows draw through the bar's text (light and dark). Lists
-  that respect the bar (Calendar, Board, Planner, Ports, Buckets, Map) stop above it. Same cause as REQ-W-CREW-01
-  (bottom safe-area inset not honoured by the hosted list); owners F3 (bar as a safe-area inset) / W-HIER / W-SIRE.
-- Snapshot hook (F3): with the default layer rendering, sections hosted in an `HSplitView` (Crew, Saved Lists) lose the
-  window header and draw their panes as floating cards with stray clipped text between them; `AA_SNAPSHOT_CACHE_DISPLAY=1`
-  renders them correctly (`cd-main-*.png`). The SIRE tab is captured while "Loading SIRE 2.0 question bank…" unless
+- Resolved post-wave (916cfb9, ee1411b): lists running under the shortcut bar, and the layer-mode card artefacts of
+  `HSplitView` sections. Re-check SIRE and Saved Lists in Stage V snapshots (only Equipment and Crew were re-rendered).
+- Snapshot hook (F3): the SIRE tab is captured while "Loading SIRE 2.0 question bank…" unless
   `AA_SIRE_SELECT` is set (the hook's 1 s idle is shorter than the debug-build bank load). Hook limits, not app defects.
 - Date pickers in the Quick work builder (Deadline `10/18/2026`) and the Date calculator (`10/ 3/2026`) follow the
   system locale while the rest of the app shows `yyyy-MM-dd` — check against ARCH §9.8 / specs 08, 14.
@@ -80,8 +77,10 @@ Visual (from the integrated snapshots, scratchpad `snapshots/integrated/`):
   check against 07.
 
 Other:
-- Not done / partial IDs: SHELL-204 (partial), SHELL-206, SHELL-207, DATA-174 (partial), DATA-319 / DATA-320 (partial),
-  DATA-322, DATA-323 — see the owner table above.
+- Not done / partial IDs: SHELL-204 (partial), SHELL-206, SHELL-207, DATA-174 (partial — in-window controls),
+  DATA-319 / DATA-320 (partial), DATA-322, DATA-323 — see the owner table above.
+- Flaky under load: `EditorSessionTests.debouncePersists` (30 ms debounce, 250 ms wait) failed once in a full run and
+  passed on every re-run; timing-based, not caused by the post-wave changes.
 - Windows goldens (WinFixtures, WinCapture, XlsxGolden) not generated: no .NET 10 SDK here; 12 WinFixtures suites skip
   until `Scripts/fixtures.sh generate` / WinCapture run on Windows. `Fixtures/mac-out/` still lacks `bundles/` and `xaml/`.
 - Person-only checks (Stage V): Finder / Gatekeeper launch, camera prompt and iPhone Flash Sync, Google sign-in, Quick

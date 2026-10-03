@@ -10,6 +10,8 @@ every wave agent that follows the ruling (build, tests, basenames and symbols ar
 Workaround in place: none possible inside W-HIER's paths; `Docs/Progress/W-HIER.md` is committed per the ruling and
 is the only path the check flags.
 
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5)
+
 ## REQ-W-HIER-02: `ProcedureChecklistSection` cannot select a navigated step (DECISIONS 02 Q-11)
 Target: ARCHITECTURE.md §7.7 row W-BUILD `ProcedureChecklistSection(procedureID: UUID)` (owner W-BUILD).
 Need: an additive initializer `ProcedureChecklistSection(procedureID: UUID, revealStepID: UUID? = nil)` (or a
@@ -20,6 +22,8 @@ is W-BUILD's view and its published contract takes only the procedure id.
 Workaround in place: the Procedures page selects the procedure, fronts the Checklist tab and consumes the child id;
 subtasks (Tasks page) and components (Equipment page) are selected by W-HIER itself (nested subtasks select the
 direct subtask that contains them).
+
+Resolution: applied — `ProcedureChecklistSection(procedureID:revealStepID: Binding<UUID?> = .constant(nil))` selects and scrolls to a navigated step and consumes the request; HierProcedureSpecifics passes `model.pendingChildID` instead of discarding it; DECISIONS amendment (5742235)
 
 ## Additive API (no change requested)
 Every contract of ARCH §6.8 (`TagParser`) and §7.7 (W-HIER rows) is implemented with the published signatures.

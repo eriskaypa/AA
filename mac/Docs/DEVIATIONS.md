@@ -29,6 +29,21 @@ verbatim with its headings moved down one level. Format inside the tables: ID ·
 
 ---
 
+## Post-wave contract resolutions (lead, 2026-10-03)
+
+The contract requests were resolved after the merge (`Requests/<id>.md` "Resolution:" lines; amended signatures in
+DECISIONS.md "Contract amendments (post-wave)"). These consolidated rows below are superseded:
+
+| Row | Owner | Now |
+|---|---|---|
+| W-PERSIST-15 (⌘S key monitor) | W-PERSIST | Removed — F3's `AppEnvironment.doSave` presents "Read-only — not saving" (406368f). |
+| W-PERSIST-4 (`.sameUserNoApp` → `.otherUser`) | W-PERSIST | `InstanceGuardResult.sameUserNoApp(pid:)` exists; the alert path is unchanged (f15d0b9). |
+| REQ-W-SHELL-02 (menu-bar preference guard) | W-SHELL | F3's binding no longer persists a spurious "off"; only a one-time repair of an older stored `false` remains (192cefc). |
+| Q-11 (02) "checklist steps wait for REQ-W-HIER-02" | W-HIER | Checklist steps are selected through `ProcedureChecklistSection(procedureID:revealStepID:)` (5742235). |
+| GOLD-R5 (portsDate / portsTime not compared) | W-GOLD | Compared through `VesselText.normDate` / `normTime` (0976386). |
+| 14 §6.5 indicator only in Settings ▸ Sync (W-DRIVE notes) | W-DRIVE | Toolbar indicator added (6ef95ac); the Settings row stays. |
+| W-PLAN / W-CREW / W-SIRE notes on `HSplitView` under the shortcut strip | W-PLAN, W-CREW, W-SIRE | The shell lays the strip out below the sections (916cfb9); the owners' own split implementations (CalSplitView, SireSplitHandle) stay. |
+
 ## F1 — deviations and P2 fixes
 
 Format: ID · spec reference · one line. Stage V merges this file into `Docs/DEVIATIONS.md`.

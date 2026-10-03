@@ -15,6 +15,8 @@ Workaround in place: `ShellFlows.setSharedSaveFile` reloads through `env.loadDat
 clears the setting. `stopSharedSaveFile` clears the setting itself if `stopUsing()` left it set. Marked
 `// REQ-W-SHELL-01`.
 
+Resolution: applied — contract documented on `SharedSaveCoordinator.adoptSharedFile` / `stopUsing` and in DECISIONS: the coordinator persists the path, imports + reloads through the host (Use Its Contents) or pushes (Overwrite/Create), STARTS the sync itself, and on failure stops and clears the setting; `stopUsing` clears the setting. ShellFlows drops its generation-check reload, extra `start()`, failure cleanup and duplicate clear (891ed61)
+
 ## REQ-W-SHELL-02: the MenuBarExtra binding persists "off" whenever the item is not shown
 Target: `Sources/AA/App/AAApp.swift` (owner F3) — ARCHITECTURE.md §7.1, DECISIONS 03 Q-4
 Need: `MenuBarExtra(isInserted:)`'s setter should persist only a user removal while the item is meant to be shown,
@@ -28,6 +30,8 @@ runs) it turns `aa.menuBarExtra` back on unless the user hid the item on purpose
 change of the preference (Settings toggle, ⌘-drag out of the menu bar) in `aa.shellx.menuBarUserHidden`
 (`ShellXMenuBarPolicy`, `ReminderCenter.startMenuBarGuard`). The binding fix above makes the guard a no-op.
 
+Resolution: applied — the MenuBarExtra `isInserted` setter persists only while the item is meant to be shown or when turning on; ReminderCenter's observation guard is replaced by a one-time repair of a stored `false` from earlier builds (`aa.shellx.menuBarRepaired`) (192cefc)
+
 ## REQ-W-SHELL-03: `Docs/Progress/<agent-id>.md` is unowned in `check-ownership.sh`
 Target: `Scripts/check-ownership.sh` (owner F1) and `Docs/OWNERSHIP.md` §2 (lead) — DECISIONS "Foundation requests"
 REQ-F1-01
@@ -37,9 +41,13 @@ Why: the lead's ruling tells every wave agent to keep `Docs/Progress/<agent-id>.
 Workaround in place: `Docs/Progress/W-SHELL.md` is committed as ruled; with it, `check-ownership.sh` reports exactly
 that one path and nothing else (verified before the commit).
 
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5)
+
 ## REQ-W-SHELL-04: export default name lives in two places (informational)
 Target: `Sources/AACore/Bundles/BundleService.swift` (owner W-PERSIST) — ARCHITECTURE.md §6.6
 Need: keep `BundleService.exportDefaultName` equal to `aa-data-{yyyyMMdd-HHmm}.zip` (local time).
 Why: the File ▸ Export Data Folder (ZIP)… panel (SHELL-070, W-SHELL) uses `ShellXText.exportDefaultName`, which is
 tested against that format; W-DRIVE's flows may use the BundleService one.
 Workaround in place: none needed.
+
+Resolution: applied — informational; a test pins `ShellXText.exportDefaultName(t)` == `BundleService.exportDefaultName(t)` (a4972ce)

@@ -11,6 +11,8 @@ status line) is drawn under the strip. ARCH §7.2 mandates `HSplitView` for sect
 Workaround in place: `CrewTabView` measures `safeAreaInsets.bottom` with a background `GeometryReader`, ignores the bottom
 container safe area for the split view, and pads each pane by the measured inset.
 
+Resolution: applied — the main window's detail column is now `VStack { SectionContentHost (top banners inset); ShellBottomBar }`, so sections (HSplitView panes, sidebar lists on Equipment/Tasks/Procedures, SIRE) end above the shortcut strip; CrewTabView's measured-inset workaround removed; checked by light snapshots of TabEquipment and CrewTab (916cfb9)
+
 ## REQ-W-CREW-02: snapshot renderer redraws HSplitView panes as sidebar cards (informational)
 Target: `Sources/AA/Debug/SnapshotHook.swift` (owner F3) — ARCHITECTURE.md §9.6
 Need: limit the "narrower split-view item" redraw in layer mode to the `NavigationSplitView` sidebar column.
@@ -18,6 +20,8 @@ Why: every `_NSSplitViewItemViewWrapper` narrower than the window is redrawn wit
 includes a section's own `HSplitView` panes; in light/dark snapshots of the Crew tab the card pane is painted over the main
 toolbar. `AA_SNAPSHOT_CACHE_DISPLAY=1` renders correctly.
 Workaround in place: none needed for the app; snapshots were verified in both modes.
+
+Resolution: applied — SnapshotHook redraws only the window's own split-view columns (walk stops at the first SplitViewItemViewWrapper on each path) and skips hidden / alpha-0 subtrees; CrewTab now renders correctly in the default layer mode (ee1411b)
 
 ## REQ-W-CREW-03: `check-ownership.sh` does not know the `Docs/Progress/<agent-id>.md` files
 Target: `Scripts/check-ownership.sh` (owner F1) — `owner_of`; OWNERSHIP.md §2 (lead)
@@ -27,3 +31,5 @@ Why: DECISIONS "Foundation requests" REQ-F1-01 tells every wave agent to keep `D
 reports it as `unowned path (not in OWNERSHIP.md §2)`, so step 1/4 of the gate fails on that one file for every wave agent.
 Workaround in place: none possible without editing F1's script; `Docs/Progress/W-CREW.md` is committed as the ruling
 requires and is the only path the check flags (steps 2–4 pass; build and all tests pass).
+
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5)

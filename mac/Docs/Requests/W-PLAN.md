@@ -11,6 +11,8 @@ Workaround in place: W-PLAN's progress record (feature-ID counts, not-done list)
 `Docs/Deviations/W-PLAN.md`; the integrator can move it to `Docs/Progress/W-PLAN.md` verbatim once the script knows
 the path.
 
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5); the progress record moved verbatim to `Docs/Progress/W-PLAN.md` (this docs commit)
+
 ## REQ-W-PLAN-02: `AASearchField` focus hook for section commands (informational)
 Target: `Sources/AA/Design/AASearchField.swift` (owner F3) — ARCHITECTURE.md §7.6, §8.6
 Need: none required; recorded so F3 / verifiers know how W-PLAN publishes ⌥⌘F. Several W-PLAN section roots stay alive
@@ -21,6 +23,8 @@ jobs...", Map Inspect search) and binds an outer `.focused(_:)` on `AASearchFiel
 the `NSSearchField` first responder.
 Workaround in place: as described; no change to F3 code is needed unless the outer binding proves unreliable in
 Stage V (then: an `AASearchField(text:prompt:onSubmit:focus:)` overload taking a `FocusState<Bool>.Binding`).
+
+Resolution: applied — informational; the outer `.focused` binding + `SectionCommands.focusSearchField` approach is accepted; no AASearchField overload added unless Stage V shows it unreliable (no commit)
 
 ## REQ-W-PLAN-03: snapshot hook artefacts with ZStack-hosted sections and nested split views (informational)
 Target: `Sources/AA/Debug/SnapshotHook.swift` (owner F3) — ARCHITECTURE.md §9.6
@@ -37,3 +41,5 @@ Workaround in place: W-PLAN's verification renders with `AA_SNAPSHOT_CACHE_DISPL
 Also observed (not W-PLAN-specific, left for F3): AppKit logs "Application performed a reentrant operation in its
 NSTableView delegate" once when the Calendar `Table` first appears; nothing in W-PLAN's cells mutates state, the
 likely source is a list/command registration written during the table's first layout.
+
+Resolution: applied — (1) SnapshotHook no longer redraws section-internal split views or alpha-0 section roots (ee1411b); (2) not changed: `--snapshot <Tab>` still visits the data's saved tab first, but the hidden root is no longer painted, so the artefact is gone

@@ -15,3 +15,5 @@ Why: the lead's REQ-F1-01 ruling makes every wave agent keep `Docs/Progress/<age
 as an unowned path, so the §10.6 gate fails on that file alone.
 Workaround in place: all code, tests and the other docs were committed with a green gate; `Docs/Progress/W-QUICK.md`
 is committed separately in a docs-only commit whose only `check-ownership` complaint is this path.
+
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5)

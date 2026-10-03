@@ -9,6 +9,8 @@ it; double-click a file to open it."` (`BuilderSavedLists.viewerSubtitle(listNam
 Workaround in place: `SavedListsTabView` opens `ContainerViewerSheet(title:container:)` (default subtitle); switch the
 call to pass `BuilderSavedLists.viewerSubtitle(listName:)` once the parameter exists.
 
+Resolution: applied — single init `ContainerViewerSheet(title:container:subtitle: String? = nil)`; Saved Lists passes `BuilderSavedLists.viewerSubtitle(listName:)` (now delegating to `FileBankText.savedListSubtitle`); DECISIONS amendment (95e9a99)
+
 ## REQ-W-BUILD-02: `check-ownership.sh` rejects the per-agent progress file DECISIONS asks for
 Target: `Scripts/check-ownership.sh` (owner F1) — ARCHITECTURE.md §12.2, DECISIONS "Foundation requests" REQ-F1-01
 Need: in `owner_of`, treat `Docs/Progress/<id>.md` like `Docs/Requests/<id>.md` (owner = `<id>`), e.g. extend the first
@@ -17,3 +19,5 @@ Why: DECISIONS (REQ-F1-01 ruling) has every wave agent write `Docs/Progress/<age
 "unowned path (not in OWNERSHIP.md §2)" and fails the gate.
 Workaround in place: `Docs/Progress/W-BUILD.md` is committed on its own in the last commit, so every code commit before
 it passes the full gate; with that file present the only check-ownership failure is this path.
+
+Resolution: applied — owner_of maps `Docs/Progress/*.md` to the basename's owner (f556cb5)

@@ -9,6 +9,8 @@ REQ-W-QUICK-01, REQ-W-BUILD-02, REQ-W-FILES-02).
 Workaround in place: none possible inside W-CONT's paths; the file is committed per the ruling and is the only
 path the script flags on this branch.
 
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5)
+
 ## REQ-W-CONT-02: the typing attributes of new text in an empty note
 Target: `Sources/AACore/RichText/XamlReader.swift` (owner W-RICH) — ARCHITECTURE.md §6.7, 05 XD.2.8 ("Typing
 attributes. In an empty document, typing attributes are the projection of the root context")
@@ -22,6 +24,8 @@ Workaround in place: `EditorFormatting.defaultTypingAttributes(paragraphStyle:)`
 .defaultParagraphStyle(fontSize:)` (spacing `round(1.17 × size)`, left aligned, `.aaFontFamilyName = "Consolas"`,
 `.aaXmlLang = "en-us"`). Swap the two call sites in `EditorController` for the reader's function once it exists.
 
+Resolution: applied — W-RICH's `XamlReader.typingAttributes(for: RichTextMetadata)` (the XD.2.8 projection, incl. the Auto-margin paragraph style) replaces `EditorFormatting.defaultTypingAttributes(paragraphStyle:)` + `EditorController.defaultParagraphStyle` at both EditorController call sites; it uses the session's loaded metadata for an empty/cleared note. Signature is W-RICH's `(for:)`, not the requested `(context:)`; DECISIONS amendment (849d2f6)
+
 ## REQ-W-CONT-03: unlocking carried element-level sentinels (ListItem / TableCell / Section backgrounds)
 Target: `Sources/AACore/RichText/LockRules.swift` (owner W-RICH) — ARCHITECTURE.md §6.7, 05 CONT-061, XD.3 (`block`
 lock source: "unlocking a `block` stretch removes the sentinel `Background` from that block's modelled or carried
@@ -34,6 +38,8 @@ a lock carried on a `ListItem`, `TableCell` or `Section` would re-appear after s
 Workaround in place: `EditorLocking.unlock(_:stretches:)` clears the run attributes and the sentinel `Background`
 in `.aaParagraphAttrs` (Paragraph-level locks round-trip correctly); `EditorLocking.lockedStretches` merges
 `LockRules.lockedRanges` so block stretches the reader knows are included.
+
+Resolution: applied — no new LockRules API needed: W-RICH's `LockRules.unlock(_:range:)` already drops the sentinel from the carried ListItem/TableCell/Section attributes on the paragraph's container path (`.richContainerPath`), so `EditorLocking.unlock(_:stretches:)` now delegates to it (nested sentinels peeled across the whole stretch) before its residual sweep; test `unlockCarriedContainerSentinels` fails on the old code (849d2f6)
 
 ## REQ-W-CONT-04: list-engine call conventions used by the editor (informational)
 Target: `Sources/AACore/RichText/RichListFormatter.swift` (owner W-RICH) — ARCHITECTURE.md §6.7, 05 §3.2, §6.5
@@ -50,6 +56,8 @@ Need (behaviour the editor relies on; no signature change):
 Why: W-CONT and W-RICH are built in parallel; this pins the seam.
 Workaround in place: none needed (the placeholder engine returns the documented "no change" values).
 
+Resolution: applied — informational; W-RICH's RichListFormatter follows the stated conventions (nil = no change, idempotent normalise, no undo registration); no signature change (no commit)
+
 ## REQ-W-CONT-05: writer acceptance of editor-made structures (informational)
 Target: `Sources/AACore/RichText/XamlWriter.swift` (owner W-RICH) — ARCHITECTURE.md §6.7, 05 §4.3.7
 Need: the writer maps these editor-created shapes to the 05 §4.3.7 output:
@@ -64,3 +72,5 @@ Need: the writer maps these editor-created shapes to the 05 §4.3.7 output:
 * family changes — `.aaFontFamilyName` holds the picked family name (the token to write).
 Why: these are the only structures the editor creates itself; everything else comes from the reader.
 Workaround in place: none needed.
+
+Resolution: applied — informational; the writer maps the editor-made shapes (tables, links, locks, baseline, family) as listed — covered by W-RICH writer tests and W-CONT editor tests; no change (no commit)

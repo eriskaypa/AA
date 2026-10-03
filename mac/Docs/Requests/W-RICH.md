@@ -28,3 +28,5 @@ Additive public API in `Sources/AACore/RichText/` (ARCH §12.2 allows it; consum
 Integration notes for W-CONT (no change to any contract):
 * Route Return, Tab/⇧Tab and Backspace through `RichListFormatter.handleReturn` / `handleTab` / `handleBackspaceAtItemStart` (nil = default behaviour); each call replaces the storage content inside one `beginEditing`/`endEditing`, so snapshot the storage for the undo group before calling.
 * Keep `linkTextAttributes` free of `.foregroundColor` (CONT-167); the link colour is baked into `.foregroundColor` with `.aaLinkStyled`.
+
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5)

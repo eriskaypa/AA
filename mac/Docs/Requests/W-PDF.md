@@ -8,6 +8,8 @@ Why: the lead's ruling REQ-F1-01 tells every wave agent to keep `Docs/Progress/<
 as "unowned path (not in OWNERSHIP.md §2)", so check 1/4 fails on that single path (all other checks pass).
 Workaround in place: `Docs/Progress/W-PDF.md` is committed as ruled; nothing else is affected.
 
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5)
+
 ## REQ-W-PDF-02: confirm two XamlDOM shapes the PDF reads (W-RICH)
 Target: `Sources/AACore/RichText/XamlDOM.swift` (owner W-RICH) — ARCHITECTURE.md §6.7, 05 CONT-152…154
 Need: (1) the `TableColumn` nodes of `<Table.Columns>` appear in the owning `Table`'s `children` (kind `.tableColumn`),
@@ -19,3 +21,5 @@ implied by CONT-152…154 but not spelled out in §6.7.
 Workaround in place: `PdfRichText` reads all three forms (children of kind `.tableColumn`; `text` then `.text`
 children; `local.background` then the `Background` property element). If columns live elsewhere, widths fall back to
 the even 16 cm split (structure and text unaffected).
+
+Resolution: applied — confirmed and pinned by `XamlDOMTests.pdfConsumerShapes`: TableColumn nodes are children of their Table with `local.width` in px (nil for `*`), run text is on the Run or its `.text` children, a `<Run.Background>` brush is reflected; PdfRichText's fallbacks stay harmless (99e4b14)
