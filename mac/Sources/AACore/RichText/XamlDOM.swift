@@ -1,7 +1,8 @@
-// PLACEHOLDER(W-RICH) — contract: ARCHITECTURE.md §6.7 (05 Addendum §XD.4 as completed and amended there)
+// Contract: ARCHITECTURE.md §6.7 (05 Addendum §XD.4 as completed and amended there).
 // Spec: 05 §XD.2.1 (parse pipeline), §XD.2.2 (value parsers), §XD.2.3 (inheritable properties), §XD.2.12
-// (loadability), §XD.4. Compiling stub created by F1 with the exact public shapes; W-RICH replaces this file in
-// place. The stub parser reports every input as malformed (ARCH §11), so nothing can be built from a stub DOM.
+// (loadability), §XD.4, CONT-151…155 (node kinds, parent links, raw + parsed attributes, property elements, roots).
+// The arena is an immutable value (XD.5): nodes in pre-order (a parent always precedes its children), integer
+// parent links, `Sendable`, so the PDF exporter can parse and resolve off the main actor.
 import Foundation
 
 public enum XamlNodeKind: Sendable, Hashable {
@@ -35,17 +36,17 @@ public enum XamlBrush: Hashable, Sendable {
 /// "No root yet" (XD.2.11 `.none`, a new document) is `rootRole: XamlRootRole?` == nil wherever a role is stored.
 public enum XamlRootRole: Sendable, Hashable { case wrapper(XamlNodeKind), content(XamlNodeKind) }
 
-public enum XamlFontStyle: String, Sendable, Hashable { case normal = "Normal", italic = "Italic", oblique = "Oblique" }
+public enum XamlFontStyle: String, Sendable, Hashable, CaseIterable { case normal = "Normal", italic = "Italic", oblique = "Oblique" }
 
-public enum XamlTextAlignment: String, Sendable, Hashable {
+public enum XamlTextAlignment: String, Sendable, Hashable, CaseIterable {
     case left = "Left", right = "Right", center = "Center", justify = "Justify"
 }
 
-public enum XamlLineStacking: String, Sendable, Hashable { case maxHeight = "MaxHeight", blockLineHeight = "BlockLineHeight" }
+public enum XamlLineStacking: String, Sendable, Hashable, CaseIterable { case maxHeight = "MaxHeight", blockLineHeight = "BlockLineHeight" }
 
-public enum XamlFlowDirection: String, Sendable, Hashable { case leftToRight = "LeftToRight", rightToLeft = "RightToLeft" }
+public enum XamlFlowDirection: String, Sendable, Hashable, CaseIterable { case leftToRight = "LeftToRight", rightToLeft = "RightToLeft" }
 
-public enum XamlBaselineAlignment: String, Sendable, Hashable {
+public enum XamlBaselineAlignment: String, Sendable, Hashable, CaseIterable {
     case top = "Top", center = "Center", bottom = "Bottom", baseline = "Baseline", textTop = "TextTop",
          textBottom = "TextBottom", `subscript` = "Subscript", superscript = "Superscript"
 }
@@ -210,26 +211,85 @@ public struct XamlDocument: Sendable, Hashable {
     }
 
     public subscript(_ id: XamlNodeID) -> XamlNode {
-        // PLACEHOLDER(W-RICH)
         let i = Int(id.index)
         return nodes.indices.contains(i) ? nodes[i] : XamlNode(kind: .unknown(""), qualifiedName: "")
     }
 
-    /// Nearest first.
+    /// Nearest first, root last (CONT-152).
     public func ancestors(of id: XamlNodeID) -> [XamlNodeID] {
-        // PLACEHOLDER(W-RICH)
-        []
+        var out: [XamlNodeID] = []
+        var cur = self[id].parent
+        while let p = cur {
+            out.append(p)
+            cur = self[p].parent
+        }
+        return out
     }
 
+    /// The inline containers (Span, Bold, Italic, Underline, Hyperlink) between a Run and its Paragraph, nearest
+    /// first (CONT-152).
     public func inlineAncestors(of run: XamlNodeID) -> [XamlNodeID] {
-        // PLACEHOLDER(W-RICH)
-        []
+        var out: [XamlNodeID] = []
+        var cur = self[run].parent
+        while let p = cur {
+            switch self[p].kind {
+            case .span, .bold, .italic, .underline, .hyperlink: out.append(p)
+            default: return out
+            }
+            cur = self[p].parent
+        }
+        return out
     }
+
+    public func parent(of id: XamlNodeID) -> XamlNodeID? { self[id].parent }
+    public func children(of id: XamlNodeID) -> [XamlNodeID] { self[id].children }
+
+    /// Nearest ancestor-or-self of `kind`.
+    public func nearest(_ kind: XamlNodeKind, from id: XamlNodeID) -> XamlNodeID? {
+        var cur: XamlNodeID? = id
+        while let c = cur {
+            if self[c].kind == kind { return c }
+            cur = self[c].parent
+        }
+        return nil
+    }
+
+    public func enclosingParagraph(of id: XamlNodeID) -> XamlNodeID? { nearest(.paragraph, from: id) }
+
+    /// Nearest Hyperlink ancestor-or-self, never crossing the enclosing Paragraph.
+    public func enclosingHyperlink(of id: XamlNodeID) -> XamlNodeID? {
+        var cur: XamlNodeID? = id
+        while let c = cur {
+            switch self[c].kind {
+            case .hyperlink: return c
+            case .paragraph, .section, .flowDocument, .listItem, .tableCell: return nil
+            default: cur = self[c].parent
+            }
+        }
+        return nil
+    }
+
+    /// The UTF-16 slice of `source` covered by a node (opaque preservation, §4.3.7 rule 10).
+    public func sourceText(of id: XamlNodeID) -> String? {
+        guard let r = self[id].sourceRange else { return nil }
+        let u = source.utf16
+        guard r.lowerBound >= 0, r.upperBound <= u.count else { return nil }
+        let a = u.index(u.startIndex, offsetBy: r.lowerBound), b = u.index(u.startIndex, offsetBy: r.upperBound)
+        return String(u[a..<b])
+    }
+
+    /// Every node id in arena (pre-) order.
+    public var allNodeIDs: [XamlNodeID] { (0..<nodes.count).map { XamlNodeID(index: Int32($0)) } }
 }
 
 public enum XamlDOM {
+    /// CONT-151…155, XD.2.1. Fatal problems (malformed XML, a DTD, a root outside the presentation namespace) are a
+    /// failure; everything else is tolerated and reported through `issues` and `loadability` (XD.2.12).
     public static func parse(_ xaml: String) -> Result<XamlDocument, XamlFatalError> {
-        // PLACEHOLDER(W-RICH)
-        .failure(.malformedXML("The rich-text parser is not available in this build yet."))
+        let units = Array(xaml.utf16)
+        switch XamlXMLScanner.scan(units) {
+        case .failure(let f): return .failure(f)
+        case .success(let tree): return XamlDOMBuilder.build(source: xaml, units: units, tree: tree)
+        }
     }
 }
