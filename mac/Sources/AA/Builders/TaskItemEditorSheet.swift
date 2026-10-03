@@ -97,7 +97,8 @@ struct TaskItemEditorSheet: View {
                         ForEach(recurrenceChoices(task), id: \.rawValue) { r in Text(r.friendlyLabel).tag(r.rawValue) }
                     }
                     .labelsHidden()
-                    .frame(width: 200)
+                    .fixedSize()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .help(store.parentTask(of: task.id) == nil
                           ? "Repeat this task when it is completed."
                           : "Stored with the subtask; only top-level tasks create their next occurrence.")
@@ -109,7 +110,8 @@ struct TaskItemEditorSheet: View {
                         ForEach(statusChoices(task), id: \.rawValue) { s in Text(s.friendlyLabel).tag(s.rawValue) }
                     }
                     .labelsHidden()
-                    .frame(width: 200)
+                    .fixedSize()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .help("Workflow status used by the Board (Done keeps the Completed box in sync).")
                 }
                 GridRow {

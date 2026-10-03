@@ -164,7 +164,8 @@ struct ChecklistStepEditorSheet: View {
 
     private func footer(_ step: ChecklistStep?) -> some View {
         HStack {
-            Text("Changes save as you type — closing keeps them.")
+            Text(isSavedListItem ? "Changes go back into the saved list when you close its editor."
+                                 : "Changes save as you type — closing keeps them.")
                 .font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
             Spacer()
             Button("Close") {

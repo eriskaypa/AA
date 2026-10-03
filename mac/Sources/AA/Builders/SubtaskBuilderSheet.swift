@@ -31,7 +31,8 @@ final class BuilderSubtaskModel {
 extension BuilderUI {
     /// BUILD-043 row display (shared with the task editor's nested Subtasks section).
     static func subtaskRow(_ t: TaskItem) -> BuilderRowDisplay {
-        BuilderRowDisplay(id: t.id, title: t.name, struck: t.isComplete, trailing: t.deadline?.format(.isoDate) ?? "")
+        BuilderRowDisplay(id: t.id, title: t.name, struck: t.isComplete, trailing: t.deadline?.format(.isoDate) ?? "",
+                          nested: t.subtasks.count)
     }
 }
 

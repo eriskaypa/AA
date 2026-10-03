@@ -107,13 +107,15 @@ struct ProcedureChecklistSection: View {
             BuilderBarButton(title: "Edit…", symbol: "pencil",
                              help: "Open this checklist step in a dedicated editor with its own rich-text container and file bank.",
                              disabled: selection.isEmpty) { editPrimary(selection) }
-            Divider().frame(height: 18)
+            Rectangle().fill(AAColor.border).frame(width: 1, height: 18).padding(.horizontal, 2)
             BuilderBarButton(title: "Link tasks…", symbol: "link",
-                             help: "Link existing (banked) tasks to the selected checklist step.") { run { await linkTasks() } }
+                             help: "Link existing (banked) tasks to the selected checklist step.",
+                             disabled: selection.isEmpty) { run { await linkTasks() } }
             BuilderBarButton(title: "New task", symbol: "plus.circle",
                              help: "Create a new Task and auto-link it to the selected checklist step.") { run { await newTask() } }
             BuilderBarButton(title: "Link equipment/area…", symbol: "wrench.and.screwdriver",
-                             help: "Link equipment/areas to the selected checklist step.") { run { await linkEquipment() } }
+                             help: "Link equipment/areas to the selected checklist step.",
+                             disabled: selection.isEmpty) { run { await linkEquipment() } }
         }
     }
 

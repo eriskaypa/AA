@@ -85,6 +85,8 @@ struct BuilderRowDisplay: Identifiable, Hashable {
     var struck: Bool
     /// `"due yyyy-MM-dd"` (steps), `"yyyy-MM-dd"` (subtasks) or `""`.
     var trailing: String
+    /// Deeper subtasks carried by this subtask (BUILD-045; shown as a small badge, 0 = none).
+    var nested: Int = 0
 }
 
 /// The bulk + list builder (both panes and the saved-lists strip).
@@ -220,10 +222,12 @@ struct BuilderItemsPane<Item: AnyObject>: View {
                 BuilderBarButton(title: "Edit…", symbol: "pencil", help: strings.editHelp, disabled: selection.isEmpty) {
                     editPrimary(selection)
                 }
-                BuilderBarButton(title: "Move up", symbol: "chevron.up", help: strings.upHelp, iconOnly: true,
-                                 disabled: !engine.canMoveUp(selection)) { moveUp() }
-                BuilderBarButton(title: "Move down", symbol: "chevron.down", help: strings.downHelp, iconOnly: true,
-                                 disabled: !engine.canMoveDown(selection)) { moveDown() }
+                HStack(spacing: 2) {
+                    BuilderBarButton(title: "Move up", symbol: "chevron.up", help: strings.upHelp, iconOnly: true,
+                                     disabled: !engine.canMoveUp(selection)) { moveUp() }
+                    BuilderBarButton(title: "Move down", symbol: "chevron.down", help: strings.downHelp, iconOnly: true,
+                                     disabled: !engine.canMoveDown(selection)) { moveDown() }
+                }
                 BuilderBarButton(title: "Move to…", symbol: "arrow.up.and.down.text.horizontal", help: strings.moveToHelp,
                                  disabled: selection.isEmpty) { run { await moveTo() } }
                 BuilderBarButton(title: "Delete", symbol: "trash", help: "Delete the selected \(strings.noun)s.",
@@ -377,6 +381,14 @@ struct BuilderItemRowView: View {
                 .foregroundStyle(row.struck ? AAColor.muted : AAColor.fg)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if row.nested > 0 {
+                Label("\(row.nested)", systemImage: "arrow.turn.down.right")
+                    .font(.system(size: AAType.caption))
+                    .foregroundStyle(AAColor.muted)
+                    .labelStyle(.titleAndIcon)
+                    .fixedSize()
+                    .help("\(row.nested) deeper subtask\(row.nested == 1 ? "" : "s") — open this subtask's editor to work on them.")
+            }
             if !row.trailing.isEmpty {
                 Text(row.trailing)
                     .font(.system(size: AAType.caption))
@@ -414,17 +426,27 @@ struct BuilderFlowLayout: Layout {
     }
 
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, lineHeight: CGFloat = 0
-        for s in subviews {
+        // Break into lines first, then centre every item vertically within its line.
+        var lines: [[(Int, CGSize)]] = [[]]
+        var x = bounds.minX
+        for (i, s) in subviews.enumerated() {
             let size = s.sizeThatFits(.unspecified)
             if x > bounds.minX, x + size.width > bounds.maxX {
-                y += lineHeight + lineSpacing
+                lines.append([])
                 x = bounds.minX
-                lineHeight = 0
             }
-            s.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+            lines[lines.count - 1].append((i, size))
             x += size.width + spacing
-            lineHeight = max(lineHeight, size.height)
+        }
+        var y = bounds.minY
+        for line in lines {
+            let h = line.map(\.1.height).max() ?? 0
+            var lx = bounds.minX
+            for (i, size) in line {
+                subviews[i].place(at: CGPoint(x: lx, y: y + (h - size.height) / 2), proposal: ProposedViewSize(size))
+                lx += size.width + spacing
+            }
+            y += h + lineSpacing
         }
     }
 }

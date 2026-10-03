@@ -149,7 +149,7 @@ struct SavedListsTabView: View {
                              iconOnly: true) {
                 run { await manageGroups() }
             }
-            Divider().frame(height: 16)
+            Rectangle().fill(AAColor.border).frame(width: 1, height: 16)
             BuilderBarButton(title: "Move up", symbol: "chevron.up",
                              help: "Move the selected saved list(s) up within its group. This is the order they export in.",
                              iconOnly: true, disabled: sortAZ) { run { await nudge(up: true) } }
