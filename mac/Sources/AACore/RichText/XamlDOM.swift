@@ -203,11 +203,14 @@ public struct XamlDocument: Sendable, Hashable {
     public let rootRole: XamlRootRole?
     public let loadability: XamlLoadability
     public let issues: [XamlIssue]
+    /// Elements found inside a `Run`'s content (invalid nesting, XD.2.12): child node index → the UTF-16 offset in
+    /// the Run's text at which the element stood, so tolerant consumers can show it in place (W-RICH addition).
+    public let runChildOffsets: [Int32: Int]
 
     public init(source: String, nodes: [XamlNode], root: XamlNodeID, rootRole: XamlRootRole?,
-                loadability: XamlLoadability, issues: [XamlIssue]) {
+                loadability: XamlLoadability, issues: [XamlIssue], runChildOffsets: [Int32: Int] = [:]) {
         self.source = source; self.nodes = nodes; self.root = root; self.rootRole = rootRole
-        self.loadability = loadability; self.issues = issues
+        self.loadability = loadability; self.issues = issues; self.runChildOffsets = runChildOffsets
     }
 
     public subscript(_ id: XamlNodeID) -> XamlNode {

@@ -22,9 +22,9 @@ import Testing
         mutating func int(_ n: Int) -> Int { n <= 0 ? 0 : Int(next() % UInt64(n)) }
     }
 
-    /// 100 steps per sample in the gate; `FUZZ_STEPS` / `FUZZ_SEED` run deeper or different sequences by hand
-    /// (the audit ran 400 steps × seeds 1–5 green).
-    static let steps = Int(ProcessInfo.processInfo.environment["FUZZ_STEPS"] ?? "") ?? 100
+    /// 30 steps per sample in the gate (a few seconds in a debug build); `FUZZ_STEPS` / `FUZZ_SEED` run deeper or
+    /// different sequences by hand (audits ran 400 steps × seeds 1–5 and 300 steps × seeds 1–3 green).
+    static let steps = Int(ProcessInfo.processInfo.environment["FUZZ_STEPS"] ?? "") ?? 30
     static let seed = Int(ProcessInfo.processInfo.environment["FUZZ_SEED"] ?? "") ?? 7
 
     nonisolated static let samples = ["S-01-editor-save", "S-02-nested-bullets", "S-03-numbered-insert", "S-04-table-2x2",

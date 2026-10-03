@@ -250,6 +250,12 @@ import Testing
         let out = RichTest.body(RichTest.roundTrip(RichTest.doc(##"<Paragraph FontSize="abc" Tag="keep"><Run Foreground="{StaticResource X}" Foo="1">x</Run></Paragraph>"##)))
         #expect(out == ##"<Paragraph Tag="keep"><Run Foo="1">x</Run></Paragraph>"##)                       // XD-L4, L9, L10
         if case .success(let d) = XamlDOM.parse(RichTest.doc(out)) { #expect(d.loadability == .loadable) }
+        // The same holds for the root: an invalid core value is dropped and completion supplies the context's.
+        let root = "<Section xmlns=\"\(RichTest.P)\" xml:space=\"preserve\" FontSize=\"big\" Foreground=\"#FF1A1\nA1A\" Tag=\"r\"><Paragraph><Run>x</Run></Paragraph></Section>"
+        let rewritten = RichTest.roundTrip(root)
+        #expect(rewritten.hasPrefix("<Section xmlns=\"\(RichTest.P)\" xml:space=\"preserve\" Tag=\"r\" TextAlignment=\"Left\""))
+        #expect(rewritten.contains(" FontSize=\"14\" Foreground=\"#FF1A1A1A\">") && !rewritten.contains("big"))
+        if case .success(let d) = XamlDOM.parse(rewritten) { #expect(d.loadability == .loadable) } else { Issue.record("unparseable") }
     }
 
     @Test func runAttributeOrderAndExtras() {
