@@ -1,18 +1,37 @@
 // Spec: 09 CREW-003/004 (Tools menu rows → select Crew first; F3's router does that), §D CREW-030…040 (pick → read
 //       off-main → learn → ask (DECISIONS 09 Q1/Q2) → convert → upsert (Q3) → log → Save → refresh → status → dates log →
-//       post-import expiry report; any failure → "Import failed"), CREW-050 (contract expiries report), §6.4 (busy
+//       post-import expiry report; any failure → "Import failed"), CREW-017 (selection after the import = the
+//       roster's own reconcile), CREW-050 (contract expiries report), §6.4 (busy
 //       overlay instead of the wait cursor, three explicit buttons for the date-order question); 03 SHELL-097/098;
-//       ARCHITECTURE.md §2.2 (XLSX parse off the main actor over Sendable values), §7.7.
+//       01 DATA-174 (disabled in a read-only copy / while editing is
+//       stopped); ARCHITECTURE.md §2.2 (XLSX parse off the main actor over Sendable values), §7.7.
 import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 import AACore
 
 @MainActor enum CrewActions {
+    /// 01 DATA-174: the crew import is disabled in a read-only copy of AA and while editing is stopped (DATA-180) —
+    /// the same predicate as the Tools-menu row (`CommandRouterCore.readOnlyDisabled` ∋ `.importCompasCrew`).
+    static func importGated(_ env: AppEnvironment) -> Bool {
+        env.isReadOnlyInstance || env.dataFileGuard?.state.mode == .stoppedEditing
+    }
+
+    /// The tooltip of the in-window Import COMPAS… buttons (the DATA-174 text while gated).
+    static func importHelp(_ env: AppEnvironment) -> String {
+        importGated(env) ? PersistReadOnlyText.disabledHelp : importTooltip
+    }
+
+    static let importTooltip = "Import a COMPAS crew report (.xlsx) and keep each member as an info card."
+
     /// CREW-030…040.
     static func importCompas(env: AppEnvironment, dialogs: DialogPresenter) async {
         let model = CrewRosterModel.shared
         guard !model.importing else { return }
+        guard !importGated(env) else {                                  // DATA-174 (buttons are disabled too)
+            env.status.post(PersistReadOnlyText.disabledHelp)
+            return
+        }
         let urls = await dialogs.openPanel(OpenPanelConfig(message: CrewImport.openPanelTitle, allowedTypes: [.xlsx],
                                                            allFilesAccessory: true))
         guard let url = urls.first else { return }                       // Cancel → nothing
@@ -63,10 +82,8 @@ import AACore
         // CREW-036 `Save()`: the roster is already updated, so a failed write is reported like every other save
         // failure (the data stays dirty and is retried) instead of claiming the import itself failed.
         CrewPersist.save(env)
-        if let first = result.memberIDs.first, let m = env.store.crewMember(id: first),
-           model.selectedID == nil || env.store.crewMember(id: model.selectedID!) == nil {
-            model.select(memberID: m.id, key: m.key, clearFilters: false)
-        }
+        // CREW-017: the roster's Refresh keeps the selected Key, else selects the FIRST ROW in the roster's current
+        // sort order — `CrewRosterModel.reconcile` does that when the rows change (never the first file row).
         model.statusOverride = result.statusText                       // CREW-038
         CrewImport.logDates(result, to: env.store)                     // CREW-037 (autosaved)
         model.importing = false
