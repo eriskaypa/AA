@@ -1,0 +1,56 @@
+AA for macOS — installing and first launch
+===========================================
+
+AA runs on any Mac with macOS 26 or later (Apple silicon and Intel). Nothing else needs to be installed.
+
+1. Install
+----------
+Drag AA.app into your Applications folder (or ~/Applications, or any folder or external drive you keep it on)
+BEFORE you open it the first time. Opening it straight from Downloads or from the unzipped folder makes macOS run
+it from a temporary read-only location ("App Translocation"); AA then shows "Move AA to Applications".
+
+To update, replace AA.app with the new copy. Your data is not inside the app and is not touched.
+
+2. First launch (this build is not notarised)
+---------------------------------------------
+A copy that arrived through a browser, Mail, Messages or AirDrop is blocked the first time:
+
+  1. Double-click AA. macOS says it could not verify AA and offers Done / Move to Trash. Choose Done.
+  2. Open System Settings ▸ Privacy & Security, scroll to Security, find the line saying AA was blocked and
+     click Open Anyway. Authenticate.
+  3. Double-click AA again and confirm Open Anyway once more. From then on it opens normally.
+
+Alternative for Terminal users (after moving the app):
+  xattr -dr com.apple.quarantine /Applications/AA.app
+
+A copy built on this Mac, copied from a USB stick with Finder, or transferred with scp/rsync normally opens
+straight away. Never edit anything inside AA.app: a changed bundle is reported as "damaged".
+
+3. Where your data lives
+------------------------
+  ~/Library/Application Support/AA/        data.json, settings.json, files/ (attachments), crash.log, …
+
+File ▸ Open Data Folder shows it in Finder. To use another folder for one launch, start AA with
+  open -n -a /Applications/AA.app --args --data-dir "/path/to/AA Data"
+(the AA_DATA_DIR environment variable works too; --data-dir wins over it).
+
+4. Portable use (USB stick or shared tools folder)
+--------------------------------------------------
+Put "AA (portable).command" next to AA.app. Double-clicking it opens AA with the "AA Data" folder beside it:
+  AA.app
+  AA (portable).command
+  AA Data/
+Scripted launches can use:  open -n --env AA_DATA_DIR="/Volumes/STICK/AA Data" -a /Volumes/STICK/AA.app
+A .command file that arrived quarantined needs the same one-time approval as the app (section 2).
+Only one copy of AA (Mac or Windows) should use the same data folder at a time.
+
+5. Camera (Flash Sync with iPhone)
+----------------------------------
+macOS asks for camera access the first time Flash Sync ▸ Receive starts the camera. AA uses the camera only to
+read the QR codes your iPhone shows; video is never recorded, saved or sent anywhere. To ask again later:
+  tccutil reset Camera com.eriskay.aa
+
+6. Notifications and the menu bar
+---------------------------------
+Reminders (overdue / due today / due this week) arrive as notifications; macOS asks once. The Dock icon shows the
+overdue count. AA ▸ Settings ▸ General hides or shows the menu-bar item.
