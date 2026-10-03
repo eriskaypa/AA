@@ -282,6 +282,10 @@ final class RichRenderer {
         }
         let allRelative = widths.allSatisfy { if case .pixel = $0 { return false }; return true }
         let allPixel = widths.allSatisfy { if case .pixel = $0 { return true }; return false }
+        // Fixed columns next to star columns (`Width="120"` + `*`): the fixed ones take their width and the star ones
+        // share what is left, as in WPF — TextKit 1's fixed layout does exactly that for cells without a width.
+        let mixed = !allRelative && !allPixel
+        if mixed { t.layoutAlgorithm = .fixedLayoutAlgorithm }
         var tablePath = ctx.path
         tablePath.append(c.info)
         for p in placements {
@@ -309,6 +313,12 @@ final class RichRenderer {
                 var w = 0.0
                 for k in p.col..<min(columns, p.col + p.cs) { if case .pixel(let v) = widths[k] { w += v } }
                 block.setValue(CGFloat(w), type: .absoluteValueType, for: .width)
+            } else if mixed {
+                let spanned = widths[p.col..<min(columns, p.col + p.cs)]
+                if !spanned.isEmpty, spanned.allSatisfy({ if case .pixel = $0 { return true }; return false }) {
+                    let w = spanned.reduce(0.0) { s, x in if case .pixel(let v) = x { return s + v }; return s }
+                    block.setValue(CGFloat(w), type: .absoluteValueType, for: .width)
+                }
             }
             var cc = ctx
             cc.path = tablePath + [entry.group.info, entry.row.info]
