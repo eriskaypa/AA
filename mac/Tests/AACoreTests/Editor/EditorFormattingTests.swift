@@ -343,6 +343,21 @@ import Testing
         #expect((s.attribute(.aaParagraphAttrs, at: 4, effectiveRange: nil) as? [[String]]) == [["Margin", "", "0,1,0,1"]])
     }
 
+    // TV: XD.3 `block` row / REQ-W-CONT-03 — a lock carried on a ListItem / TableCell does not come back after save
+    @Test func unlockCarriedContainerSentinels() {
+        for body in [##"<List MarkerStyle="Disc"><ListItem Background="#FFFFE699"><Paragraph><Run>item</Run></Paragraph></ListItem></List>"##,
+                     ##"<Table CellSpacing="0"><TableRowGroup><TableRow><TableCell Background="#FFFFE699"><Paragraph><Run>cell</Run></Paragraph></TableCell></TableRow></TableRowGroup></Table>"##] {
+            let (s, m) = RichTest.read(RichTest.doc(body))
+            let e = NSMutableAttributedString(attributedString: s)
+            #expect(EditorLocking.hasAnyLock(e))
+            #expect(EditorLocking.unlock(e, stretches: EditorLocking.lockedStretches(e, touching: NSRange(location: 0, length: e.length))))
+            #expect(!EditorLocking.hasAnyLock(e))
+            let xaml = XamlWriter.write(e, metadata: m, context: .containerEditor)
+            #expect(!xaml.contains("FFFFE699"))
+            #expect(!EditorLocking.hasAnyLock(RichTest.read(xaml).0))
+        }
+    }
+
     @Test func markersNeverCountAsLocked() {
         let s = EditorFx.text("\t•\tx")
         s.addAttribute(.backgroundColor, value: EditorLocking.sentinelColor, range: NSRange(location: 0, length: 3))

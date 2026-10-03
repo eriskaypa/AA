@@ -90,12 +90,12 @@ final class EditorController: NSObject {
 
     static let paperColor = NSColor(srgbRed: 0xFC / 255.0, green: 0xFC / 255.0, blue: 0xFC / 255.0, alpha: 1)
 
-    /// The default paragraph look of new text: WPF's automatic paragraph margin ≈ one line between paragraphs (§6.2).
-    static func defaultParagraphStyle(fontSize: CGFloat = 14) -> NSParagraphStyle {
-        let p = NSMutableParagraphStyle()
-        p.paragraphSpacing = (fontSize * 1.17).rounded()
-        p.alignment = .left
-        return p
+    /// XD.2.8: the typing attributes of an empty (or cleared) note — W-RICH's projection of the root context,
+    /// including the paragraph style the reader gives an `Auto`-margin paragraph, so new text looks exactly like
+    /// loaded text and the writer emits no `Margin` for it (CONT-003, 05 §6.2, §4.3.7 rule 5; REQ-W-CONT-02).
+    static func emptyTypingAttributes(_ metadata: RichTextMetadata = RichTextMetadata(context: .containerEditor))
+        -> [NSAttributedString.Key: Any] {
+        XamlReader.typingAttributes(for: metadata)
     }
 
     private func makeViews() {
@@ -168,8 +168,9 @@ final class EditorController: NSObject {
         tv.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         // XD.5: the link colour is baked into the text; the view only adds the underline.
         tv.linkTextAttributes = [.underlineStyle: NSUnderlineStyle.single.rawValue]
-        tv.defaultParagraphStyle = Self.defaultParagraphStyle()
-        tv.typingAttributes = EditorFormatting.defaultTypingAttributes(paragraphStyle: Self.defaultParagraphStyle())
+        let empty = Self.emptyTypingAttributes()
+        if let p = empty[.paragraphStyle] as? NSParagraphStyle { tv.defaultParagraphStyle = p }
+        tv.typingAttributes = empty
         tv.selectedTextAttributes = [.backgroundColor: NSColor(srgbRed: 0.71, green: 0.84, blue: 1.0, alpha: 1)]
         tv.delegate = self
         tv.setAccessibilityLabel("Notes")
@@ -309,7 +310,9 @@ final class EditorController: NSObject {
 
     private func typingAttributesForEmptyOrStart() -> [NSAttributedString.Key: Any] {
         if storage.length == 0 {
-            return EditorFormatting.defaultTypingAttributes(paragraphStyle: Self.defaultParagraphStyle())
+            let empty = Self.emptyTypingAttributes(session.metadata)
+            if let p = empty[.paragraphStyle] as? NSParagraphStyle { textView.defaultParagraphStyle = p }
+            return empty
         }
         return EditorFormatting.cleanTypingAttributes(storage.attributes(at: 0, effectiveRange: nil), in: storage, caret: 0)
     }

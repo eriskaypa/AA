@@ -85,7 +85,7 @@ struct EditorPreviewHost: View {
 /// a link, a lock).
 @MainActor enum EditorPreviewText {
     static func sample() -> NSAttributedString {
-        let base = EditorFormatting.defaultTypingAttributes(paragraphStyle: EditorController.defaultParagraphStyle())
+        let base = EditorController.emptyTypingAttributes()
         let out = NSMutableAttributedString()
         func add(_ s: String, _ tweak: (inout [NSAttributedString.Key: Any]) -> Void = { _ in }) {
             var a = base
@@ -181,7 +181,7 @@ struct EditorSelfTestView: View {
     @MainActor static func run(_ c: EditorController) -> [(String, Bool)] {
         var out: [(String, Bool)] = []
         func check(_ name: String, _ ok: Bool) { out.append((name, ok)) }
-        let base = EditorFormatting.defaultTypingAttributes(paragraphStyle: EditorController.defaultParagraphStyle())
+        let base = EditorController.emptyTypingAttributes()
         let doc = NSMutableAttributedString(string: "abcDEFghi\nsecond line\n", attributes: base)
         EditorLocking.lock(doc, range: NSRange(location: 3, length: 3))
         c.showPreview(doc, selection: NSRange(location: 0, length: 0))

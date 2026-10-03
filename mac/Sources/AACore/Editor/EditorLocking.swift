@@ -115,11 +115,24 @@ import AppKit
     /// CONT-061: clears the lock from every stretch (sentinel background, stored lock source, and a block's carried
     /// sentinel `Background` in `.aaParagraphAttrs`). Other backgrounds are untouched. Returns false when nothing
     /// changed.
+    ///
+    /// The data effect is W-RICH's `LockRules.unlock(_:range:)` (XD.3 `block` row: it also drops the sentinel from
+    /// the carried `ListItem` / `TableCell` / `Section` attributes on the paragraph's container path, so a carried
+    /// block lock does not re-appear after save — REQ-W-CONT-03). Windows clears only the nearest sentinel per
+    /// click; the editor's unit is the whole stretch (05 §7.4), so nested sentinels are peeled until none is left.
     @discardableResult
     public static func unlock(_ s: NSMutableAttributedString, stretches: [NSRange]) -> Bool {
         var changed = false
         s.beginEditing()
         defer { s.endEditing() }
+        for stretch in stretches where stretch.length > 0 && NSMaxRange(stretch) <= s.length {
+            var pass = 0
+            while pass < 16, !LockRules.unlock(s, range: stretch).isEmpty {
+                changed = true
+                pass += 1
+            }
+        }
+        // Residual encodings the contract does not model (raw `[[String]]` paragraph attributes, `.aaLocked` alone).
         let text = s.string as NSString
         for stretch in stretches where stretch.length > 0 && NSMaxRange(stretch) <= s.length {
             var target = stretch
