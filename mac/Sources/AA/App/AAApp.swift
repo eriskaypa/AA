@@ -89,13 +89,13 @@ struct AAApp: App {
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)
         .commandsRemoved()
-        .defaultSize(width: 560, height: 520)
+        .defaultSize(width: 500, height: 660)                          // TOOLS-080 (REQ-W-DRIVE-02)
 
         Window("Folder builder", id: SceneID.folderBuilder.rawValue) { FolderBuilderView().aaWindowRoot(.folderBuilder) }
             .defaultLaunchBehavior(.suppressed)
             .restorationBehavior(.disabled)
             .commandsRemoved()
-            .defaultSize(width: 760, height: 600)
+            .defaultSize(width: 820, height: 660)                      // TOOLS-040 (REQ-W-DRIVE-02)
 
         Window("Date calculator", id: SceneID.dateCalculator.rawValue) {
             DateCalculatorView().aaWindowRoot(.dateCalc).frame(width: 540, height: 520)
