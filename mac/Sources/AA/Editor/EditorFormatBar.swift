@@ -48,29 +48,19 @@ struct EditorFormatBar: View {
                 bar("text.justify", "Justify", on: s.alignment == .justified, .justify)
             }
 
+            // Windows toolbar order (ContainerEditor.xaml:21-55): lists and indent, saved list + move, undo/redo,
+            // link / table / clear, lock / unlock.
             EditorBarGroup {
                 bar("list.bullet", "Bullets (⇧⌘7)", on: s.list == .bullets, .bulletedList)
                 bar("list.number", "Numbered (⇧⌘9)", on: s.list == .numbered, .numberedList)
-                bar("decrease.indent", "Outdent — ⌘[ (⇧Tab at the start of a list item)", .outdent)
                 bar("increase.indent", "Indent — ⌘] (Tab at the start of a list item)", .indent)
+                bar("decrease.indent", "Outdent — ⌘[ (⇧Tab at the start of a list item)", .outdent)
             }
 
             EditorBarGroup {
+                bar("text.badge.plus", EditorSavedListInsert.buttonHelp + " (⌥⌘L)", .insertSavedList)
                 bar("arrow.up.to.line", "Move the current list item (or block) up — ⌃⌘↑. Sub-items move with it.", .moveItemUp)
                 bar("arrow.down.to.line", "Move the current list item (or block) down — ⌃⌘↓. Sub-items move with it.", .moveItemDown)
-            }
-
-            EditorBarGroup {
-                bar("link", "Insert hyperlink (⌘K)", .insertLink)
-                EditorTablePickerButton(controller: controller)
-                bar("text.badge.plus", EditorSavedListInsert.buttonHelp + " (⌥⌘L)", .insertSavedList)
-            }
-
-            EditorBarGroup {
-                bar("eraser", "Clear formatting", .clearFormatting)
-                bar("lock", "Lock the highlighted text (password-protected; still visible everywhere, just can't be edited).",
-                    .lockSelection)
-                bar("lock.open", "Unlock the highlighted text (requires app password).", .unlockSelection)
             }
 
             EditorBarGroup {
@@ -80,6 +70,18 @@ struct EditorFormatBar: View {
                 EditorBarButton(symbol: "arrow.uturn.forward", help: "Redo (⇧⌘Z)", enabled: controller.canRedo && editable) {
                     controller.redo()
                 }
+            }
+
+            EditorBarGroup {
+                bar("link", "Insert hyperlink (⌘K)", .insertLink)
+                EditorTablePickerButton(controller: controller)
+                bar("eraser", "Clear formatting", .clearFormatting)
+            }
+
+            EditorBarGroup {
+                bar("lock", "Lock the highlighted text (password-protected; still visible everywhere, just can't be edited).",
+                    .lockSelection)
+                bar("lock.open", "Unlock the highlighted text (requires app password).", .unlockSelection)
             }
 
             EditorBarGroup {

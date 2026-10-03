@@ -159,7 +159,7 @@ import Testing
         #expect(!made.store.isDirty)
     }
 
-    // TV: ARCH §11 — an empty note under an unavailable engine stays empty (never written)
+    // TV: ARCH §11 / CONT-006 — an empty note under an unavailable engine is read-only (withheld) and stays empty
     @Test func emptyNoteUnderUnavailableEngine() {
         let made = StoreFactory.make()
         let c = Container(richTextXaml: "")
@@ -167,7 +167,8 @@ import Testing
         bind(s, doc)
         let d = s.load(c, store: made.store, passwords: nil)
         doc.show(d)
-        #expect(d.editable)
+        #expect(!d.editable)
+        #expect(d.withheld == .engineUnavailable && s.withheld == .engineUnavailable)
         #expect(!s.canPersist)
         doc.type("new text")
         s.noteEdited()
@@ -187,7 +188,9 @@ import Testing
         }, writer: { _, _, _ in "WRITTEN" }, engineAvailable: { true })
         let doc = EditorTestDoc()
         bind(s, doc)
-        doc.show(s.load(c, store: made.store, passwords: nil))
+        let d = s.load(c, store: made.store, passwords: nil)
+        doc.show(d)
+        #expect(!d.editable && s.withheld == .engineUnavailable)    // never typeable (CONT-006)
         doc.type("x")
         s.noteEdited()
         s.flushPending()

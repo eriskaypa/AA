@@ -37,17 +37,36 @@ Done (where):
 ## Gate and checks
 
 * `swift build -j 3 -Xswiftc -warnings-as-errors` — clean.
-* `swift test -j 3 -Xswiftc -warnings-as-errors` — green; W-CONT: 87 tests in 15 suites under
+* `swift test -j 3 -Xswiftc -warnings-as-errors` — green; W-CONT: 89 tests in 15 suites under
   `Tests/AACoreTests/Editor/` (2 of them gated on W-RICH and skipped here).
 * `Scripts/check-placeholders.sh W-CONT` — empty; `EditorContractStatus` = true.
 * `Scripts/check-ownership.sh` — passes except `Docs/Progress/W-CONT.md` (unmapped in the script; REQ-W-CONT-01).
 * Snapshots (DEBUG hook, both appearances) in the session scratchpad `snapshots/W-CONT/`: editor (wide and narrow),
   withheld, legacy-locked with Unlock…, locked-hint notice, real container + file bank, live self-test (20 AppKit-path
-  checks: lock gate, undo, table, link, alignment, Tab, size step — all ✓), Insert Saved List, Insert
+  checks: lock gate, undo, table, link, alignment, Tab, size step, typing after a list marker — all ✓), Insert Saved List, Insert
   hyperlink (valid / invalid), colour pop-overs and table grid. Sheet ids: `w-cont.editor`, `w-cont.editor-narrow`,
   `w-cont.editor-withheld`, `w-cont.editor-legacy`, `w-cont.editor-notice`, `w-cont.container`,
   `w-cont.selftest`, `w-cont.insert-saved-list`, `w-cont.insert-link`, `w-cont.insert-link-invalid`, `w-cont.palettes`;
   fixture data in `Tests/AACoreTests/Fixtures/ui/w-cont/`.
+
+## Independent audit (2026-10-02)
+
+Every assigned ID re-read against 05 / 06 / 03 and the C# (`Views/ContainerEditor.xaml(.cs)`,
+`InsertSavedListWindow.xaml.cs`); clean rebuild + gate. Result: 51 / 51 implemented; 0 missing. Fixed during the audit:
+* CONT-044 / §6.4 — text typed right after a list marker inherited `.aaListMarker` (the writer drops marker text, so
+  it would have vanished on save); typing, plain paste and link insertion now also drop `.aaInRunNewline`,
+  `.aaPreservedXaml` and attachments (`EditorFormatting.cleanTypingAttributes`, 2 new tests, self-test check 21).
+* CONT-006 — without the real engine a blank note was typeable but never saved; it is now withheld (read-only,
+  banner) like every other unsaveable note.
+* CONT-008 — a parked editor kept its `EditorFlushCenter` binding, so `holder(of:)` named the wrong editor; parking
+  now unbinds the token and unparking rebinds it; re-binding a parked controller to another container unparks it.
+* CONT-021 / K-7 — leaving the size box unchanged re-applied the same size (an undo step and a dirty mark); now only a
+  changed value applies.
+* CONT-033 — every spelling suggestion is listed (was capped at 8).
+* CONT-064 / ARCH §8.5 — the inline lock notice draws 🔓 as the `lock.open` symbol.
+* CONT-020…061 — format bar order follows the Windows toolbar; Insert Saved List uses the spec symbol
+  `text.badge.plus`; the family menu offers Show Fonts…; radio/checkbox labels in the Insert Saved List sheet use the
+  system font (native controls); the text-colour bar keeps a visible outline in dark mode.
 
 ## Post-merge (Stage V)
 

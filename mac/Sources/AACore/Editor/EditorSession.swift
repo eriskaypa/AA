@@ -156,6 +156,13 @@ public struct EditorLoadedDocument {
                 doc = EditorLoadedDocument(text: loadedText, editable: false, withheld: withheld, hasAnyLock: false)
             }
         }
+        // CONT-006 on the Mac: what can never be saved is never typeable. Without the real engine (or with a
+        // placeholder parse) even a blank or readable note is shown read-only with the banner, so nothing typed is
+        // silently dropped (ARCH §6.7, §11).
+        if withheld == nil, !engineAvailable() || metadata.isPlaceholderResult {
+            withheld = .engineUnavailable
+            return EditorLoadedDocument(text: doc.text, editable: false, withheld: withheld, hasAnyLock: doc.hasAnyLock)
+        }
         return doc
     }
 

@@ -1238,7 +1238,7 @@ final class EditorController: NSObject {
                 item.isEnabled = false
                 menu.addItem(item)
             } else {
-                for g in word.guesses.prefix(8) {
+                for g in word.guesses {                         // every suggestion, as WPF lists them
                     let item = EditorMenuItem(title: g) { [weak self] in self?.correctSpelling(word.range, with: g) }
                     item.attributedTitle = NSAttributedString(string: g, attributes: [.font: NSFont.boldSystemFont(ofSize: 0)])
                     menu.addItem(item)
