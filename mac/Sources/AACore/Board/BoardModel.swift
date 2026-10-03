@@ -99,23 +99,43 @@ public enum BoardModel {
         return d.civilDate < today && t.status != .done
     }
 
+    /// The card's meta line in parts (the Mac card draws OVERDUE as a chip after the dates so it never wraps onto a
+    /// line of its own; `meta` keeps the exact Windows string for accessibility and help).
+    public struct MetaParts: Equatable, Sendable {
+        /// `"{start} → {end}"` when ranged, else `"Due {deadline}"`; nil without a deadline.
+        public var dates: String?
+        /// The dates are overdue (`"  ·  OVERDUE"` in the string form).
+        public var overdue: Bool
+        /// The recurrence label when not None.
+        public var recurrence: String?
+    }
+
+    public static func metaParts(_ t: TaskItem, today: CivilDate) -> MetaParts {
+        var parts = MetaParts(dates: nil, overdue: false, recurrence: nil)
+        if let d = t.deadline {
+            if let rs = t.rangeStart, rs.civilDate < d.civilDate {
+                parts.dates = rs.format(.isoDate) + " \u{2192} " + d.format(.isoDate)
+            } else {
+                parts.dates = "Due " + d.format(.isoDate)
+            }
+            parts.overdue = isOverdue(t, today: today)
+        }
+        if t.recurrence != .none { parts.recurrence = t.recurrence.friendlyLabel }
+        return parts
+    }
+
     /// Parts joined by `"   ·   "`: the dates (`"{start} → {end}"` when ranged, else `"Due {deadline}"`, plus
     /// `"  ·  OVERDUE"`) and the recurrence name when not None.
     public static func meta(_ t: TaskItem, today: CivilDate) -> String {
+        let m = metaParts(t, today: today)
         var parts: [String] = []
-        if let d = t.deadline {
-            var s: String
-            if let rs = t.rangeStart, rs.civilDate < d.civilDate {
-                s = rs.format(.isoDate) + " \u{2192} " + d.format(.isoDate)
-            } else {
-                s = "Due " + d.format(.isoDate)
-            }
-            if isOverdue(t, today: today) { s += "  \u{00B7}  OVERDUE" }
-            parts.append(s)
-        }
-        if t.recurrence != .none { parts.append(t.recurrence.name) }
+        if let dates = m.dates { parts.append(m.overdue ? dates + "  \u{00B7}  " + overdueWord : dates) }
+        if let r = m.recurrence { parts.append(r) }
         return parts.joined(separator: "   \u{00B7}   ")
     }
+
+    /// The overdue marker word (VIEW-043).
+    public static let overdueWord = "OVERDUE"
 
     /// `"📎 {n} file(s)"` for the task's own files and `"☑ {done}/{total}"` over direct subtasks, joined by 4 spaces.
     public static func badges(_ t: TaskItem) -> String {

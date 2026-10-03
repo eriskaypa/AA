@@ -44,3 +44,21 @@ Post-merge (Stage V): editor sheets opened from Calendar / Planner / Board / Buc
 `TaskItemEditorSheet`, `ChecklistStepEditorSheet`), the batch context-menu items (W-HIER's
 `BatchContextMenuItems` / `BatchActions`), Board "Open all files" through W-PERSIST's `AttachmentOpener`,
 interactive drag and drop (not exercisable by the snapshot hook).
+
+Fix pass FIX-W-PLAN (2026-10-03, verification findings V-07 / V-DESIGN; 7 of 7 fixed):
+* V-07 Board single "Delete task" now runs the batch path's steps (flushAllEditors after the confirmation, re-resolve,
+  trash, save, close the item window, drop from `detachedItemIDs`, status, Trash refresh) — VIEW-052, DECISIONS 02 Q-4;
+* V-07 Calendar A- / A+ enablement uses `CalFontScale.canStep` (stored 10 → A- gives 11; stored 30 → A+ gives 28,
+  C18); unit test extended;
+* V-07 Calendar clipping: `CalPageHeader` flows its controls onto further lines in narrow panes (`CalFlowLayout`), the
+  view-mode segments fall back to a pop-up, the sidebar default is 232 pt and the column ideals 40 / 150 / 92 / 160 /
+  88 — all five columns visible at 1100 × 720 and the default 1280 × 820 (snapshots light + dark under
+  `scratchpad/snapshots/fix1-W-PLAN/`); horizontal scroll only below ~1100 pt;
+* V-DESIGN Calendar Status shows friendly labels (`WorkStatus.friendlyLabel`), Recurrence and the Board card meta use
+  `RecurrenceKind.friendlyLabel`; test updated ("To Do", "In Progress");
+* V-DESIGN Buckets header is one icon bar (`plus`, `trash`, overflow menu with Rename / Set category...);
+* V-DESIGN Board cards draw OVERDUE as an `AAStatusCapsule` after the date (`BoardModel.metaParts`, test added);
+* V-DESIGN Planner pool names and Map Inspect rows wrap to two lines (Map: middle truncation), Planner default
+  column 256 pt.
+Design-rule pass on the touched views: no zebra stripes (Calendar table, Buckets members), regular-weight row names
+(Calendar Task, Buckets list), mono digits on dates / durations.

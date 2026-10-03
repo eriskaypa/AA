@@ -75,7 +75,7 @@ struct CalendarTabView: View {
     @State private var selection = Set<String>()
 
     var body: some View {
-        CalSplitView(minLeading: 240, idealLeading: 264, maxLeading: 420, minTrailing: 560) {
+        CalSplitView(minLeading: 216, idealLeading: 232, maxLeading: 420, minTrailing: 560) {
             CalSidebar(model: model)
         } trailing: {
             detail
@@ -99,15 +99,11 @@ struct CalendarTabView: View {
             CalPageHeader(title: schedule?.title ?? CalendarRowBuilder.initialTitle,
                           subtitle: summary) {
                 CalTextSizeControl(model: model)
-                Picker("View", selection: Binding(get: { model.mode }, set: { model.setMode($0) })) {
-                    ForEach(CalViewMode.allCases, id: \.self) { m in
-                        Text(m.label).tag(m).help(m.help ?? "")
-                    }
+                // The five segments when they fit; a pop-up with the same five choices in a very narrow pane.
+                ViewThatFits(in: .horizontal) {
+                    modePicker.pickerStyle(.segmented).fixedSize()
+                    modePicker.pickerStyle(.menu).fixedSize()
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
-                .help("View")
             }
             ZStack {
                 CalScheduleTable(model: model, selection: $selection, open: open)
@@ -118,6 +114,17 @@ struct CalendarTabView: View {
                 }
             }
         }
+    }
+
+    /// VIEW-004: the five view modes (labels and tooltips unchanged).
+    private var modePicker: some View {
+        Picker("View", selection: Binding(get: { model.mode }, set: { model.setMode($0) })) {
+            ForEach(CalViewMode.allCases, id: \.self) { m in
+                Text(m.label).tag(m).help(m.help ?? "")
+            }
+        }
+        .labelsHidden()
+        .help("View")
     }
 
     /// A short count line under the title (Mac addition; muted).
@@ -168,19 +175,17 @@ private struct CalSidebar: View {
                 .labelsHidden()
                 .padding(.horizontal, AASpacing.s)
                 .frame(maxWidth: .infinity)
-            HStack(spacing: AASpacing.s) {
-                Button {
-                    model.select(env.store.clock.today())
-                } label: {
-                    Label("Today", systemImage: "smallcircle.filled.circle")
+            // Today + the selected day on one line; in a narrow pane the day moves under the button (never clipped).
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: AASpacing.s) {
+                    todayButton
+                    Spacer()
+                    selectedDayText.fixedSize()
                 }
-                .controlSize(.small)
-                .help("Select today")
-                Spacer()
-                Text(selectedText)
-                    .font(.aaMono(AAType.caption))
-                    .foregroundStyle(AAColor.muted)
-                    .lineLimit(1)
+                VStack(alignment: .leading, spacing: AASpacing.xs) {
+                    todayButton
+                    selectedDayText
+                }
             }
             .padding(.horizontal, AASpacing.m)
             .padding(.top, AASpacing.s)
@@ -191,6 +196,24 @@ private struct CalSidebar: View {
         }
         .padding(.bottom, AASpacing.m)
         .background(AAPaneBackground())
+    }
+
+    private var todayButton: some View {
+        Button {
+            model.select(env.store.clock.today())
+        } label: {
+            Label("Today", systemImage: "smallcircle.filled.circle")
+        }
+        .controlSize(.small)
+        .help("Select today")
+        .fixedSize()
+    }
+
+    private var selectedDayText: some View {
+        Text(selectedText)
+            .font(.aaMono(AAType.caption).monospacedDigit())
+            .foregroundStyle(AAColor.muted)
+            .lineLimit(1)
     }
 
     private var selectedText: String {
@@ -232,14 +255,14 @@ private struct CalTextSizeControl: View {
                     Label("A-", systemImage: "textformat.size.smaller")
                 }
                 .help(CalFontScale.smallerHelp)
-                .disabled(model.fontScale <= CalFontScale.minimum)
+                .disabled(!CalFontScale.canStep(model.fontScale, bigger: false))
                 Button {
                     model.setFontScale(CalFontScale.stepped(model.fontScale, bigger: true))
                 } label: {
                     Label("A+", systemImage: "textformat.size.larger")
                 }
                 .help(CalFontScale.biggerHelp)
-                .disabled(model.fontScale >= CalFontScale.maximum)
+                .disabled(!CalFontScale.canStep(model.fontScale, bigger: true))
             }
             .controlGroupStyle(.navigation)
             .labelStyle(.iconOnly)
@@ -263,11 +286,14 @@ private struct CalScheduleTable: View {
         let size = CGFloat(model.fontScale)
         let groups = schedule?.groups ?? []
         let grouped = schedule?.isGrouped ?? false
+        // Ideal widths sum to what a 1100-pt window leaves the pane, so all five columns are visible there and at the
+        // default 1280 × 820; wider panes grow every column (NSTableView uniform resizing). Windows widths: 56 / 210 /
+        // 120 / 420 / 110 (VIEW-011; Deviations/W-PLAN.md).
         Table(of: CalScheduleRow.self, selection: $selection) {
             TableColumn("Done") { row in
                 CalDoneCell(row: row) { save() }
             }
-            .width(min: 44, ideal: 56, max: 70)
+            .width(min: 36, ideal: 40, max: 70)
             TableColumn("When") { row in
                 Text(row.rangeDisplay)
                     .font(.aaMono(size))
@@ -276,22 +302,22 @@ private struct CalScheduleTable: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .help(CalendarRowBuilder.whenHelp)
             }
-            .width(min: 120, ideal: 216, max: 300)
+            .width(min: 110, ideal: 150, max: 300)
             TableColumn("Status") { row in
                 CalStatusCell(row: row, size: size)
             }
-            .width(min: 80, ideal: 112, max: 170)
+            .width(min: 80, ideal: 92, max: 170)
             TableColumn("Task") { row in
                 CalNameCell(row: row, size: size)
             }
-            .width(min: 180, ideal: 340)
+            .width(min: 140, ideal: 160)
             TableColumn("Recurrence") { row in
                 Text(row.recurrence)
                     .font(.aaMono(size))
                     .foregroundStyle(row.recurrence == "None" ? AAColor.muted : AAColor.fg)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .width(min: 70, ideal: 110, max: 140)
+            .width(min: 84, ideal: 88, max: 140)
         } rows: {
             if grouped {
                 ForEach(groups) { g in
@@ -307,7 +333,7 @@ private struct CalScheduleTable: View {
                 }
             }
         }
-        .tableStyle(.inset(alternatesRowBackgrounds: true))
+        .tableStyle(.inset(alternatesRowBackgrounds: false))
         .environment(\.defaultMinListRowHeight, max(24, size * 1.9))
         .contextMenu(forSelectionType: String.self) { ids in
             BatchContextMenuItems(selection: { objects(ids) }, refresh: { model.schedule.refresh() })
@@ -382,14 +408,14 @@ private struct CalStatusCell: View {
     private func color(_ s: String) -> Color {
         switch s {
         case "Done": return AAColor.Status.ok
-        case "InProgress": return AAColor.tint
+        case WorkStatus.inProgress.friendlyLabel: return AAColor.tint
         case "Blocked": return AAColor.Status.overdueMeta
         default: return AAColor.fg
         }
     }
 }
 
-/// Task column: a kind stripe, the name (semi-bold, wraps, struck when complete).
+/// Task column: a kind stripe, the name (regular weight — V-DESIGN rule 2; wraps, struck when complete).
 private struct CalNameCell: View {
     let row: CalScheduleRow
     let size: CGFloat
@@ -403,7 +429,7 @@ private struct CalNameCell: View {
                 .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 2 }
                 .accessibilityHidden(true)
             Text(row.name)
-                .font(.aaMono(size, weight: .semibold))
+                .font(.aaMono(size))
                 .strikethrough(done)
                 .foregroundStyle(done ? AAColor.muted : AAColor.fg)
                 .lineLimit(nil)

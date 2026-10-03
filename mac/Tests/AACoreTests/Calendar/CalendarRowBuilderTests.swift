@@ -168,11 +168,12 @@ enum CalTestData {
     }
 
     @Test func taskStatusAndRecurrenceNames() {
-        // TV: 07 C14, VIEW-012
+        // TV: 07 C14, VIEW-012 — friendly labels (DECISIONS 04 Q-G / 08 OQ-10; Deviations/W-PLAN.md).
         let t = D.task("t", deadline: "2026-10-02")
+        #expect(CalendarRowBuilder.allRows(D.data(tasks: [t]))[0].status == "To Do")
         t.status = .inProgress
         let r = CalendarRowBuilder.allRows(D.data(tasks: [t]))[0]
-        #expect(r.status == "InProgress" && r.recurrence == "None")
+        #expect(r.status == "In Progress" && r.recurrence == "None")
         t.recurrence = .weekly
         #expect(CalendarRowBuilder.allRows(D.data(tasks: [t]))[0].recurrence == "Weekly")
     }
@@ -211,6 +212,11 @@ enum CalTestData {
         #expect(CalFontScale.initial(stored: 30) == 30 && CalFontScale.initial(stored: 31) == 15)
         #expect(CalFontScale.initial(stored: .nan) == 15)
         #expect(CalFontScale.stepped(30, bigger: true) == 28 && CalFontScale.stepped(10, bigger: false) == 11)
+        // C18 through the buttons: A- / A+ stay enabled while a click changes the size (stored 10 / 30 included).
+        #expect(CalFontScale.canStep(30, bigger: true) && CalFontScale.canStep(10, bigger: false))
+        #expect(CalFontScale.canStep(30, bigger: false) && CalFontScale.canStep(10, bigger: true))
+        #expect(!CalFontScale.canStep(28, bigger: true) && !CalFontScale.canStep(11, bigger: false))
+        #expect(CalFontScale.canStep(27, bigger: true) && CalFontScale.canStep(12, bigger: false))
     }
 
     @Test func storedViewModeIsMatchedExactly() {

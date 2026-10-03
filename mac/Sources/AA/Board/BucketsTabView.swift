@@ -48,20 +48,20 @@ struct BucketsTabView: View {
 
     private func sidebar(groups: [BucketGroup], count: Int) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            CalPaneTitle(title: BucketsModel.headerTitle, symbol: "tray.2")
+            CalPaneTitle(title: BucketsModel.headerTitle, symbol: "tray.2") {
+                Text("\(count)")
+                    .font(.aaMono(AAType.caption))
+                    .foregroundStyle(AAColor.muted)
+                    .monospacedDigit()
+                    .accessibilityLabel("\(count) buckets")
+            }
             AAHelpText(BucketsModel.help)
                 .padding(.horizontal, AASpacing.m)
                 .padding(.bottom, AASpacing.s)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 6) { newButton; editButtons }
-                VStack(alignment: .leading, spacing: 6) {
-                    newButton
-                    HStack(spacing: 6) { editButtons }
-                }
-            }
-            .controlSize(.small)
-            .padding(.horizontal, AASpacing.m)
-            .padding(.bottom, AASpacing.s)
+            iconBar
+                .padding(.horizontal, AASpacing.s)
+                .padding(.bottom, AASpacing.xs)
+            Divider()
             ScrollViewReader { proxy in
                 List(selection: $selectedBucket) {
                     ForEach(groups) { g in
@@ -108,19 +108,34 @@ struct BucketsTabView: View {
         .background(AAPaneBackground())
     }
 
-    private var newButton: some View {
-        Button { newBucket() } label: { Label(BucketsModel.newBucketTitle, systemImage: "plus") }
-            .aaProminent()
-            .labelStyle(.titleOnly)
+    /// VIEW-141 toolbar as one icon bar (V-DESIGN rule 4): `plus` "+ New bucket", `trash` "Delete", and an overflow
+    /// menu holding "Rename" and "Set category..." by their spec names. Same commands as the row context menu.
+    private var iconBar: some View {
+        HStack(spacing: AASpacing.xs) {
+            BucketIconButton(symbol: "plus", label: BucketsModel.newBucketTitle, help: BucketsModel.newBucketTitle) {
+                newBucket()
+            }
+            BucketIconButton(symbol: "trash", label: BucketsModel.deleteTitle, help: BucketsModel.deleteTitle) {
+                delete()
+            }
+            Spacer(minLength: 0)
+            Menu {
+                Button(BucketsModel.renameTitle, systemImage: "pencil") { rename() }
+                Button(BucketsModel.setCategoryTitle, systemImage: "tag") { setCategory() }
+                    .help(BucketsModel.setCategoryHelp)
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .symbolRenderingMode(.hierarchical)
+                    .fontWeight(.regular)
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
             .fixedSize()
-    }
-
-    @ViewBuilder private var editButtons: some View {
-        Button(BucketsModel.renameTitle) { rename() }.fixedSize()
-        Button(BucketsModel.setCategoryTitle) { setCategory() }
-            .help(BucketsModel.setCategoryHelp)
-            .fixedSize()
-        Button(BucketsModel.deleteTitle, role: .destructive) { delete() }.fixedSize()
+            .frame(width: 24, height: 24)
+            .help("More bucket commands: \(BucketsModel.renameTitle), \(BucketsModel.setCategoryTitle)")
+            .accessibilityLabel("More")
+        }
+        .frame(height: 28)
     }
 
     // MARK: Members (VIEW-146, VIEW-151, VIEW-152)
@@ -155,7 +170,7 @@ struct BucketsTabView: View {
                         BucketMemberListRow(member: m).tag(m.id)
                     }
                 }
-                .listStyle(.inset(alternatesRowBackgrounds: true))
+                .listStyle(.inset(alternatesRowBackgrounds: false))
                 .tint(AAColor.tint)
                 .contextMenu(forSelectionType: String.self) { ids in
                     if let id = ids.first, let m = members.first(where: { $0.id == id }) {
@@ -260,6 +275,27 @@ struct BucketsTabView: View {
     }
 }
 
+/// A 24-pt borderless icon button of the Buckets icon bar (help = the spec tooltip / button text).
+private struct BucketIconButton: View {
+    let symbol: String
+    let label: String
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .symbolRenderingMode(.hierarchical)
+                .fontWeight(.regular)
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.borderless)
+        .help(help)
+        .accessibilityLabel(label)
+    }
+}
+
 private struct BucketListRow: View {
     let row: BucketRow
 
@@ -269,7 +305,7 @@ private struct BucketListRow: View {
                 .foregroundStyle(AAColor.tint.opacity(0.8))
                 .font(.system(size: 11))
             Text(row.displayName)
-                .font(.aaMono(AAType.body, weight: .semibold))
+                .font(.aaMono(AAType.body))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: AASpacing.s)
             Text(row.countText)

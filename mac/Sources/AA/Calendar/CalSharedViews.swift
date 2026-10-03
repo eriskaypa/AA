@@ -25,12 +25,13 @@ struct CalPageHeader<Trailing: View>: View {
                 Spacer(minLength: AASpacing.s)
                 trailing()
             }
+            // Narrow panes: the controls flow onto as many lines as they need (never wider than the pane).
             VStack(alignment: .leading, spacing: AASpacing.s) {
                 titleBlock
-                HStack(spacing: AASpacing.m) {
+                CalFlowLayout(spacing: AASpacing.m, lineSpacing: AASpacing.s) {
                     trailing()
-                    Spacer(minLength: 0)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
         .padding(.horizontal, AASpacing.l)
@@ -63,6 +64,57 @@ struct CalPageHeader<Trailing: View>: View {
                         .truncationMode(.tail)
                 }
             }
+        }
+    }
+}
+
+/// Lays its children out left to right and wraps onto further lines when the proposed width runs out (header
+/// controls in narrow panes — nothing is clipped). Each child is offered the full line width, so a `ViewThatFits`
+/// child can fall back to a narrower variant.
+struct CalFlowLayout: Layout {
+    var spacing: CGFloat = AASpacing.m
+    var lineSpacing: CGFloat = AASpacing.s
+
+    private struct Line { var indices: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func lines(_ maxWidth: CGFloat?, _ subviews: Subviews) -> (lines: [Line], sizes: [CGSize]) {
+        let limit = maxWidth ?? .infinity
+        let sizes = subviews.map { $0.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil)) }
+        var out: [Line] = []
+        var cur = Line()
+        for (i, size) in sizes.enumerated() {
+            let needed = cur.indices.isEmpty ? size.width : cur.width + spacing + size.width
+            if !cur.indices.isEmpty && needed > limit {
+                out.append(cur)
+                cur = Line()
+            }
+            cur.width = cur.indices.isEmpty ? size.width : cur.width + spacing + size.width
+            cur.height = max(cur.height, size.height)
+            cur.indices.append(i)
+        }
+        if !cur.indices.isEmpty { out.append(cur) }
+        return (out, sizes)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let (ls, _) = lines(proposal.width, subviews)
+        let width = ls.map(\.width).max() ?? 0
+        let height = ls.map(\.height).reduce(0, +) + lineSpacing * CGFloat(max(0, ls.count - 1))
+        return CGSize(width: min(width, proposal.width ?? width), height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let (ls, sizes) = lines(bounds.width, subviews)
+        var y = bounds.minY
+        for line in ls {
+            var x = bounds.minX
+            for i in line.indices {
+                let size = sizes[i]
+                subviews[i].place(at: CGPoint(x: x, y: y + (line.height - size.height) / 2),
+                                  proposal: ProposedViewSize(width: min(size.width, bounds.width), height: size.height))
+                x += size.width + spacing
+            }
+            y += line.height + lineSpacing
         }
     }
 }
