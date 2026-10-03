@@ -36,14 +36,15 @@ struct FolderBuilderView: View {
             }
             baseLocationPanel
             HSplitView {
-                editorPane.frame(minWidth: 240, maxWidth: .infinity, maxHeight: .infinity)
-                previewPane.frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity)
+                editorPane.frame(minWidth: 240, maxWidth: .infinity, maxHeight: .infinity).background(AAColor.bg)
+                previewPane.frame(minWidth: 220, maxWidth: .infinity, maxHeight: .infinity).background(AAColor.bg)
             }
             .frame(minHeight: 260)
             bottomBar
         }
         .padding(AASpacing.m)
         .frame(minWidth: 640, idealWidth: 820, minHeight: 520, idealHeight: 660)
+        .background(AAColor.bg)
         .onChange(of: text) { _, new in plan = ToolFolderPlan.parse(new) }
     }
 

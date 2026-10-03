@@ -43,6 +43,25 @@ inclusive / +1000 days state), unit-converter (Speed seed and Pressure with 14.7
 Settings ▸ Sync Drive section. Registered sheets: `w-drive.sign-in`, `w-drive.settings`, `w-drive.folder-builder`,
 `w-drive.date-calculator`, `w-drive.unit-converter`.
 
+## Independent audit (2026-10-02)
+
+Clean rebuild (`rm -rf .build`), then every assigned ID re-checked against spec 14, 01 DATA-073/153, 03
+SHELL-010/011/073…080/121/122 and the C# (`GoogleDriveUploader.cs`, `MainWindow.xaml.cs` Drive parts, the three tool
+windows; the 86-unit table diffed programmatically against `UnitConverterWindow.xaml.cs` — names and factors identical).
+
+| Result | Count |
+|---|---|
+| IDs checked | 85 |
+| OK as built | 85 (behaviour, exact strings, persistence) |
+| Fixed in audit | 1 visual defect (below); no functional gaps found |
+| Still missing | 0 |
+
+Visual fix: Folder builder — on macOS 26 the `HSplitView` panes showed a grey rounded band behind the "Folder list" /
+"Preview" headers (both appearances); the panes and the window root now paint `AAColor.bg`, so the bordered editor and
+preview sit on a clean canvas. Re-rendered and checked in light and dark: Folder builder (empty, Example + case merge),
+Date calculator (today; 2026-09-30 → 2027-03-01 inclusive / +1,000 days), Unit converter (Speed seed; Pressure with
+14.7 psi typed), sign-in waiting sheet, Settings ▸ Sync Drive section.
+
 ## Gate
 
 `swift build -j 3 -Xswiftc -warnings-as-errors && swift test -j 3 -Xswiftc -warnings-as-errors` green;
