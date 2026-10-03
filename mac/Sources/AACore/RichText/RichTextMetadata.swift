@@ -1,6 +1,6 @@
-// PLACEHOLDER(W-RICH) — contract: ARCHITECTURE.md §6.7
-// Spec: 05 §XD.3 (RichTextMetadata additions), CONT-165. Compiling stub created by F1; W-RICH replaces this file
-// in place (same shape).
+// Contract: ARCHITECTURE.md §6.7.
+// Spec: 05 §XD.3 (RichTextMetadata additions), CONT-165 (completion source = `context`), 01 §4.11 invariant 1
+// (`sourceHash` lets the editor detect "unchanged → never rewrite").
 import Foundation
 
 /// Stable id of a carried element within one document.
@@ -34,5 +34,16 @@ public struct RichTextMetadata: Sendable, Equatable {
         hasAnyLock = false
         sourceHash = 0
         isPlaceholderResult = false
+    }
+
+    /// FNV-1a (64-bit) over the UTF-8 bytes: stable across launches (unlike `hashValue`), cheap, and equal for equal
+    /// strings — what `sourceHash` holds.
+    public static func hash(of text: String) -> Int {
+        var h: UInt64 = 0xcbf2_9ce4_8422_2325
+        for b in text.utf8 {
+            h ^= UInt64(b)
+            h = h &* 0x0000_0100_0000_01B3
+        }
+        return Int(truncatingIfNeeded: h)
     }
 }
