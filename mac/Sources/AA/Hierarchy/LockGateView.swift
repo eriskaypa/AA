@@ -32,7 +32,7 @@ struct LockGateView: View {
                     .symbolEffect(.bounce, value: error)
                     .accessibilityHidden(true)
                 Text(HierText.lockedTitle(item?.kind ?? ItemKind(rawValue: -1)))
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.aaMono(AAType.title, weight: .bold))
                     .foregroundStyle(AAColor.fg)
                     .multilineTextAlignment(.center)
                 Text(HierText.lockedSubtitle)
@@ -149,7 +149,7 @@ struct ItemLockSheet: View {
                     .accessibilityHidden(true)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(HierText.lockSheetTitle(change: changeMode, itemName: itemName))
-                        .font(.system(size: 15, weight: .bold))
+                        .font(.body.bold())
                         .fixedSize(horizontal: false, vertical: true)
                     Text(HierText.lockSheetPrompt(change: changeMode))
                         .foregroundStyle(AAColor.muted)

@@ -31,6 +31,9 @@ struct HierItemDetail: View {
     let item: HierarchyItem
     @Environment(AppEnvironment.self) private var env
 
+    /// Bumped when the hosted editor must re-load after an app-password session change (HierEditorReload).
+    @State private var editorReload = 0
+
     private var gated: Bool { env.locks.isGated(item) }
     private var detached: Bool { env.store.detachedItemIDs.contains(item.id) }
 
@@ -67,8 +70,8 @@ struct HierItemDetail: View {
             } else {
                 ContainerEditorView(container: item.container,
                                     context: ContainerEditorContext(title: item.name, host: .mainPane(item.kind)))
-                    .id(HierEditorKey(container: ObjectIdentifier(item.container),
-                                      passwordSession: env.passwords.isUnlocked))
+                    .id(HierEditorKey(container: ObjectIdentifier(item.container), reload: editorReload))
+                    .modifier(HierEditorReloadCounter(container: item.container, counter: $editorReload))
             }
         case .relationships:
             HierRelationshipsTab(model: model, item: item)
@@ -93,11 +96,29 @@ struct HierItemDetail: View {
     }
 }
 
-/// The identity of a hosted container editor: the container (ARCH §2.4) and the app-password session, so Tools ▸
-/// Lock Now re-loads the editor of a non-gated item and text-level locks re-render (HIER-056 `RelockCurrent`).
+/// The identity of a hosted container editor: the container (ARCH §2.4) and a re-load counter, so Tools ▸ Lock Now
+/// re-loads the editor of a non-gated item (HIER-056 `RelockCurrent`) while an unlock made by the editor's own
+/// CONT-062 gate keeps the same editor instance — caret, scroll and undo survive (DEVIATIONS 05 D-4).
 struct HierEditorKey: Hashable {
     var container: ObjectIdentifier
-    var passwordSession: Bool
+    var reload: Int
+}
+
+/// Counts the app-password session changes that must re-load a hosted editor (`HierEditorReload`). The body is read
+/// only inside the change handler, so editor saves never re-render the host.
+struct HierEditorReloadCounter: ViewModifier {
+    let container: Container
+    @Binding var counter: Int
+    @Environment(AppEnvironment.self) private var env
+
+    func body(content: Content) -> some View {
+        content.onChange(of: env.passwords.isUnlocked) { was, now in
+            if HierEditorReload.onSessionChange(wasUnlocked: was, isUnlocked: now,
+                                                bodyIsLegacyEncrypted: LegacyBodyCrypto.isEncrypted(container.richTextXaml)) {
+                counter += 1
+            }
+        }
+    }
 }
 
 /// HIER-042 tab order as a centred segmented control.
@@ -196,7 +217,7 @@ struct HierItemHeader: View {
                             .textFieldStyle(.roundedBorder)
                             .font(.aaMono(15, weight: .semibold))
                             .focused($nameFocused)
-                            .onSubmit { model.commitRename() }
+                            .onSubmit { model.commitRename(stillEditing: nameFocused ? item.id : nil) }
                             .accessibilityLabel("Name")
                         lockButtons
                         Button {

@@ -200,10 +200,13 @@ final class HierPageModel {
     }
 
     /// Enter or focus loss: rebuild (re-sort / re-group) and re-select by id — without the selection side effects
-    /// (Q-32: a vessel keeps its sub-tab).
-    func commitRename() {
+    /// (Q-32: a vessel keeps its sub-tab). `stillEditing` is the item whose Name box keeps the focus after Return:
+    /// it stays excluded from the rebuild signature, so later keystrokes re-label the row in place again instead of
+    /// rebuilding (and re-sorting) the sidebar on every key (HIER-025).
+    func commitRename(stillEditing: UUID? = nil) {
         editingNameID = nil
         rebuild()
+        editingNameID = HierRenameState.editingAfterCommit(stillEditing: stillEditing, primary: primaryID)
     }
 
     // MARK: A→Z and expand (HIER-013, HIER-015)
@@ -352,29 +355,5 @@ final class HierPageModel {
         return HierarchySelectionState(primary: p?.id, count: selection.count,
                                        gated: p.map { env.locks.isGated($0) } ?? false,
                                        detached: p.map { store.detachedItemIDs.contains($0.id) } ?? false)
-    }
-}
-
-/// What the sidebar must rebuild on: every structural change of the kind's collection and its groups, made from any
-/// page or window (HIER-125, §8 Q-07). The name being typed in the page's own Name box is left out (HIER-025).
-struct HierStructureSignature: Equatable {
-    var generation: Int
-    var ids: [UUID]
-    var groupIDs: [UUID?]
-    var names: [String]
-    var tags: [[String]]
-    var groups: [String]
-    var sortAZ: Bool
-
-    @MainActor
-    init(store: AppStore, kind: ItemKind, editingNameID: UUID?, includeTags: Bool) {
-        let items = store.items(of: kind)
-        generation = store.generation
-        ids = items.map(\.id)
-        groupIDs = items.map(\.groupId)
-        names = items.map { $0.id == editingNameID ? "" : $0.name }
-        tags = includeTags ? items.map(\.tags) : []
-        groups = store.groups(for: kind).map { "\($0.id.netString)|\($0.name)" }
-        sortAZ = HierUiState.sortAZ(store.data.ui, kind: kind)
     }
 }

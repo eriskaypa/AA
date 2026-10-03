@@ -55,14 +55,16 @@ struct HierEquipmentSpecifics: View {
         } content: {
             Table(equipment.components, selection: $selectedComponent) {
                 TableColumn(HierText.nameColumn) { (c: Component) in
-                    Text(c.name).lineLimit(1).truncationMode(.tail)
+                    Text(c.name).font(.aaMono(AAType.body)).lineLimit(2).truncationMode(.tail)
                 }
-                .width(min: 120, ideal: 260)
+                .width(min: 120, ideal: 220)
                 TableColumn(HierText.notesColumn) { (c: Component) in
-                    Text(c.notes).foregroundStyle(AAColor.muted).lineLimit(1).truncationMode(.tail)
+                    Text(c.notes).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
+                        .lineLimit(2).truncationMode(.tail)
                 }
-                .width(min: 120, ideal: 360)
+                .width(min: 120)
             }
+            .alternatingRowBackgrounds(.disabled)
             .contextMenu(forSelectionType: UUID.self) { ids in
                 if let id = ids.first {
                     Button(HierText.edit) { editComponent(id) }
@@ -200,9 +202,8 @@ struct HierComponentEditorSheet: View {
         VStack(alignment: .leading, spacing: AASpacing.m) {
             if let component = resolved?.component {
                 Text(HierText.componentEditorTitle(component.name))
-                    .font(.system(size: 15, weight: .bold))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                    .font(.aaMono(15, weight: .bold))
+                    .fixedSize(horizontal: false, vertical: true)
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: AASpacing.s, verticalSpacing: 6) {
                     GridRow {
                         Text(HierText.nameLabel).foregroundStyle(AAColor.muted).frame(width: 100, alignment: .trailing)

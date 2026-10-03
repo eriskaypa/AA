@@ -67,7 +67,7 @@ struct ItemWindowView: View {
     private var orphaned: some View {
         VStack(alignment: .leading, spacing: AASpacing.m) {
             HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
-                Text(lastKind.name).font(.aaMono(AAType.body, weight: .bold)).foregroundStyle(AAColor.accent)
+                AAKindBadge(kind: lastKind)
                 Label(HierText.orphaned, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(AAColor.Status.dueSoon)
                     .fixedSize(horizontal: false, vertical: true)
@@ -89,32 +89,49 @@ struct HierItemWindowContent: View {
     @Environment(AppEnvironment.self) private var env
     @State private var tagsText = ""
     @FocusState private var tagsFocused: Bool
+    @State private var editorReload = 0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: AASpacing.m) {
-            HStack(alignment: .center, spacing: AASpacing.s) {
-                Circle().fill(AAColor.kind(item.kind)).frame(width: 9, height: 9)
-                    .overlay(Circle().strokeBorder(AAColor.border, lineWidth: 0.5))
-                Text(item.kind.name).font(.aaMono(AAType.body, weight: .bold)).foregroundStyle(AAColor.accent)
-                if item.isLockProtected {
-                    Image(systemName: "lock.fill").imageScale(.small).foregroundStyle(.secondary)
-                        .help("Password-protected")
+        VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: AASpacing.m) {
+                // HIER-111 kind line: the shared kind badge on the fields' leading edge (the title already reads
+                // "{Kind} — {name}").
+                HStack(alignment: .center, spacing: AASpacing.s) {
+                    AAKindBadge(kind: item.kind)
+                    if item.isLockProtected {
+                        Image(systemName: "lock.fill")
+                            .imageScale(.small)
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(.secondary)
+                            .help("Password-protected")
+                            .accessibilityLabel("Password-protected")
+                    }
+                    Spacer(minLength: 0)
                 }
-                Spacer()
+                .padding(.leading, HierItemWindowFields.labelWidth + AASpacing.s)
+                HierItemWindowFields(name: nameBinding, description: descriptionBinding, tags: $tagsText,
+                                     tagsFocused: $tagsFocused)
+                ContainerEditorView(container: item.container,
+                                    context: ContainerEditorContext(title: item.name, host: .itemWindow(item.id)))
+                    .id(HierEditorKey(container: ObjectIdentifier(item.container), reload: editorReload))
+                    .modifier(HierEditorReloadCounter(container: item.container, counter: $editorReload))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            HierItemWindowFields(name: nameBinding, description: descriptionBinding, tags: $tagsText,
-                                 tagsFocused: $tagsFocused)
-            ContainerEditorView(container: item.container,
-                                context: ContainerEditorContext(title: item.name, host: .itemWindow(item.id)))
-                .id(HierEditorKey(container: ObjectIdentifier(item.container),
-                                  passwordSession: env.passwords.isUnlocked))
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            Text(HierText.itemWindowFooter)
-                .font(.aaMono(AAType.caption))
-                .foregroundStyle(AAColor.muted)
-                .fixedSize(horizontal: false, vertical: true)
+            .padding([.horizontal, .top], AASpacing.l)
+            .padding(.bottom, AASpacing.m)
+            // Footer bar (design rule 7/11): Divider + the help note.
+            Divider()
+            HStack(spacing: AASpacing.s) {
+                Image(systemName: "info.circle")
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(AAColor.muted)
+                AAHelpText(HierText.itemWindowFooter)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, AASpacing.l)
+            .padding(.vertical, AASpacing.s)
+            .frame(minHeight: 44)
         }
-        .padding(AASpacing.l)
         .onAppear { tagsText = TagParser.display(item.tags) }
         .onChange(of: tagsText) { _, text in
             guard tagsFocused, HierPageOps.setTags(item, fromText: text) else { return }
@@ -175,8 +192,12 @@ struct HierItemWindowFields: View {
         }
     }
 
+    /// The fixed label column (design rule 6); the kind badge above the fields aligns with the fields' edge.
+    static let labelWidth: CGFloat = 90
+
     private func label(_ text: String) -> some View {
-        Text(text).foregroundStyle(AAColor.muted).frame(width: 90, alignment: .trailing).gridColumnAlignment(.trailing)
+        Text(text).font(.aaMono(AAType.body)).foregroundStyle(AAColor.muted)
+            .frame(width: Self.labelWidth, alignment: .trailing).gridColumnAlignment(.trailing)
     }
 }
 
@@ -190,7 +211,8 @@ struct HierMultilineField: View {
             .scrollContentBackground(.hidden)
             .padding(.horizontal, 3)
             .padding(.vertical, 2)
-            .background(AAColor.panelAlt, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(AAColor.border, lineWidth: 1))
+            .background(AAColor.panelAlt, in: RoundedRectangle(cornerRadius: AARadius.control + 1, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: AARadius.control + 1, style: .continuous)
+                .strokeBorder(AAColor.border, lineWidth: 1))
     }
 }
