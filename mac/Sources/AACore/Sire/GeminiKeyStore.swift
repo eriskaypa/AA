@@ -48,7 +48,8 @@ import Foundation
     /// import never runs again on this Mac.
     public func importFromSettingsOnce() {
         guard !preferences.bool(Self.importedKey, default: false) else { return }
-        if let legacy = settings.values.geminiApiKey, !NetText.isBlank(legacy), !hasKey {
+        guard let legacy = settings.values.geminiApiKey, !NetText.isBlank(legacy) else { return }   // nothing to import yet
+        if !hasKey {
             do { try setKey(legacy) } catch { return }                   // retry on the next launch
         }
         preferences.set(true, Self.importedKey)

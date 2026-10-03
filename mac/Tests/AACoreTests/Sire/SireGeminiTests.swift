@@ -208,6 +208,13 @@ final class SireStubURLProtocol: URLProtocol, @unchecked Sendable {
         #expect(try env.folder.readText("settings-under-test.json") == original)
     }
 
+    @Test func noLegacyKeyLeavesTheImportPending() throws {
+        let env = try SireKeyEnv(settingsJSON: #"{"DarkMode":false}"#)
+        env.store.importFromSettingsOnce()
+        #expect(!env.prefs.bool(GeminiKeyStore.importedKey, default: false))
+        #expect(env.store.key() == nil)
+    }
+
     @Test func importDoesNotOverwriteAnExistingKey() throws {
         let env = try SireKeyEnv(settingsJSON: #"{"GeminiApiKey":"old"}"#)
         try env.store.setKey("mac-key")

@@ -55,6 +55,7 @@ public enum SireFlowRenderer {
             if let bg = p.background {
                 let block = NSTextBlock()
                 block.backgroundColor = color(bg)
+                block.setContentWidth(100, type: .percentageValueType)
                 let pad = p.padding ?? SireThickness(0, 0, 0, 0)
                 block.setWidth(CGFloat(pad.left), type: .absoluteValueType, for: .padding, edge: .minX)
                 block.setWidth(CGFloat(pad.top), type: .absoluteValueType, for: .padding, edge: .minY)
