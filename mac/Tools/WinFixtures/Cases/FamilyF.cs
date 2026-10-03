@@ -29,7 +29,7 @@ internal static class FamilyF
         yield return new CaseDef
         {
             Id = "X01.rel", Family = F, Normative = "should", Compare = "json-semantic",
-            Title = "AppRepository relations and lookups (02 T-REL-1…11)", Settles = new[] { "02 §7.1" },
+            Title = "AppRepository relations and lookups (02 T-REL-1…8, 10, 11; T-REL-9 is X01.purge)", Settles = new[] { "02 §7.1" },
             Run = r =>
             {
                 var o = new JsonObject();
@@ -50,6 +50,23 @@ internal static class FamilyF
                   var repo = new AppRepository(d); repo.TrashHierarchyItem(p);
                   o["T-REL-7"] = new JsonObject { ["label"] = repo.Label(G(4)), ["related"] = Names(repo.RelatedItems(e)) }; }
                 { var d = new AppData(); d.Tasks.Add(MkTask(3, "Pump")); o["T-REL-8"] = new AppRepository(d).Label(G(3)); }
+                { var d = new AppData(); d.Equipment.Add(Equip(3, "Equipment Z")); d.Tasks.Add(MkTask(3, "Task Z"));
+                  o["T-REL-10"] = new AppRepository(d).FindById(G(3))?.Name; }
+                { var d = new AppData(); var t = MkTask(3, "T"); t.IsJob = true; var s = MkTask(5, "S"); s.IsJob = true; s.Subtasks.Add(MkTask(6, "SS")); t.Subtasks.Add(s); d.Tasks.Add(t);
+                  var p = Proc(4, "P"); var s1 = Step(71, "s1"); s1.IsJob = true; p.Steps.Add(s1); p.Steps.Add(Step(72, "s2")); d.Procedures.Add(p);
+                  var crew = new CrewMember { Id = G(11) }; var cs = Step(12, "cs"); cs.IsJob = true; crew.Checklist.Add(cs); d.Crew.Add(crew);
+                  o["T-REL-11"] = new JsonArray(new AppRepository(d).AllJobs().Select(j => (JsonNode?)j.JobName).ToArray()); }
+                r.Json("result", "relations", o);
+            },
+        };
+
+        yield return new CaseDef
+        {
+            Id = "X01.purge", Family = F, Normative = "should", Compare = "json-semantic",
+            Title = "AppRepository.PurgeReferences leaves nested subtasks' RelatedIds (02 T-REL-9)", Settles = new[] { "02 §7.1", "02 Q-3" },
+            Run = r =>
+            {
+                var o = new JsonObject();
                 { var d = new AppData(); var dd = G(77);
                   var e = Equip(1, "E"); e.RelatedIds.Add(dd); e.ProcedureIds.Add(dd); d.Equipment.Add(e);
                   var p = Proc(4, "P"); var s = Step(7, "s"); s.EquipmentIds.Add(dd); p.Steps.Add(s); d.Procedures.Add(p);
@@ -58,13 +75,8 @@ internal static class FamilyF
                   new AppRepository(d).PurgeReferences(dd);
                   o["T-REL-9"] = new JsonObject { ["E.RelatedIds"] = Ids(e.RelatedIds), ["E.ProcedureIds"] = Ids(e.ProcedureIds), ["step.EquipmentIds"] = Ids(s.EquipmentIds),
                                                   ["crewFile.LinkedItemIds"] = Ids(f.LinkedItemIds), ["subtask.RelatedIds"] = Ids(sub.RelatedIds) }; }
-                { var d = new AppData(); d.Equipment.Add(Equip(3, "Equipment Z")); d.Tasks.Add(MkTask(3, "Task Z"));
-                  o["T-REL-10"] = new AppRepository(d).FindById(G(3))?.Name; }
-                { var d = new AppData(); var t = MkTask(3, "T"); t.IsJob = true; var s = MkTask(5, "S"); s.IsJob = true; s.Subtasks.Add(MkTask(6, "SS")); t.Subtasks.Add(s); d.Tasks.Add(t);
-                  var p = Proc(4, "P"); var s1 = Step(71, "s1"); s1.IsJob = true; p.Steps.Add(s1); p.Steps.Add(Step(72, "s2")); d.Procedures.Add(p);
-                  var crew = new CrewMember { Id = G(11) }; var cs = Step(12, "cs"); cs.IsJob = true; crew.Checklist.Add(cs); d.Crew.Add(crew);
-                  o["T-REL-11"] = new JsonArray(new AppRepository(d).AllJobs().Select(j => (JsonNode?)j.JobName).ToArray()); }
-                r.Json("result", "relations", o);
+                r.Json("result", "purge", o);
+                r.DivergentRecordOnly("DECISIONS 02 Q-3: the Mac widens PurgeReferences to nested subtasks (P2; asserted by F2's tests)");
             },
         };
 
