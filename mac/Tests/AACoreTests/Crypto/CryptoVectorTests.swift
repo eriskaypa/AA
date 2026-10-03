@@ -235,6 +235,88 @@ private enum CryptoFixture {
         #expect(ps.verify("newpass2"))
     }
 
+    // 01 §8.1 D-5 fix: changing the password first migrates every live legacy `enc:` body it can decrypt with the
+    // OLD salt (typed current password, then the session password), saves the data file, then re-salts.
+    @Test func setPasswordMigratesLegacyBodiesBeforeResalting() throws {
+        let salt = CryptoFixture.saltB64
+        let mine = LegacyBodyCrypto.encrypt("<Section>mine</Section>", password: "correct horse", saltBase64: salt)
+        let foreign = LegacyBodyCrypto.encrypt("<Section>other</Section>", password: "other pw", saltBase64: salt)
+        let data = AppData()
+        let e = Equipment(name: "Pump")
+        e.container.richTextXaml = mine
+        e.container.isLocked = true
+        let comp = Component(name: "Seal", container: Container(richTextXaml: foreign))
+        e.components.append(comp)
+        let t = TaskItem(name: "Plain")
+        t.container.richTextXaml = "<Section>plain</Section>"
+        data.equipment.append(e); data.tasks.append(t)
+        let made = StoreFactory.make(data: data)
+        made.dataStore.settings.setPassword(hash: CryptoFixture.correctHorseHash, salt: salt)
+        let ps = PasswordService(settings: made.dataStore.settings)
+
+        #expect(ps.undecryptableLegacyBodyCount(in: made.store, current: "correct horse") == 1)
+        #expect(ps.undecryptableLegacyBodyCount(in: made.store, current: "redemption") == 2)   // master: no key (D-4)
+        let r = try ps.setPassword("newpass1", current: "correct horse", migratingLegacyBodiesIn: made.store)
+        #expect(r == LegacyBodyMigration(migrated: 1, undecryptable: 1))
+        #expect(e.container.richTextXaml == "<Section>mine</Section>")
+        #expect(!e.container.isLocked)
+        #expect(comp.container.richTextXaml == foreign)                     // kept (never replaced by "")
+        #expect(t.container.richTextXaml == "<Section>plain</Section>")
+        #expect(ps.verify("newpass1") && settings(ps) != salt)
+        let saved = made.dataStore.load()                                   // written before the re-salt
+        #expect(saved.equipment.first?.container.richTextXaml == "<Section>mine</Section>")
+        #expect(LegacyBodyMigration.orphanWarning(count: 0) == nil)
+        #expect(LegacyBodyMigration.orphanWarning(count: 1)?.hasPrefix("1 note encrypted by an older AA build") == true)
+        #expect(LegacyBodyMigration.orphanWarning(count: 2)?.contains("they can no longer be opened") == true)
+    }
+
+    // D-5: the session password is a candidate too (current typed as the master password)
+    @Test func setPasswordMigratesWithSessionPassword() throws {
+        let salt = CryptoFixture.saltB64
+        let data = AppData()
+        let v = Vessel(name: "MV X")
+        v.container.richTextXaml = LegacyBodyCrypto.encrypt("<Section>v</Section>", password: "correct horse", saltBase64: salt)
+        data.vessels.append(v)
+        let made = StoreFactory.make(data: data)
+        made.dataStore.settings.setPassword(hash: CryptoFixture.correctHorseHash, salt: salt)
+        let ps = PasswordService(settings: made.dataStore.settings)
+        #expect(ps.unlock("correct horse"))
+        let r = try ps.setPassword("newpass1", current: "redemption", migratingLegacyBodiesIn: made.store)
+        #expect(r == LegacyBodyMigration(migrated: 1, undecryptable: 0))
+        #expect(v.container.richTextXaml == "<Section>v</Section>")
+    }
+
+    // D-5: a migration that cannot be saved leaves the password and salt unchanged
+    @Test func setPasswordKeepsSaltWhenMigrationCannotBeSaved() throws {
+        let salt = CryptoFixture.saltB64
+        let data = AppData()
+        let e = Equipment(name: "Pump")
+        let blob = LegacyBodyCrypto.encrypt("<Section>mine</Section>", password: "correct horse", saltBase64: salt)
+        e.container.richTextXaml = blob
+        data.equipment.append(e)
+        let made = StoreFactory.make(data: data)
+        made.dataStore.settings.setPassword(hash: CryptoFixture.correctHorseHash, salt: salt)
+        let ps = PasswordService(settings: made.dataStore.settings)
+        made.store.suspendSaving = true
+        #expect(throws: PasswordError.self) {
+            try ps.setPassword("newpass1", current: "correct horse", migratingLegacyBodiesIn: made.store)
+        }
+        #expect(e.container.richTextXaml == blob)                           // nothing touched
+        #expect(ps.verify("correct horse") && !ps.verify("newpass1") && settings(ps) == salt)
+        made.store.suspendSaving = false
+        made.store.pauseWrites(reason: .externalChange)
+        #expect(throws: PasswordError.self) {
+            try ps.setPassword("newpass1", current: "correct horse", migratingLegacyBodiesIn: made.store)
+        }
+        #expect(settings(ps) == salt)
+        // Without a store (no data to migrate) the change goes through as before.
+        try ps.setPassword("newpass1", current: "correct horse")
+        #expect(settings(ps) != salt)
+        #expect(PasswordError.legacyBodiesNotSaved("x").message.hasPrefix("The password was not changed."))
+    }
+
+    private func settings(_ ps: PasswordService) -> String? { ps.settings.values.passwordSalt }
+
     // TV: 04 §7.8 lock dialog validation (also DATA-080)
     @Test func validation() {
         #expect(PasswordService.validationMessage(password: "", confirm: "") == "Password cannot be empty.")

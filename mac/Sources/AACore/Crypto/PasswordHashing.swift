@@ -38,13 +38,19 @@ public enum LegacyBodyCrypto {
     /// nil on any failure — never guesses (wrong password, tampered data, short blob, bad Base64).
     public static func decrypt(_ blob: String, password: String, saltBase64: String) -> String? {
         guard isEncrypted(blob), let salt = NetBase64.decode(saltBase64), !salt.isEmpty else { return nil }
+        return decrypt(blob, keys: keys(password: password, salt: salt))
+    }
+
+    /// `decrypt` with pre-derived keys (the D-5 bulk migration derives once per candidate password).
+    static func decrypt(_ blob: String, keys k: (enc: Data, mac: Data)) -> String? {
+        guard isEncrypted(blob) else { return nil }
         guard let combined = NetBase64.decode(String(blob.utf16.dropFirst(prefix.utf16.count))!),
               combined.count >= ivSize + macSize + 16 else { return nil }
         let bytes = [UInt8](combined)
         let iv = Data(bytes[0..<ivSize])
         let tag = Data(bytes[(bytes.count - macSize)...])
         let ct = Data(bytes[ivSize..<(bytes.count - macSize)])
-        let (enc, mac) = keys(password: password, salt: salt)
+        let (enc, mac) = k
         guard ConstantTime.equals(HMACSHA256.mac(iv + ct, key: mac), tag) else { return nil }
         guard let plain = try? AESCBC.decrypt(ct, key: enc, iv: iv) else { return nil }
         return decodeWithBOMDetection(plain)

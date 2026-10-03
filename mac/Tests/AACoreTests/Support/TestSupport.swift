@@ -34,6 +34,41 @@ final class TempFolder: @unchecked Sendable {
     func exists(_ name: String) -> Bool { FileManager.default.fileExists(atPath: file(name).path) }
 }
 
+/// A uniquely named UserDefaults suite that leaves nothing behind. `removePersistentDomain(forName:)` alone empties
+/// the domain but cfprefsd keeps an empty `~/Library/Preferences/<suite>.plist`, so `remove()` also synchronises and
+/// deletes that file (only this suite's own, UUID-named file). Use `let t = TempDefaults(); defer { t.remove() }`
+/// (or keep it as a stored property): `remove()` is idempotent and also runs from `deinit`.
+final class TempDefaults: @unchecked Sendable {
+    let suite: String
+    let defaults: UserDefaults
+    private let lock = NSLock()
+    private var removed = false
+
+    init(_ label: String = "aa-tests") {
+        suite = "\(label)-\(UUID().uuidString)"
+        defaults = UserDefaults(suiteName: suite)!
+    }
+
+    /// `MacPreferences` over this suite.
+    var preferences: MacPreferences { MacPreferences(defaults: defaults) }
+
+    /// `~/Library/Preferences/<suite>.plist`.
+    var plistURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Preferences/\(suite).plist")
+    }
+
+    func remove() {
+        lock.lock(); defer { lock.unlock() }
+        guard !removed else { return }
+        removed = true
+        defaults.removePersistentDomain(forName: suite)
+        CFPreferencesAppSynchronize(suite as CFString)
+        try? FileManager.default.removeItem(at: plistURL)
+    }
+
+    deinit { remove() }
+}
+
 /// Test fixtures under `Tests/AACoreTests/Fixtures/` (copied whole into the test bundle).
 enum Fixtures {
     static var root: URL {
