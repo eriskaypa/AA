@@ -153,6 +153,8 @@ struct GoldHarnessManifestTests {
         let aa = try JSONParser.parse(#"{"exception":{"type":"System.IO.InvalidDataException","message":"The bundle has no data.json.","aaAuthored":true}}"#)
         #expect(GoldJSONSemantic.compare(golden: aa, actual: try JSONParser.parse(#"{"exception":{"type":"System.IO.InvalidDataException","message":"The bundle has no data.json.","aaAuthored":true}}"#)) == nil)
         #expect(GoldJSONSemantic.compare(golden: aa, actual: try JSONParser.parse(#"{"exception":{"type":"System.IO.InvalidDataException","message":"No data.json.","aaAuthored":true}}"#)) != nil)
+        // The Mac has no .NET type names: an AA-authored message alone is enough.
+        #expect(GoldJSONSemantic.compare(golden: aa, actual: try JSONParser.parse(#"{"exception":{"message":"The bundle has no data.json.","aaAuthored":true}}"#)) == nil)
     }
 
     @Test("reproducer lookup: exact id, the `w` twin, the group, the family prefix")

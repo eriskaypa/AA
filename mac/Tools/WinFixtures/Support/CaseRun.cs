@@ -85,7 +85,8 @@ internal sealed class CaseRun
         // A25 also stores the data folder upper-cased (case-insensitive file systems) — a W-GOLD extension token.
         if (dataDir.ToUpperInvariant() != dataDir) Mask.Literal(dataDir.ToUpperInvariant(), "%%DATADIRUPPER%%");
         try { Mask.QuotedLiteral(Environment.MachineName, "%%MACHINE%%"); } catch { }
-        Mask.Literal(Path.GetTempPath().TrimEnd('/', '\\'), "%%TEMP%%");
+        // %%TEMP%% is registered only by the cases that put a scratch path into an output (FamilyC.Scratch): a global
+        // /tmp literal would also hit ordinary values such as the S02 FolderBuilderBase "/tmp/fb".
     }
 
     public string Id => Platform == RunPlatform.Windows && Def.Runs is Runs.Both or Runs.Windows ? Def.Id + "w" : Def.Id;
@@ -120,10 +121,12 @@ internal sealed class CaseRun
         return rel;
     }
 
+    /// <summary>A text input: asserted token-free, then masked like an output (a data-folder path in a settings
+    /// precondition becomes %%DATADIR%%; the Swift side substitutes its own folder back).</summary>
     public string InputFile(string name, string content, string key = "file")
     {
         Masker.AssertNoToken(content, name);
-        return InputFile(name, Fx.Utf8(content), key);
+        return InputFile(name, Fx.Utf8(Mask.Apply(content)), key);
     }
 
     /// <summary>Reads an authored input (committed under inputs/, never written by the generator).</summary>

@@ -64,7 +64,7 @@ internal static class FamilyB
         {
             AllSetters();
             var text = File.ReadAllText(DataStore.SettingsFile).Replace($"\"PasswordSalt\":\"{Salt}\"", "\"PasswordSalt\":\"%%%\"");
-            Precondition(r, text, assertNoToken: false);
+            Precondition(r, text);
             DataStore.LoadSettings();
             r.Json("state.load", "state-load", Dump(), mac: true);
             DataStore.SetDarkMode(false);
@@ -83,7 +83,7 @@ internal static class FamilyB
             AllSetters();
             var text = File.ReadAllText(DataStore.SettingsFile);
             File.WriteAllBytes(DataStore.SettingsFile, new byte[] { 0xEF, 0xBB, 0xBF }.Concat(Fx.Utf8(text)).ToArray());
-            r.InputFile("S07.input.bin", File.ReadAllBytes(DataStore.SettingsFile));
+            r.InputFile("S07.input.bin", new byte[] { 0xEF, 0xBB, 0xBF }.Concat(Fx.Utf8(r.Mask.Apply(text))).ToArray());
             DataStore.LoadSettings();
             r.Json("state.load", "state-load", Dump(), mac: true);
             Finish(r);
@@ -157,11 +157,11 @@ internal static class FamilyB
         DataStore.SetSharedSaveFile("/Volumes/share/aa-shared.zip");
     }
 
-    private static void Precondition(CaseRun r, string text, bool assertNoToken = true)
+    /// <summary>Writes the precondition file and records it (masked: a data-folder path becomes %%DATADIR%%).</summary>
+    private static void Precondition(CaseRun r, string text)
     {
-        if (assertNoToken) Masker.AssertNoToken(text, r.Id);
         File.WriteAllText(DataStore.SettingsFile, text, Fx.Utf8NoBom);
-        r.InputFile($"{r.Id}.input.json", Fx.Utf8(text));
+        r.InputFile($"{r.Id}.input.json", text);
     }
 
     /// <summary>The state dump (GF.4.7).</summary>

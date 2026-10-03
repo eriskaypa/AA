@@ -393,10 +393,12 @@ enum GoldJSONSemantic {
             }
             return nil
         case (.object(var g), .object(var a)):
-            // GF.4.7: exception messages (and .NET type names) are compared only when the text is written in AA's
-            // own source (`aaAuthored`); a framework exception only has to be an exception on both sides.
-            if g["aaAuthored"]?.boolValue == false {
-                for k in ["type", "message"] { _ = g.removeValue(forKey: k); _ = a.removeValue(forKey: k) }
+            // GF.4.7: exception messages are compared only when the text is written in AA's own source
+            // (`aaAuthored`); a framework exception only has to be an exception on both sides.
+            // .NET exception type names have no Mac counterpart: dropped whenever the object is an exception shape.
+            if let authored = g["aaAuthored"]?.boolValue {
+                _ = g.removeValue(forKey: "type"); _ = a.removeValue(forKey: "type")
+                if !authored { _ = g.removeValue(forKey: "message"); _ = a.removeValue(forKey: "message") }
                 _ = g.removeValue(forKey: "aaAuthored"); _ = a.removeValue(forKey: "aaAuthored")
             }
             let missing = g.keys.filter { !a.containsKey($0) }
