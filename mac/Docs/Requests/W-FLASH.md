@@ -27,6 +27,7 @@ basename when it is a known owner id), e.g. extend the first pattern to
 `Docs/Requests/*.md|Docs/Deviations/*.md|Docs/Progress/*.md)`.
 Why: the lead's ruling on REQ-F1-01 has every wave agent keep `Docs/Progress/<agent-id>.md`, but the script reports
 it as "unowned path (not in OWNERSHIP.md §2)", so committing the file turns the gate red.
-Workaround in place: `Docs/Progress/W-FLASH.md` is written in the worktree but NOT committed (the gate must stay green);
-its counts are repeated in the final report (82 IDs: 81 done, FLASH-133 not applicable per DECISIONS 13, 0 remaining).
-Commit it (or fold it into `Docs/PROGRESS.md`) once the script accepts the path.
+Workaround in place: the script also rejects the file while it is merely untracked, so the progress record is kept
+outside the repository (the session scratchpad, `W-FLASH-progress.md`) and its counts are repeated in the final report:
+82 feature IDs — 81 done, 1 not applicable (FLASH-133, DECISIONS 13: no screen-capture receive in v1), 0 remaining.
+Add `Docs/Progress/W-FLASH.md` from it once the script accepts the path.
