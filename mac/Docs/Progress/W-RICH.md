@@ -64,3 +64,18 @@ gate green (593 tests in the package).
 
 Post-merge (Stage V): §7.7 item 10 (every Mac output loads in Windows `TextRange.Load`) needs the W-GOLD Windows
 harness; the editor behaviours of §7.8 are W-CONT's.
+
+## Stage V round 2 (FIX2-W-RICH)
+
+Counts: findings **1** (V2-J3 "Pasting a list or table into a non-empty paragraph breaks its structure"); W-RICH part
+done **1**; remaining in other owners **2** (W-CONT paste pipeline, W-SIRE `sirePaste`: cross-owner requests).
+
+| Finding | IDs | W-RICH change | Still open (owner) |
+|---|---|---|---|
+| HTML / own-XAML / RTF list or table pasted into a non-empty paragraph lost its first item or cell to that paragraph (`Introa`, `IntroOne`, `Intror1`); a table pasted at the end of a note had no paragraph after it, so Return and typing stayed in the last cell | CONT-035/036/037, CONT-161, §6.4 | Verified `XamlReader.insertFragment(_:into:replacing:base:)` gives the WPF shape for every journey case (the defect is that nothing called it). Added `insertFragment(attributed:into:replacing:base:)` for RTF / RTFD: writes the sanitised text to XAML (native `NSTextTable` / `NSTextList` → Table / List, fresh element ids) and inserts it the same way; a trailing paragraph mark keeps its break (RICH-I14). Both share one core (`insertBlocks`) | W-CONT: route `EditorController.paste(from:type:)` `.aaXaml` / `.html` / RTF / RTFD through these inside one undo group after the lock check; W-SIRE: `SireInsertionTextView.sirePaste` |
+
+New tests: `RichPasteStructureTests` (6) — the verifier's journeys `pastedTableAtEnd`, `pasteStructureMidParagraph`,
+`copyPasteOwnXamlList`, `rtfTablePaste` and `htmlTablePasteThroughController` at the W-RICH level (real `NSTextView`
+Return + typing after a pasted table), RTF paragraph breaks, a pasted copy of a table staying a separate table.
+The controller-level tests (`V2J3ControllerTests`) need `"AA"` in AACoreTests' dependencies (F1, `Package.swift`) or a
+home in W-CONT's tests; requested.
