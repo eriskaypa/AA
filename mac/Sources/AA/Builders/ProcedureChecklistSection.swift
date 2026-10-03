@@ -11,13 +11,20 @@ import AACore
 
 struct ProcedureChecklistSection: View {
     let procedureID: UUID
+    /// A checklist step to select and scroll to after a navigation (search hit, quick switcher, Calendar step row —
+    /// DECISIONS 02 Q-11). The section consumes it (sets it back to nil) once honoured. ARCH §7.7 as amended by
+    /// DECISIONS "Contract amendments (post-wave)" (REQ-W-HIER-02).
+    @Binding var revealStepID: UUID?
 
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dialogs) private var dialogs
     @State private var selection: Set<UUID> = []
     @State private var busy = false
 
-    init(procedureID: UUID) { self.procedureID = procedureID }
+    init(procedureID: UUID, revealStepID: Binding<UUID?> = .constant(nil)) {
+        self.procedureID = procedureID
+        self._revealStepID = revealStepID
+    }
 
     private var procedure: Procedure? { env.store.item(id: procedureID) as? Procedure }
 
@@ -121,6 +128,23 @@ struct ProcedureChecklistSection: View {
 
     /// BUILD-031 / HIER-093 grid.
     private func grid(_ rows: [BuilderStepGridRow]) -> some View {
+        ScrollViewReader { proxy in
+            table(rows)
+                .onAppear { revealStep(proxy) }
+                .onChange(of: revealStepID) { _, _ in revealStep(proxy) }
+        }
+    }
+
+    /// DECISIONS 02 Q-11: a navigation whose child is one of this procedure's steps selects and reveals that row.
+    private func revealStep(_ proxy: ScrollViewProxy) {
+        guard let id = revealStepID else { return }
+        revealStepID = nil
+        guard procedure?.steps.contains(where: { $0.id == id }) == true else { return }
+        selection = [id]
+        DispatchQueue.main.async { proxy.scrollTo(id, anchor: .center) }
+    }
+
+    private func table(_ rows: [BuilderStepGridRow]) -> some View {
         Table(rows, selection: $selection) {
             TableColumn("Done") { row in
                 Toggle("", isOn: Binding(get: { row.done }, set: { setDone(row.id, $0) }))

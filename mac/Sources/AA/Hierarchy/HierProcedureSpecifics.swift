@@ -69,14 +69,14 @@ struct HierProcedureSpecifics: View {
             .padding(.horizontal, AASpacing.l)
             .padding(.vertical, AASpacing.m)
             Divider()
-            ProcedureChecklistSection(procedureID: procedure.id)
+            // DECISIONS 02 Q-11: a navigated step is selected by W-BUILD's grid, which consumes the request.
+            ProcedureChecklistSection(procedureID: procedure.id,
+                                      revealStepID: Binding(get: { model.pendingChildID },
+                                                            set: { model.pendingChildID = $0 }))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onAppear {
             durationText = String(procedure.durationMinutes)
-            // The step grid is W-BUILD's ProcedureChecklistSection, whose contract takes no child to select
-            // (REQ-W-HIER-02): the Checklist tab is fronted and the request is consumed here.
-            model.pendingChildID = nil
         }
         .onChange(of: procedure.durationMinutes) { _, v in
             if HierDuration.parse(durationText) != v { durationText = String(v) }
