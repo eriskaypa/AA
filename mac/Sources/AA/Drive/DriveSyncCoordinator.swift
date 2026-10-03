@@ -169,7 +169,8 @@ enum DriveIndicatorState: Equatable {
     }
 
     func checkRemoteNewer(interactive: Bool, dialogs: DialogPresenter?) async {
-        guard let env, env.mainLoaded else { return }
+        // DATA-174: a read-only copy never loads from Drive (the menu row and Settings button are disabled too).
+        guard let env, env.mainLoaded, !DriveActions.isWriteGated(env) else { return }
         // Mac addition (14 §6.5, Q-18): a background check never overlaps a push or another check.
         if !interactive && (inFlight.contains(.check) || inFlight.contains(.push)) { return }
         if interactive && inFlight.contains(.check) { return }

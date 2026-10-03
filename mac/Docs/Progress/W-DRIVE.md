@@ -29,12 +29,13 @@ Vector home: 14 §7.7 smart import — written, gated on `.wPersist` (post-merge
   formatting), date calculator (7.4 difference and add tables, amount validation, de-DE, Q-16), folder plan (7.3 parse
   table, headers, sanitise, Q-15, create outcomes incl. the file-in-the-way case).
 - `GoogleDrive/`: 7.1 names, 7.2 restorable table, 7.6-1…8 (best remote in two zones, non-bundles, no-stamp download,
-  decline memory, own push, "o" round trip, query strings, HasToken/NeedsReconsent), 7.8 AgeVerdict, synced-folder
+  decline memory, own push, "o" round trip, query strings incl. the Q-3-hardened folder query, HasToken/NeedsReconsent),
+  Q-3 EnsureFolder pick, 7.8 AgeVerdict, synced-folder
   detection order, token vault (Keychain item, legacy plaintext, foreign DPAPI), client file, PKCE (RFC 7636 vector),
   consent URL, live loopback redirect on 127.0.0.1, refresh rules (4xx deletes / 5xx keeps), REST paging + 401 retry,
   resumable upload, download, error texts, the whole interactive flow with a fake browser (prompt=consent retry,
   access_denied, Cancel, timeout).
-- 49 test functions; gated: 2 (`.wPersist`, 14 §7.7).
+- 50 test functions; gated: 2 (`.wPersist`, 14 §7.7).
 
 ## Snapshots (both appearances, `scratchpad/snapshots/W-DRIVE/`)
 
@@ -61,6 +62,21 @@ Visual fix: Folder builder — on macOS 26 the `HSplitView` panes showed a grey 
 preview sit on a clean canvas. Re-rendered and checked in light and dark: Folder builder (empty, Example + case merge),
 Date calculator (today; 2026-09-30 → 2027-03-01 inclusive / +1,000 days), Unit converter (Speed seed; Pressure with
 14.7 psi typed), sign-in waiting sheet, Settings ▸ Sync Drive section.
+
+## Verification fixes (FIX-W-DRIVE, 2026-10-03)
+
+| Finding (V-14) | IDs | Result |
+|---|---|---|
+| Settings ▸ Sync Drive buttons skipped the DATA-174 read-only gate | TOOLS-002, 007, 015 (also 003, 014, 023) | Fixed: `DriveActions.isWriteGated(env)` = the router's `writeGated` (read-only copy or DATA-180 stopped editing); the six buttons matching `readOnlyDisabled` are disabled with `PersistReadOnlyText.disabledHelp` as tooltip; the six actions refuse (status text) when reached anyway; `checkRemoteNewer` returns early while gated. |
+| DECISIONS 14 "Q-3 harden EnsureFolder: yes" not implemented | TOOLS-014, 016, 022 | Fixed: query adds `'me' in owners`; fields `files(id,name,capabilities/canAddChildren)`; pick = first writable, else first with unknown capability, else create. Vector 7.6-7 updated; new test `ensureFolderHardened` (writable-over-read-only, all-read-only → create, unknown → first, REST row parsing). Q-3 moved from "Kept quirks" to "Sanctioned deviations" in `Docs/Deviations/W-DRIVE.md`. |
+| Drive footers in Settings ▸ Sync were monospaced and outside the boxes | TOOLS-001 | Fixed: both help lines are in-section rows (`DriveSettingsHelp`: callout, secondary, wrapping) — the same style as the Shared Save File / Exports help. The `w-drive.settings` debug sheet resets to `.body` so it renders like the Settings scene. |
+
+Counts: findings 3 · fixed 3 · not fixed 0. Tests: 1,587 passing (+1 Drive test function).
+Snapshots (light and dark, checked): `scratchpad/snapshots/fix1-W-DRIVE/` — `settings-sync-*.png` (Settings scene,
+Sync tab), `w-drive-settings-*.png` (the whole Drive section incl. the OAuth part below the Settings fold).
+Not rendered: the read-only state (no snapshot switch for a read-only instance); the gate is the same expression the
+router uses (`CommandRouter` context `writeGated`).
+Lead request: `Docs/DEVIATIONS.md` (lead-owned) still lists Q-3 under W-DRIVE "Kept quirks"; see crossOwnerRequests.
 
 ## Gate
 

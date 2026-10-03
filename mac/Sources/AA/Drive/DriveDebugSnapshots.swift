@@ -11,8 +11,11 @@ extension SnapshotRegistry {
             return AnyView(DriveSignInSheet(model: model, dismiss: {}))
         }
         register("w-drive.settings") { _ in
+            // `.font(.body)`: the Settings scene is system-font chrome; a sheet on the main window would otherwise
+            // inherit the content monospace and misrepresent the pane.
             AnyView(Form { DriveSettingsSection() }
                 .formStyle(.grouped)
+                .font(.body)
                 .frame(width: 680, height: 620))
         }
         register("w-drive.folder-builder") { _ in

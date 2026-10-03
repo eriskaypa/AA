@@ -52,7 +52,10 @@ import Testing
         #expect(DriveQuery.bundleNames == "(name contains 'aa-data' or name contains 'AA-backup' or name contains 'AA-sync' or name contains '.aaz')")
         #expect(DriveQuery.listBackups(folderID: "F1") == "('F1' in parents or (name contains 'aa-data' or name contains 'AA-backup' or name contains 'AA-sync' or name contains '.aaz')) and trashed=false and mimeType!='application/vnd.google-apps.folder'")
         #expect(DriveQuery.listBackups(folderID: nil) == "(name contains 'aa-data' or name contains 'AA-backup' or name contains 'AA-sync' or name contains '.aaz') and trashed=false and mimeType!='application/vnd.google-apps.folder'")
-        #expect(DriveQuery.folder(named: "AA Backups") == "mimeType='application/vnd.google-apps.folder' and name='AA Backups' and trashed=false")
+        // §3.1.10 hardened per DECISIONS 14 Q-3 ('me' in owners; capabilities read for the pick).
+        #expect(DriveQuery.folder(named: "AA Backups") == "mimeType='application/vnd.google-apps.folder' and name='AA Backups' and 'me' in owners and trashed=false")
+        #expect(DriveQuery.folder(named: "AA Sync") == "mimeType='application/vnd.google-apps.folder' and name='AA Sync' and 'me' in owners and trashed=false")
+        #expect(DriveQuery.folderFields == "files(id,name,capabilities/canAddChildren)")
         #expect(DriveQuery.bestRemote == "trashed=false and mimeType!='application/vnd.google-apps.folder' and (name='AA-sync.zip' or (name contains 'aa-data' or name contains 'AA-backup' or name contains 'AA-sync' or name contains '.aaz'))")
         #expect(DriveQuery.syncFile(folderID: "S9") == "'S9' in parents and name='AA-sync.zip' and trashed=false")
         #expect(DriveQuery.syncFile(folderID: nil) == "name='AA-sync.zip' and trashed=false")
@@ -230,6 +233,38 @@ import Testing
         let failing = DriveMockAPI()
         failing.failList = .api(status: 403, message: "nope", reason: nil)
         #expect(await ops(failing).ensureFolder("AA Backups") == nil)
+    }
+
+    // TV: 14 §3.1.10 / §8 Q-3 hardened EnsureFolder (DECISIONS 14 "Q-3 harden EnsureFolder: yes")
+    @Test func ensureFolderHardened() async throws {
+        let folder = DriveConstants.folderMimeType
+        // A read-only (hand-made / other-app) match is skipped for a writable one, whatever the order.
+        let api = DriveMockAPI()
+        api.folderCandidates["AA Backups"] = [
+            DriveFile(id: "hand-made", name: "AA Backups", mimeType: folder, canAddChildren: false),
+            DriveFile(id: "aa-made", name: "AA Backups", mimeType: folder, canAddChildren: true),
+        ]
+        #expect(await ops(api).ensureFolder("AA Backups") == "aa-made")
+        #expect(api.listQueries.last == DriveQuery.folder(named: "AA Backups"))
+        #expect(api.listFields.last == DriveQuery.folderFields)
+        #expect(!api.calls.contains { $0.hasPrefix("createFolder") })
+
+        // Every match read-only → AA creates its own folder in My Drive root (the upload then succeeds).
+        let readOnly = DriveMockAPI()
+        readOnly.folderCandidates["AA Sync"] = [DriveFile(id: "shared", name: "AA Sync", mimeType: folder, canAddChildren: false)]
+        #expect(await ops(readOnly).ensureFolder("AA Sync") == "folder-AA-Sync")
+        #expect(readOnly.calls.contains("createFolder:AA Sync"))
+
+        // Capability not sent → Windows' first result.
+        #expect(DriveOperations.pickFolder([DriveFile(id: "x", name: "AA Sync"), DriveFile(id: "y", name: "AA Sync")]) == "x")
+        #expect(DriveOperations.pickFolder([DriveFile(id: "", name: "AA Sync", canAddChildren: true)]) == nil)
+        #expect(DriveOperations.pickFolder([]) == nil)
+
+        // The REST row carries capabilities.canAddChildren.
+        let row = try #require(JSONParser.parse(Data(#"{"id":"F","name":"AA Backups","capabilities":{"canAddChildren":false}}"#.utf8)).objectValue)
+        #expect(DriveFile(json: row).canAddChildren == false)
+        let bare = try #require(JSONParser.parse(Data(#"{"id":"F","name":"AA Backups"}"#.utf8)).objectValue)
+        #expect(DriveFile(json: bare).canAddChildren == nil)
     }
 
     // TV: TOOLS-018 picker rows
