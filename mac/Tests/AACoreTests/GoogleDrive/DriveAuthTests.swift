@@ -92,11 +92,35 @@ import Testing
         #expect(throws: DriveError.invalidClientFile) { try DriveClientSecret.load(from: dest) }
     }
 
+    // TV: RFC 7636 §4.1 — the verifier is base64url of 48 random octets: 64 characters from a 64-symbol alphabet,
+    // one character per 6-bit group, so no character is favoured (V2-J6: `byte % 66` made the first 58 ~25 % likelier).
+    @Test func pkceVerifierIsUnbiased() {
+        // Every 6-bit value 0…63 exactly once, packed into 48 octets → each of the 64 symbols exactly once.
+        var bits: [UInt8] = []
+        for v in 0..<64 { for b in (0..<6).reversed() { bits.append(UInt8((v >> b) & 1)) } }
+        let octets = Data(stride(from: 0, to: bits.count, by: 8).map { i in bits[i..<i + 8].reduce(0) { $0 << 1 | $1 } })
+        #expect(octets.count == DrivePKCE.verifierOctets)
+        let v = DrivePKCE.verifier(from: octets)
+        #expect(v == "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_")
+        #expect(Set(v).count == 64)
+        // Bijective: the verifier decodes back to its octets (no information folded away by a modulo).
+        let b64 = v.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        #expect(Data(base64Encoded: b64) == octets)
+        // All-0xFF octets map to the last symbol only (the old mapping gave 255 % 66 = 57 → "5").
+        #expect(DrivePKCE.verifier(from: Data(repeating: 0xFF, count: 48)) == String(repeating: "_", count: 64))
+        // RFC 7636: 43…128 unreserved characters.
+        for _ in 0..<50 {
+            let r = DrivePKCE.makeVerifier()
+            #expect(r.count == 64 && r.allSatisfy { DrivePKCE.unreserved.contains($0) })
+        }
+    }
+
     // TV: §3.1.14 step 3 (PKCE + consent URL)
     @Test func pkceAndConsentURL() throws {
         let v = DrivePKCE.makeVerifier()
         #expect(v.count == 64)
         #expect(v.allSatisfy { DrivePKCE.unreserved.contains($0) })
+        #expect(DrivePKCE.makeVerifier() != v)
         // RFC 7636 appendix B vector.
         #expect(DrivePKCE.challenge(for: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk") == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
         let s = try DriveClientSecret.parse(Data(DriveFixture.clientSecret.utf8))

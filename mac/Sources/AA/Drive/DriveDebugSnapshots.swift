@@ -32,7 +32,7 @@ extension SnapshotRegistry {
         register("w-drive.unit-converter") { _ in
             var s = ToolUnitConverterState(categoryIndex: 2)
             s.edit(row: 2, text: "14.7")
-            return AnyView(UnitConverterView(sessionID: UUID(), state: s).frame(width: 500, height: 640))
+            return AnyView(UnitConverterView(sessionID: UUID(), state: s).frame(width: 500))
         }
     }
 }

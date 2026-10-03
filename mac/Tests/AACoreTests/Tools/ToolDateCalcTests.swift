@@ -49,6 +49,29 @@ import Testing
     }
 
     // TV: 14 §7.4 amount validation (TOOLS-067)
+    // TV: DECISIONS "Stage V rulings" (ISO pickers) / V2-DESIGN — the From / To / Date fields use the picker locale,
+    // whose short numeric date (the stepper field's format) is `yyyy-MM-dd`, matching the `Result:` line; the
+    // system locale (here en_US) would show `10/3/26`.
+    @Test func pickerLocaleShowsISODates() {
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(identifier: "UTC")!
+        let date = cal.date(from: DateComponents(year: 2026, month: 10, day: 3))!
+        func short(_ locale: Locale) -> String {
+            let f = DateFormatter()
+            f.calendar = cal
+            f.timeZone = cal.timeZone
+            f.locale = locale
+            f.dateStyle = .short
+            f.timeStyle = .none
+            return f.string(from: date)
+        }
+        #expect(ToolDateCalc.pickerLocale.identifier == "en_CA")
+        #expect(short(ToolDateCalc.pickerLocale) == "2026-10-03")
+        #expect(short(us) != "2026-10-03")
+        #expect(ToolDateCalc.add(date: d("2026-10-03"), operation: .add, amountText: "0", unit: .days, locale: us)
+                .hasPrefix("Result: \(short(ToolDateCalc.pickerLocale)) "))
+    }
+
     @Test func amountValidation() {
         for ok in [" 7 ", "+7", "7", "\t7", "-7"] {
             #expect(ToolDateCalc.add(date: d("2026-09-30"), operation: .add, amountText: ok, unit: .days, locale: us)

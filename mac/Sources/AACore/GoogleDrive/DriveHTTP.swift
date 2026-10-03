@@ -15,8 +15,15 @@ public protocol DriveHTTPTransport: Sendable {
 public final class DriveURLSessionTransport: NSObject, DriveHTTPTransport, @unchecked Sendable {
     private let session: URLSession
 
-    public override init() {
-        let config = URLSessionConfiguration.ephemeral
+    public convenience override init() {
+        self.init(configuration: .ephemeral)
+    }
+
+    /// Applies AA's settings (no cache, timeouts, `User-Agent`) on top of `configuration`. Production uses the
+    /// ephemeral configuration; tests pass one whose `protocolClasses` holds a mock `URLProtocol` so the real
+    /// URLSession path (no redirect on 308, the header, the staging-folder move) is exercised without a network.
+    public init(configuration base: URLSessionConfiguration) {
+        let config = (base.copy() as? URLSessionConfiguration) ?? .ephemeral
         config.requestCachePolicy = .reloadIgnoringLocalCacheData
         config.urlCache = nil
         config.timeoutIntervalForRequest = 120
