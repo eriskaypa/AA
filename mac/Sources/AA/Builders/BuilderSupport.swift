@@ -115,28 +115,72 @@ struct BuilderSheetHeader: View {
     }
 }
 
-/// A small labelled toolbar button with an SF Symbol (06 §6.2 button bar) and the Windows tooltip.
-struct BuilderBarButton: View {
-    let title: String
-    let symbol: String
-    var help: String? = nil
-    var iconOnly = false
+/// One command of a builder icon bar (V-DESIGN rule 4, 06 §6.2): the spec's button text (accessibility label and
+/// the visible label when there is room), its SF Symbol and the Windows tooltip.
+struct BuilderBarCommand {
+    var title: String
+    var symbol: String
+    var help: String
     var disabled = false
-    let action: () -> Void
+    /// ↑ / ↓ stay icon-only even when labels fit (DEVIATIONS W-BUILD "glyphs").
+    var iconOnly = false
+    var action: () -> Void
+}
+
+/// A one-row command bar that never wraps (BUILD-042 "single-row (non-wrapping)"; V-DESIGN rule 4): labelled
+/// `.accessoryBar` buttons when the whole row fits, else 24-pt icon buttons. Groups are split by a hairline.
+struct BuilderCommandBar: View {
+    var groups: [[BuilderBarCommand]]
 
     var body: some View {
-        Button(action: action) {
-            if iconOnly {
-                Image(systemName: symbol).frame(minWidth: 16)
-            } else {
-                Label(title, systemImage: symbol).labelStyle(.titleAndIcon)
+        ViewThatFits(in: .horizontal) {
+            row(labels: true)
+            row(labels: false)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func row(labels: Bool) -> some View {
+        HStack(spacing: labels ? AASpacing.xs : 2) {
+            ForEach(groups.indices, id: \.self) { gi in
+                if gi > 0 { BuilderBarSeparator() }
+                ForEach(groups[gi].indices, id: \.self) { ci in
+                    BuilderIconButton(command: groups[gi][ci], showsTitle: labels && !groups[gi][ci].iconOnly)
+                }
             }
         }
-        .controlSize(.small)
-        .buttonStyle(.bordered)
-        .disabled(disabled)
-        .help(help ?? title)
-        .accessibilityLabel(title)
+        .fixedSize()
+    }
+}
+
+/// A 24-pt accessory-bar button: the symbol (hierarchical, regular weight), optionally with its title.
+struct BuilderIconButton: View {
+    let command: BuilderBarCommand
+    var showsTitle = false
+
+    var body: some View {
+        Button(action: command.action) {
+            if showsTitle {
+                Label(command.title, systemImage: command.symbol).labelStyle(.titleAndIcon)
+            } else {
+                Image(systemName: command.symbol)
+                    .symbolRenderingMode(.hierarchical)
+                    .fontWeight(.regular)
+                    .frame(minWidth: 18, minHeight: 18)
+            }
+        }
+        .buttonStyle(.accessoryBar)
+        .frame(minHeight: 24)
+        .disabled(command.disabled)
+        .help(command.help)
+        .accessibilityLabel(command.title)
+    }
+}
+
+/// The hairline between icon-bar groups.
+struct BuilderBarSeparator: View {
+    var body: some View {
+        Rectangle().fill(AAColor.border).frame(width: 1, height: 16).padding(.horizontal, 2)
     }
 }
 

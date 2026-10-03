@@ -45,7 +45,7 @@ struct ProcedureChecklistSection: View {
         let done = rows.filter(\.done).count
         return VStack(alignment: .leading, spacing: AASpacing.s) {
             HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
-                Text("Checklist Steps").font(.aaMono(AAType.body, weight: .bold)).foregroundStyle(AAColor.fg)
+                Text("Checklist Steps").font(.aaMono(AAType.body, weight: .semibold)).foregroundStyle(AAColor.fg)
                 if !rows.isEmpty {
                     Text("\(done) of \(rows.count) done")
                         .font(.aaMono(AAType.caption, weight: .medium))
@@ -62,68 +62,99 @@ struct ProcedureChecklistSection: View {
             stepButtons
             grid(rows)
         }
+        // The same side margins as the host's form above (HIER-091): nothing sits on the divider or the window edge.
+        .padding(.horizontal, AASpacing.l)
+        .padding(.vertical, AASpacing.m)
     }
 
-    /// BUILD-030 / HIER-091: the builder banner (stretched, accent, bold) and the two checklist-only exports.
+    /// BUILD-030 / HIER-091 / PDF-010: the builder banner (stretched, accent, bold) with the two checklist-only
+    /// exports docked on its right. When the row cannot hold all three at full length, the exports move under the
+    /// banner instead of truncating its caption (no clipping).
     private var banner: some View {
-        HStack(spacing: AASpacing.s) {
-            Button {
-                run {
-                    await dialogs.presentSheet(.closeType) { _ in ChecklistBuilderSheet(host: .procedure(procedureID)) }
-                }
-            } label: {
-                Label("Open Comprehensive Checklist Builder", systemImage: "hammer")
-                    .font(.aaMono(14, weight: .bold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 2)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: AASpacing.s) {
+                builderButton
+                exportPDFButton
+                exportXLSXButton
             }
-            .aaProminent()
-            .controlSize(.large)
-            .help("Open a dedicated window to bulk-create, reorder, edit and delete checklist steps.")
-            Button {
-                run {
-                    env.flushAllEditors()
-                    BuilderUI.flush(env)
-                    await PdfExportFlows.exportChecklistPDF(procedureID: procedureID, env: env, dialogs: dialogs)
+            VStack(alignment: .leading, spacing: AASpacing.s) {
+                builderButton
+                HStack(spacing: AASpacing.s) {
+                    exportPDFButton
+                    exportXLSXButton
+                    Spacer(minLength: 0)
                 }
-            } label: {
-                Label("Export checklist (PDF)", systemImage: "doc.richtext")
             }
-            .controlSize(.large)
-            .help("Export ONLY the checklist (no notes, no relationships) as a printable A4 PDF.")
-            Button {
-                run {
-                    env.flushAllEditors()
-                    BuilderUI.flush(env)
-                    await PdfExportFlows.exportChecklistXLSX(procedureID: procedureID, env: env, dialogs: dialogs)
-                }
-            } label: {
-                Label("Export checklist (Excel)", systemImage: "tablecells")
-            }
-            .controlSize(.large)
-            .help("Export ONLY the checklist as an Excel workbook (.xlsx).")
         }
     }
 
-    /// HIER-094 / HIER-095 / BUILD-032…037 buttons.
-    private var stepButtons: some View {
-        BuilderFlowLayout(spacing: 6, lineSpacing: 6) {
-            BuilderBarButton(title: "Step", symbol: "plus", help: "Append a new checklist step.") { run { await addStep() } }
-            BuilderBarButton(title: "Remove", symbol: "minus", help: "Remove the selected checklist step.",
-                             disabled: selection.isEmpty) { removeStep() }
-            BuilderBarButton(title: "Edit…", symbol: "pencil",
-                             help: "Open this checklist step in a dedicated editor with its own rich-text container and file bank.",
-                             disabled: selection.isEmpty) { editPrimary(selection) }
-            Rectangle().fill(AAColor.border).frame(width: 1, height: 18).padding(.horizontal, 2)
-            BuilderBarButton(title: "Link tasks…", symbol: "link",
-                             help: "Link existing (banked) tasks to the selected checklist step.",
-                             disabled: selection.isEmpty) { run { await linkTasks() } }
-            BuilderBarButton(title: "New task", symbol: "plus.circle",
-                             help: "Create a new Task and auto-link it to the selected checklist step.") { run { await newTask() } }
-            BuilderBarButton(title: "Link equipment/area…", symbol: "wrench.and.screwdriver",
-                             help: "Link equipment/areas to the selected checklist step.",
-                             disabled: selection.isEmpty) { run { await linkEquipment() } }
+    private var builderButton: some View {
+        Button {
+            run {
+                await dialogs.presentSheet(.closeType) { _ in ChecklistBuilderSheet(host: .procedure(procedureID)) }
+            }
+        } label: {
+            Label("Open Comprehensive Checklist Builder", systemImage: "hammer")
+                .font(.aaMono(14, weight: .bold))
+                .lineLimit(1)
+                .fixedSize()
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 2)
         }
+        .aaProminent()
+        .controlSize(.large)
+        .layoutPriority(1)
+        .help("Open a dedicated window to bulk-create, reorder, edit and delete checklist steps.")
+    }
+
+    private var exportPDFButton: some View {
+        Button {
+            run {
+                env.flushAllEditors()
+                BuilderUI.flush(env)
+                await PdfExportFlows.exportChecklistPDF(procedureID: procedureID, env: env, dialogs: dialogs)
+            }
+        } label: {
+            Label("Export checklist (PDF)", systemImage: "doc.richtext").lineLimit(1)
+        }
+        .controlSize(.large)
+        .fixedSize()
+        .help("Export ONLY the checklist (no notes, no relationships) as a printable A4 PDF.")
+    }
+
+    private var exportXLSXButton: some View {
+        Button {
+            run {
+                env.flushAllEditors()
+                BuilderUI.flush(env)
+                await PdfExportFlows.exportChecklistXLSX(procedureID: procedureID, env: env, dialogs: dialogs)
+            }
+        } label: {
+            Label("Export checklist (Excel)", systemImage: "tablecells").lineLimit(1)
+        }
+        .controlSize(.large)
+        .fixedSize()
+        .help("Export ONLY the checklist as an Excel workbook (.xlsx).")
+    }
+
+    /// HIER-094 / HIER-095 / BUILD-032…037 buttons: one row (labels when they fit, else icons) — never wrapped.
+    private var stepButtons: some View {
+        BuilderCommandBar(groups: [
+            [BuilderBarCommand(title: "Step", symbol: "plus", help: "Append a new checklist step.") { run { await addStep() } },
+             BuilderBarCommand(title: "Remove", symbol: "minus", help: "Remove the selected checklist step.",
+                               disabled: selection.isEmpty) { removeStep() },
+             BuilderBarCommand(title: "Edit…", symbol: "pencil",
+                               help: "Open this checklist step in a dedicated editor with its own rich-text container and file bank.",
+                               disabled: selection.isEmpty) { editPrimary(selection) }],
+            [BuilderBarCommand(title: "Link tasks…", symbol: "link",
+                               help: "Link existing (banked) tasks to the selected checklist step.",
+                               disabled: selection.isEmpty) { run { await linkTasks() } },
+             BuilderBarCommand(title: "New task", symbol: "plus.circle",
+                               help: "Create a new Task and auto-link it to the selected checklist step.") { run { await newTask() } },
+             BuilderBarCommand(title: "Link equipment/area…", symbol: "wrench.and.screwdriver",
+                               help: "Link equipment/areas to the selected checklist step.",
+                               disabled: selection.isEmpty) { run { await linkEquipment() } }],
+        ])
     }
 
     /// BUILD-031 / HIER-093 grid.

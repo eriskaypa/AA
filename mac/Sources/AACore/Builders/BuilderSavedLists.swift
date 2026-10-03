@@ -2,7 +2,8 @@
 //       (arranged order, guards and messages), 06 §7.5 / §7.6 vectors, §8 D1 (group by Id; dangling ids are
 //       ungrouped), D2 (Move to group preselects the current group); DECISIONS 06.
 // The Saved Lists tab's derived rows, texts and model operations. Ordering of the collection itself (Nudge / MoveTo)
-// is F2's `SavedListOrder`; this file never re-sorts `ChecklistTemplates`.
+// follows F2's `SavedListOrder` (REPO-131…133), applied to the resolved group so a dangling `GroupId` arranges
+// inside "Ungrouped" where the tab shows it (D1); this file never re-sorts `ChecklistTemplates`.
 import Foundation
 
 /// One saved list as the tab shows it.
@@ -161,21 +162,104 @@ public enum BuilderReorderCheck {
         return nil
     }
 
+    // MARK: Arranging (BUILD-085…089, REPO-131…134 under D1)
+
+    /// The group a list is arranged in (D1 "treat dangling ids as ungrouped everywhere"): its resolved group's id, nil
+    /// for ungrouped **and** for a dangling `GroupId`, so a list is arranged inside the section the tab shows it in.
+    /// The stored `GroupId` is never changed (Windows-compatible data; every arrange is a pure permutation).
+    public static func arrangeGroupID(_ t: ChecklistTemplate, data: AppData) -> UUID? {
+        resolvedGroup(t, groups: data.listGroups)?.id
+    }
+
+    /// REPO-131 over resolved groups: ascending indices in `ChecklistTemplates` of the lists arranged in `groupID`
+    /// (nil = "Ungrouped": null and dangling ids). Equals `SavedListOrder.groupSpan` whenever no id dangles.
+    public static func arrangeSpan(_ data: AppData, groupID: UUID?) -> [Int] {
+        let valid = Set(data.listGroups.map(\.id))
+        let all = data.checklistTemplates
+        return all.indices.filter { i in (all[i].groupId.flatMap { valid.contains($0) ? $0 : nil }) == groupID }
+    }
+
+    /// The common arrange group of a non-empty pick list (`.some(nil)` = all ungrouped), nil when empty or mixed.
+    static func arrangeGroup(_ picks: [ChecklistTemplate], data: AppData) -> UUID?? {
+        guard let first = picks.first else { return nil }
+        let g = arrangeGroupID(first, data: data)
+        return picks.allSatisfy { arrangeGroupID($0, data: data) == g } ? .some(g) : nil
+    }
+
     /// BUILD-089 / REPO-134 guards of ↑ / ↓ / Move to position.
     public static func checkReorder(_ data: AppData, ids: Set<UUID>) -> BuilderReorderCheck {
         if isSortAZ(data) { return .sortAZ }
         let picks = selectedTemplates(data, ids: ids)
-        guard let first = picks.first else { return .noSelection }
-        if picks.contains(where: { $0.groupId != first.groupId }) { return .mixedGroups }
-        let span = SavedListOrder.groupSpan(data.checklistTemplates, groupID: first.groupId)
-        return span.count > 1 ? .ok(picks: picks) : .groupOfOne
+        guard !picks.isEmpty else { return .noSelection }
+        guard let gid = arrangeGroup(picks, data: data) else { return .mixedGroups }
+        return arrangeSpan(data, groupID: gid).count > 1 ? .ok(picks: picks) : .groupOfOne
+    }
+
+    /// Whether ↑ / ↓ can move the picks (first pick not already first / last pick not already last in its group).
+    public static func reorderAvailability(_ data: AppData, picks: [ChecklistTemplate]) -> (up: Bool, down: Bool) {
+        guard let gid = arrangeGroup(picks, data: data) else { return (false, false) }
+        let span = arrangeSpan(data, groupID: gid)
+        let all = data.checklistTemplates
+        let positions = picks.compactMap { p in all.firstIndex { $0 === p }.flatMap { span.firstIndex(of: $0) } }
+        guard span.count > 1, let lo = positions.min(), let hi = positions.max() else { return (false, false) }
+        return (lo > 0, hi < span.count - 1)
+    }
+
+    /// REPO-132 (`SavedListOrder.nudge`, with its D-1 fix) over the resolved group, so a dangling-group list moves
+    /// within "Ungrouped". Same algorithm and the same flat result as `SavedListOrder.nudge` when no id dangles.
+    @discardableResult
+    public static func nudge(_ data: AppData, picks: [ChecklistTemplate], up: Bool) -> Bool {
+        guard let gid = arrangeGroup(picks, data: data) else { return false }
+        let span = arrangeSpan(data, groupID: gid)
+        guard span.count >= 2 else { return false }
+        var all = data.checklistTemplates
+        let at = Array(Set(picks.compactMap { p in
+            all.firstIndex(where: { $0 === p }).flatMap { span.firstIndex(of: $0) }
+        })).sorted()
+        guard let first = at.first, let last = at.last else { return false }
+        if up && first == 0 { return false }
+        if !up && last == span.count - 1 { return false }
+        if at.count == 1 || span[span.count - 1] - span[0] == span.count - 1 {
+            for pos in (up ? at : at.reversed()) {
+                let x = all.remove(at: span[pos])
+                all.insert(x, at: span[up ? pos - 1 : pos + 1])
+            }
+        } else {
+            var desired = span.map { all[$0] }
+            for pos in (up ? at : at.reversed()) { desired.swapAt(pos, up ? pos - 1 : pos + 1) }
+            SavedListOrder.reanchor(&all, span: span, desired: desired)
+        }
+        data.checklistTemplates = all
+        return true
+    }
+
+    /// REPO-133 (`SavedListOrder.moveTo`) over the resolved group: the picks (relative order kept) go to
+    /// `targetInGroup` (0 = top, group size = bottom). False when the picks are empty, span groups, or the group has
+    /// fewer than two lists. Same result as `SavedListOrder.moveTo` when no id dangles.
+    @discardableResult
+    public static func moveTo(_ data: AppData, picks: [ChecklistTemplate], targetInGroup: Int) -> Bool {
+        guard let gid = arrangeGroup(picks, data: data) else { return false }
+        let span = arrangeSpan(data, groupID: gid)
+        guard span.count >= 2 else { return false }
+        var all = data.checklistTemplates
+        let moving = Set(picks.map(ObjectIdentifier.init))
+        let ordered = span.map { all[$0] }
+        guard moving.isSubset(of: Set(ordered.map(ObjectIdentifier.init))) else { return false }
+        let cut = min(max(targetInGroup, 0), ordered.count)
+        let before = ordered[0..<cut].filter { moving.contains(ObjectIdentifier($0)) }.count
+        var remaining = ordered.filter { !moving.contains(ObjectIdentifier($0)) }
+        let inOrder = ordered.filter { moving.contains(ObjectIdentifier($0)) }
+        remaining.insert(contentsOf: inOrder, at: min(max(targetInGroup - before, 0), remaining.count))
+        SavedListOrder.reanchor(&all, span: span, desired: remaining)
+        data.checklistTemplates = all
+        return true
     }
 
     /// BUILD-087 picker options: `(Move to top of group)` (0), `Before: {Shorten(name, 60)}` for each non-selected
-    /// list at its group position, `(Move to bottom of group)` (group size).
+    /// list at its group position, `(Move to bottom of group)` (group size). The group is the resolved one (D1).
     public static func moveToPositionOptions(_ data: AppData, picks: [ChecklistTemplate]) -> [BuilderMoveOption] {
         guard let first = picks.first else { return [] }
-        let span = SavedListOrder.groupSpan(data.checklistTemplates, groupID: first.groupId)
+        let span = arrangeSpan(data, groupID: arrangeGroupID(first, data: data))
         let moving = Set(picks.map(ObjectIdentifier.init))
         var out = [BuilderMoveOption(display: "(Move to top of group)", target: 0)]
         for (pos, idx) in span.enumerated() {
@@ -188,17 +272,17 @@ public enum BuilderReorderCheck {
     }
 
     /// A drag within one group section (06 §6.2 additive): SwiftUI's destination row index inside the section →
-    /// the in-group target of `SavedListOrder.moveTo`.
+    /// the in-group target of `moveTo`.
     public static func dropTarget(sectionRowIDs: [UUID], destination: Int, data: AppData) -> Int {
         guard destination < sectionRowIDs.count else {
             guard let firstID = sectionRowIDs.first, let t = data.checklistTemplates.first(where: { $0.id == firstID })
             else { return 0 }
-            return SavedListOrder.groupSpan(data.checklistTemplates, groupID: t.groupId).count
+            return arrangeSpan(data, groupID: arrangeGroupID(t, data: data)).count
         }
         let targetID = sectionRowIDs[destination]
         guard let t = data.checklistTemplates.first(where: { $0.id == targetID }),
               let flat = data.checklistTemplates.firstIndex(where: { $0 === t }) else { return 0 }
-        return SavedListOrder.groupSpan(data.checklistTemplates, groupID: t.groupId).firstIndex(of: flat) ?? 0
+        return arrangeSpan(data, groupID: arrangeGroupID(t, data: data)).firstIndex(of: flat) ?? 0
     }
 
     // MARK: Pickers

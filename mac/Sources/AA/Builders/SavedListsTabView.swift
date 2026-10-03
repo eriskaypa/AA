@@ -50,20 +50,16 @@ struct SavedListsTabView: View {
         let reorder = reorderAvailability(sortAZ: sortAZ)
         return VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Saved Lists").font(.aaMono(15, weight: .bold)).foregroundStyle(AAColor.accent)
+                Text("Saved Lists").font(.aaMono(AAType.title, weight: .bold)).foregroundStyle(AAColor.accent)
                 Spacer()
-                Toggle(isOn: Binding(get: { sortAZ }, set: { _ in toggleSortAZ() })) {
-                    Label("Sort A-Z", systemImage: "textformat.abc")
-                }
-                .toggleStyle(.button)
-                .controlSize(.small)
-                .help("Show lists alphabetically instead of your own order. Your arranged order is kept and is what "
-                      + "exports use when this is off.")
+                Text("\(env.store.data.checklistTemplates.count)")
+                    .font(.aaMono(AAType.caption)).monospacedDigit().foregroundStyle(AAColor.muted)
+                    .accessibilityLabel("\(env.store.data.checklistTemplates.count) saved lists")
             }
             .padding(.horizontal, AASpacing.m)
             .padding(.top, AASpacing.m)
-            .padding(.bottom, AASpacing.s)
-            toolbar(sortAZ: sortAZ, reorder: reorder)
+            .padding(.bottom, AASpacing.xs)
+            toolbar(sortAZ: sortAZ)
                 .padding(.horizontal, AASpacing.m)
                 .padding(.bottom, AASpacing.s)
             Divider()
@@ -82,7 +78,8 @@ struct SavedListsTabView: View {
                                     .foregroundStyle(AAColor.muted)
                                 Text(section.title).font(.aaMono(AAType.small, weight: .bold))
                                     .foregroundStyle(AAColor.accent)
-                                Text(" (\(section.count))").font(.aaMono(AAType.small)).foregroundStyle(AAColor.muted)
+                                Text("(\(section.count))").font(.aaMono(AAType.caption)).monospacedDigit()
+                                    .foregroundStyle(AAColor.muted)
                             }
                         }
                     }
@@ -94,6 +91,7 @@ struct SavedListsTabView: View {
                 }
             }
             .listStyle(.inset)
+            .alternatingRowBackgrounds(.disabled)
             .scrollContentBackground(.hidden)
             .overlay {
                 if sections.isEmpty {
@@ -128,50 +126,79 @@ struct SavedListsTabView: View {
         .background(AAPaneBackground())
     }
 
-    private func toolbar(sortAZ: Bool, reorder: (up: Bool, down: Bool)) -> some View {
-        HStack(spacing: 6) {
+    /// V-DESIGN rule 4 icon bar: create (List / Group), delete, Sort A-Z, ↑ / ↓, then every remaining command by
+    /// its spec name in the trailing overflow menu — including "Export ALL (PDF)…", which never needs a selection
+    /// (06 §6.5, R3, PDF-022). As on Windows the selection commands stay enabled and answer "Select a saved list
+    /// first." with nothing selected; ↑ / ↓ / Move to position are disabled only while Sort A-Z is on (T-KB-33).
+    private func toolbar(sortAZ: Bool) -> some View {
+        HStack(spacing: 2) {
             Menu {
                 Button("New List…", systemImage: "list.bullet.rectangle") { run { await newList() } }
                     .help("Create a new empty saved list.")
                 Button("New Group…", systemImage: "folder.badge.plus") { run { await newGroup() } }
                     .help("Create a new List Group to bundle saved lists together.")
             } label: {
-                Image(systemName: "plus")
+                Image(systemName: "plus").symbolRenderingMode(.hierarchical)
             } primaryAction: {
                 run { await newList() }
             }
             .menuStyle(.button)
-            .controlSize(.small)
+            .buttonStyle(.accessoryBar)
             .fixedSize()
             .help("+ List: create a new empty saved list. Use the arrow for + Group (a new List Group).")
-            .accessibilityLabel("New list or group")
-            BuilderBarButton(title: "Rename", symbol: "pencil", help: "Rename the selected saved list.", iconOnly: true) {
-                run { await rename() }
-            }
-            BuilderBarButton(title: "Delete", symbol: "trash", help: "Delete the selected saved list.", iconOnly: true) {
+            .accessibilityLabel("+ List")
+            BuilderIconButton(command: BuilderBarCommand(title: "Delete", symbol: "trash",
+                                                         help: "Delete the selected saved list.") {
                 run { await deleteList() }
+            })
+            Toggle(isOn: Binding(get: { sortAZ }, set: { _ in toggleSortAZ() })) {
+                Image(systemName: "arrow.up.arrow.down").symbolRenderingMode(.hierarchical)
             }
-            BuilderBarButton(title: "Move to group…", symbol: "folder",
-                             help: "Put the selected saved list into a group (or remove it from all groups).", iconOnly: true) {
-                run { await assignGroup() }
-            }
-            BuilderBarButton(title: "Manage groups…", symbol: "folder.badge.gearshape",
-                             help: "Rename or delete List Groups (lists inside a deleted group become ungrouped).",
-                             iconOnly: true) {
-                run { await manageGroups() }
-            }
-            Rectangle().fill(AAColor.border).frame(width: 1, height: 16)
-            BuilderBarButton(title: "Move up", symbol: "chevron.up",
-                             help: "Move the selected saved list(s) up within its group. This is the order they export in.",
-                             iconOnly: true, disabled: sortAZ) { run { await nudge(up: true) } }
-            BuilderBarButton(title: "Move down", symbol: "chevron.down",
-                             help: "Move the selected saved list(s) down within its group. This is the order they export in.",
-                             iconOnly: true, disabled: sortAZ) { run { await nudge(up: false) } }
-            BuilderBarButton(title: "Move to position…", symbol: "arrow.up.and.down.text.horizontal",
-                             help: "Move the selected saved list(s) to a chosen position within its group.",
-                             iconOnly: true, disabled: sortAZ) { run { await moveToPosition() } }
+            .toggleStyle(.button)
+            .buttonStyle(.accessoryBar)
+            .help("Sort A-Z: show lists alphabetically instead of your own order. Your arranged order is kept and is "
+                  + "what exports use when this is off.")
+            .accessibilityLabel("Sort A-Z")
+            BuilderBarSeparator()
+            BuilderIconButton(command: BuilderBarCommand(
+                title: "Move up", symbol: "chevron.up",
+                help: "Move the selected saved list(s) up within its group. This is the order they export in.",
+                disabled: sortAZ) { run { await nudge(up: true) } })
+            BuilderIconButton(command: BuilderBarCommand(
+                title: "Move down", symbol: "chevron.down",
+                help: "Move the selected saved list(s) down within its group. This is the order they export in.",
+                disabled: sortAZ) { run { await nudge(up: false) } })
             Spacer(minLength: 0)
+            Menu {
+                Button("Edit items…", systemImage: "pencil") { run { await editItems() } }
+                Button("Rename", systemImage: "character.cursor.ibeam") { run { await rename() } }
+                    .help("Rename the selected saved list.")
+                Button("Duplicate", systemImage: "plus.square.on.square") { run { await duplicate() } }
+                Button("Move to group…", systemImage: "folder") { run { await assignGroup() } }
+                    .help("Put the selected saved list into a group (or remove it from all groups).")
+                Button("Manage groups…", systemImage: "folder.badge.gearshape") { run { await manageGroups() } }
+                    .help("Rename or delete List Groups (lists inside a deleted group become ungrouped).")
+                Divider()
+                Button("Move to position…", systemImage: "arrow.up.and.down.text.horizontal") {
+                    run { await moveToPosition() }
+                }
+                .disabled(sortAZ)
+                .help("Move the selected saved list(s) to a chosen position within its group.")
+                Divider()
+                Button("Export this list (PDF)…", systemImage: "doc.richtext") { run { await exportList() } }
+                Button("Export group (PDF)…", systemImage: "doc.on.doc") { run { await exportGroup() } }
+                Button("Export ALL (PDF)…", systemImage: "books.vertical") { run { await exportAll() } }
+            } label: {
+                Image(systemName: "ellipsis.circle").symbolRenderingMode(.hierarchical)
+            }
+            .menuStyle(.button)
+            .buttonStyle(.accessoryBar)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More saved-list commands (rename, groups, position, exports).")
+            .accessibilityLabel("More")
         }
+        .frame(minHeight: 24)
     }
 
     @ViewBuilder
@@ -238,8 +265,8 @@ struct SavedListsTabView: View {
             VStack(spacing: AASpacing.m) {
                 AAEmptyState(title: "Select a saved list", symbol: "list.bullet.rectangle",
                              message: "Pick a list on the left to see its items, edit it or export it.")
+                // Always enabled (PDF-022 / DEV-10): with no saved lists the flow answers "No saved lists to export."
                 Button { run { await exportAll() } } label: { Label("Export ALL (PDF)…", systemImage: "books.vertical") }
-                    .disabled(env.store.data.checklistTemplates.isEmpty)
                 Spacer(minLength: AASpacing.xl)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -323,11 +350,7 @@ struct SavedListsTabView: View {
         guard !sortAZ, case .ok(let picks) = BuilderSavedLists.checkReorder(env.store.data, ids: selection) else {
             return (false, false)
         }
-        let all = env.store.data.checklistTemplates
-        let span = SavedListOrder.groupSpan(all, groupID: picks[0].groupId)
-        let positions = picks.compactMap { p in all.firstIndex { $0 === p }.flatMap { span.firstIndex(of: $0) } }
-        guard let lo = positions.min(), let hi = positions.max() else { return (false, false) }
-        return (lo > 0, hi < span.count - 1)
+        return BuilderSavedLists.reorderAvailability(env.store.data, picks: picks)
     }
 
     /// A Refresh() of the Windows page: the temporary status text goes back to the counts.
@@ -453,7 +476,7 @@ struct SavedListsTabView: View {
 
     private func nudge(up: Bool) async {
         guard let picks = await reorderPicks() else { return }
-        guard SavedListOrder.nudge(&env.store.data.checklistTemplates, picks: picks, up: up) else { return }
+        guard BuilderSavedLists.nudge(env.store.data, picks: picks, up: up) else { return }
         commitOrder(picks)
     }
 
@@ -463,19 +486,20 @@ struct SavedListsTabView: View {
         guard let target = await BuilderUI.pickOne(dialogs, prompt: BuilderWording.moveTitle(picks.count, noun: "list"),
                                                    rows: options.map { (display: $0.display, tag: $0.target) }),
               picks.allSatisfy({ p in env.store.data.checklistTemplates.contains { $0 === p } }),
-              SavedListOrder.moveTo(&env.store.data.checklistTemplates, picks: picks, targetInGroup: target)
+              BuilderSavedLists.moveTo(env.store.data, picks: picks, targetInGroup: target)
         else { return }
         commitOrder(picks)
     }
 
-    /// Drag within a group section (06 §6.2 additive) → `SavedListOrder.moveTo` with the in-group target.
+    /// Drag within a group section (06 §6.2 additive) → `BuilderSavedLists.moveTo` (resolved group, D1) with the
+    /// in-group target.
     private func dropMove(_ section: BuilderSavedListSection, _ source: IndexSet, _ destination: Int) {
         let data = env.store.data
         let ids = source.map { section.rows[$0].id }
         let picks = data.checklistTemplates.filter { ids.contains($0.id) }
         let target = BuilderSavedLists.dropTarget(sectionRowIDs: section.rows.map(\.id), destination: destination, data: data)
         guard !picks.isEmpty,
-              SavedListOrder.moveTo(&env.store.data.checklistTemplates, picks: picks, targetInGroup: target) else { return }
+              BuilderSavedLists.moveTo(env.store.data, picks: picks, targetInGroup: target) else { return }
         commitOrder(picks)
     }
 
@@ -527,7 +551,8 @@ struct SavedListsTabView: View {
     }
 }
 
-/// One saved list in the sidebar (BUILD-071: name semi-bold + right muted `"{n} items"`).
+/// One saved list in the sidebar (BUILD-071: name + right muted `"{n} items"`; regular weight so the bold group
+/// headers stay the only bold text — V-DESIGN rule 2, DEVIATIONS W-BUILD "design").
 struct BuilderSavedListRowView: View {
     let row: BuilderSavedListRow
 
@@ -535,9 +560,10 @@ struct BuilderSavedListRowView: View {
         HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
             Image(systemName: "list.bullet").foregroundStyle(AAColor.muted).font(.aaMono(AAType.caption))
             Text(row.name)
-                .font(.aaMono(AAType.body, weight: .semibold))
+                .font(.aaMono(AAType.body))
                 .foregroundStyle(AAColor.fg)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
+                .truncationMode(.tail)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(row.countText)
                 .font(.aaMono(AAType.caption))
@@ -545,7 +571,8 @@ struct BuilderSavedListRowView: View {
                 .monospacedDigit()
                 .fixedSize()
         }
-        .padding(.vertical, 1)
+        .padding(.vertical, AASpacing.xs)
+        .frame(minHeight: 22)
         .accessibilityElement(children: .combine)
     }
 }

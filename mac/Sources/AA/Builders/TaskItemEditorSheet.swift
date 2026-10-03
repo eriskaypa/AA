@@ -30,7 +30,9 @@ struct TaskItemEditorSheet: View {
                 footer
             }
         }
-        .frame(minWidth: 820, idealWidth: 900, maxWidth: .infinity, minHeight: 600, idealHeight: 700, maxHeight: .infinity)
+        // BUILD-050: wide and tall enough that the container editor (format bar, File Bank toolbar and footer) is never
+        // clipped next to the nested Subtasks pane, and the notes area keeps a usable height.
+        .frame(minWidth: 980, idealWidth: 1060, maxWidth: .infinity, minHeight: 700, idealHeight: 780, maxHeight: .infinity)
         .background(AAColor.bg)
         .onDisappear { commit() }
         .aaSheet(.closeType, onClose: { commit() })
@@ -57,9 +59,10 @@ struct TaskItemEditorSheet: View {
                 ContainerEditorView(container: task.container,
                                     context: ContainerEditorContext(title: task.name, host: .subtask(task.id)))
                     .id(ObjectIdentifier(task.container))
-                    .frame(minWidth: 420, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    .frame(minWidth: 640, idealWidth: 720, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                    .layoutPriority(1)
                 BuilderNestedSubtasksPane(taskID: task.id)
-                    .frame(minWidth: 250, idealWidth: 300, maxWidth: 420, minHeight: 0, maxHeight: .infinity)
+                    .frame(minWidth: 260, idealWidth: 300, maxWidth: 420, minHeight: 0, maxHeight: .infinity)
             }
             Divider()
             footer
@@ -290,21 +293,21 @@ struct BuilderNestedSubtasksPane: View {
                                          if dir == .up { engine.moveUp(model.selection) } else { engine.moveDown(model.selection) }
                                      },
                                      primary: { edit(model.selection, model) }))
-        HStack(spacing: 6) {
-            BuilderBarButton(title: "Subtask", symbol: "plus", help: "Append a new subtask to the end of the list.") {
+        BuilderCommandBar(groups: [
+            [BuilderBarCommand(title: "Subtask", symbol: "plus", help: "Append a new subtask to the end of the list.") {
                 run { await add(model) }
-            }
-            BuilderBarButton(title: "Edit…", symbol: "pencil",
-                             help: "Open the full subtask editor (deadline / recurrence / status / notes / files).",
-                             disabled: model.selection.isEmpty) { edit(model.selection, model) }
-            BuilderBarButton(title: "Move up", symbol: "chevron.up", help: "Move selected subtask(s) up by one position.",
-                             iconOnly: true, disabled: !engine.canMoveUp(model.selection)) { engine.moveUp(model.selection) }
-            BuilderBarButton(title: "Move down", symbol: "chevron.down",
-                             help: "Move selected subtask(s) down by one position.", iconOnly: true,
-                             disabled: !engine.canMoveDown(model.selection)) { engine.moveDown(model.selection) }
-            BuilderBarButton(title: "Delete", symbol: "trash", help: "Delete the selected subtasks.", iconOnly: true,
-                             disabled: model.selection.isEmpty) { run { await delete(model.selection, model) } }
-        }
+             },
+             BuilderBarCommand(title: "Edit…", symbol: "pencil",
+                               help: "Open the full subtask editor (deadline / recurrence / status / notes / files).",
+                               disabled: model.selection.isEmpty) { edit(model.selection, model) }],
+            [BuilderBarCommand(title: "Move up", symbol: "chevron.up", help: "Move selected subtask(s) up by one position.",
+                               disabled: !engine.canMoveUp(model.selection), iconOnly: true) { engine.moveUp(model.selection) },
+             BuilderBarCommand(title: "Move down", symbol: "chevron.down",
+                               help: "Move selected subtask(s) down by one position.",
+                               disabled: !engine.canMoveDown(model.selection), iconOnly: true) { engine.moveDown(model.selection) }],
+            [BuilderBarCommand(title: "Delete", symbol: "trash", help: "Delete the selected subtasks.",
+                               disabled: model.selection.isEmpty) { run { await delete(model.selection, model) } }],
+        ])
     }
 
     private func run(_ body: @escaping @MainActor () async -> Void) {
