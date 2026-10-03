@@ -16,9 +16,14 @@ struct MainWindowView: View {
             SectionSidebar()
                 .navigationSplitViewColumnWidth(min: 196, ideal: 228, max: 320)
         } detail: {
-            SectionContentHost()
-                .safeAreaInset(edge: .top, spacing: 0) { ShellBanners() }
-                .safeAreaInset(edge: .bottom, spacing: 0) { ShellBottomBar(toolbarHidden: chrome.toolbarHidden) }
+            // The shortcut strip / bottom bar is laid out BELOW the sections, not as a safe-area inset: the AppKit
+            // split views behind a section's `HSplitView` ignore SwiftUI insets, so their panes (and lists) would
+            // run under the strip (REQ-W-CREW-01).
+            VStack(spacing: 0) {
+                SectionContentHost()
+                    .safeAreaInset(edge: .top, spacing: 0) { ShellBanners() }
+                ShellBottomBar(toolbarHidden: chrome.toolbarHidden)
+            }
         }
         .navigationTitle(env.windowTitle)
         .navigationSubtitle(subtitle)

@@ -11,26 +11,16 @@ struct CrewTabView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dialogs) private var dialogs
     @State private var model = CrewRosterModel.shared
-    @State private var bottomInset: CGFloat = 0
 
     var body: some View {
         @Bindable var model = model
-        // The AppKit split view lays its panes out under SwiftUI safe-area insets (the shell's bottom shortcut strip),
-        // so the measured inset is applied to each pane as padding.
+        // The shell lays the shortcut strip out below the section (REQ-W-CREW-01), so the panes need no inset.
         HSplitView {
             CrewRosterPane(model: model)
-                .padding(.bottom, bottomInset)
                 .frame(minWidth: 290, idealWidth: 340, maxWidth: 520)
             CrewCardPane(model: model)
-                .padding(.bottom, bottomInset)
                 .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
         }
-        .ignoresSafeArea(.container, edges: .bottom)
-        .background(GeometryReader { g in
-            Color.clear
-                .onAppear { bottomInset = g.safeAreaInsets.bottom }
-                .onChange(of: g.safeAreaInsets.bottom) { _, v in bottomInset = v }
-        })
         .overlay {
             if model.importing { AAProgressOverlay(text: "Importing the COMPAS crew report…") }
         }
