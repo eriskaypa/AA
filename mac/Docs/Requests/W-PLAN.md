@@ -11,7 +11,7 @@ Workaround in place: W-PLAN's progress record (feature-ID counts, not-done list)
 `Docs/Deviations/W-PLAN.md`; the integrator can move it to `Docs/Progress/W-PLAN.md` verbatim once the script knows
 the path.
 
-Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5); the progress record moved verbatim to `Docs/Progress/W-PLAN.md` (this docs commit)
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5); the progress record moved verbatim to `Docs/Progress/W-PLAN.md` (ad9a24b)
 
 ## REQ-W-PLAN-02: `AASearchField` focus hook for section commands (informational)
 Target: `Sources/AA/Design/AASearchField.swift` (owner F3) — ARCHITECTURE.md §7.6, §8.6

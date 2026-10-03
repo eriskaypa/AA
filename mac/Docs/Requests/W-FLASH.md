@@ -32,4 +32,4 @@ outside the repository (the session scratchpad, `W-FLASH-progress.md`) and its c
 82 feature IDs — 81 done, 1 not applicable (FLASH-133, DECISIONS 13: no screen-capture receive in v1), 0 remaining.
 Add `Docs/Progress/W-FLASH.md` from it once the script accepts the path.
 
-Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5); `Docs/Progress/W-FLASH.md` added by the lead from the counts above (this docs commit)
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5); `Docs/Progress/W-FLASH.md` added by the lead from the counts above (ad9a24b)

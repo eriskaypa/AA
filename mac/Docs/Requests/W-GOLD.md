@@ -58,4 +58,4 @@ fails the gate.
 Workaround in place: the progress record (counts, per-ID status, remaining work) is the last section of
 `Docs/Deviations/W-GOLD.md`.
 
-Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5); the progress record moved from Deviations/W-GOLD.md to `Docs/Progress/W-GOLD.md` (this docs commit)
+Resolution: applied — owner_of maps `Docs/Progress/*.md` (f556cb5); the progress record moved from Deviations/W-GOLD.md to `Docs/Progress/W-GOLD.md` (ad9a24b)
