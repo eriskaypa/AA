@@ -250,6 +250,7 @@ struct XamlDOMBuilder {
     private let raw: XamlRawXMLTree
     private var nodes: [MNode] = []
     private var issues: [XamlIssue] = []
+    private var runChildOffsets: [Int32: Int] = [:]
 
     private enum Child {
         case element(Int)            // raw element index
@@ -312,7 +313,8 @@ struct XamlDOMBuilder {
                      children: n.children.map { XamlNodeID(index: Int32($0)) })
         }
         return .success(XamlDocument(source: source, nodes: frozen, root: XamlNodeID(index: Int32(rootIndex)),
-                                     rootRole: rootRole, loadability: loadability, issues: issues))
+                                     rootRole: rootRole, loadability: loadability, issues: issues,
+                                     runChildOffsets: runChildOffsets))
     }
 
     // MARK: - Helpers
@@ -622,12 +624,13 @@ struct XamlDOMBuilder {
     }
 
     /// Creates the node for an element and fills its content according to its kind.
-    private mutating func addElement(_ ri: Int, parent: Int, preserve: Bool) {
+    @discardableResult
+    private mutating func addElement(_ ri: Int, parent: Int, preserve: Bool) -> Int {
         let idx = makeElement(ri, parent: parent)
         let kind = nodes[idx].kind
         switch kind {
         case .blockUIContainer, .inlineUIContainer, .unknown, .text:
-            return                                                           // opaque: subtree kept raw
+            return idx                                                       // opaque: subtree kept raw
         default: break
         }
         let children = content(of: ri, owner: idx)
@@ -654,22 +657,37 @@ struct XamlDOMBuilder {
             }
         default: break
         }
+        return idx
     }
 
     private mutating func processRun(_ idx: Int, _ ri: Int, _ children: [Child], preserve: Bool) {
         var text = ""
         var hasContent = false
+        var placed: [(node: Int, offset: Int)] = []
         for c in children {
             switch c {
             case .text(let s, _):
-                text += s
+                text += preserve ? s : Self.collapse(s)
                 hasContent = true
             case .element(let ci):
-                issues.append(.invalidNesting("\(raw.elements[ci].qualifiedName) inside a Run"))
-                _ = makeElement(ci, parent: idx)
+                // Not loadable (XD.2.12), shown tolerantly where it stood: a recognised inline is real content
+                // (it inherits through the Run), anything else stays an opaque, verbatim slice.
+                let e = raw.elements[ci]
+                issues.append(.invalidNesting("\(e.qualifiedName) inside a Run"))
+                let child: Int
+                switch classify(e) {
+                case .run?, .span?, .bold?, .italic?, .underline?, .hyperlink?, .lineBreak?:
+                    child = addElement(ci, parent: idx, preserve: xmlSpacePreserve(e, inherited: preserve))
+                default:
+                    if case .unknown(let n)? = classify(e) { issues.append(.unknownElement(n)) }
+                    child = makeElement(ci, parent: idx)
+                }
+                placed.append((child, text.utf16.count))
             }
         }
         if !preserve { text = Self.collapse(text) }                       // §4.3.1: collapse (Run text keeps its ends)
+        let length = text.utf16.count
+        for p in placed { runChildOffsets[Int32(p.node)] = min(p.offset, length) }
         let attr = nodes[idx].rawAttributes.first { $0.namespaceURI == nil && $0.qualifiedName == "Text" }
         if hasContent, attr != nil, !(text.isEmpty) { issues.append(.runTextAndContent) }
         if hasContent && !text.isEmpty {
@@ -721,12 +739,17 @@ struct XamlDOMBuilder {
                     let g = pendingGroup ?? addImplicit(.tableRowGroup, parent: idx)
                     pendingGroup = g
                     addElement(ri, parent: g, preserve: xmlSpacePreserve(e, inherited: preserve))
-                } else {
-                    if case .unknown(let n)? = kind { issues.append(.unknownElement(n)) } else {
-                        issues.append(.invalidNesting("\(e.qualifiedName) in a Table"))
-                    }
+                } else if case .unknown(let n)? = kind {
+                    issues.append(.unknownElement(n))
                     pendingGroup = nil
                     _ = makeElement(ri, parent: idx)
+                } else {
+                    // Misplaced recognised content becomes a cell of its own (as `processRow` does), so it is real,
+                    // re-writable content rather than a slice that would land somewhere else invalid again.
+                    issues.append(.invalidNesting("\(e.qualifiedName) in a Table"))
+                    let g = pendingGroup ?? addImplicit(.tableRowGroup, parent: idx)
+                    pendingGroup = g
+                    misplacedInRowGroup(g, ri, c, kind: kind, preserve: preserve)
                 }
             }
         }
@@ -750,14 +773,28 @@ struct XamlDOMBuilder {
                     let r = pendingRow ?? addImplicit(.tableRow, parent: idx)
                     pendingRow = r
                     addElement(ri, parent: r, preserve: xmlSpacePreserve(e, inherited: preserve))
-                } else {
-                    if case .unknown(let n)? = kind { issues.append(.unknownElement(n)) } else {
-                        issues.append(.invalidNesting("\(e.qualifiedName) in a TableRowGroup"))
-                    }
+                } else if case .unknown(let n)? = kind {
+                    issues.append(.unknownElement(n))
                     pendingRow = nil
                     _ = makeElement(ri, parent: idx)
+                } else {
+                    issues.append(.invalidNesting("\(e.qualifiedName) in a TableRowGroup"))
+                    pendingRow = nil
+                    misplacedInRowGroup(idx, ri, c, kind: kind, preserve: preserve)
                 }
             }
+        }
+    }
+
+    /// A recognised element that is neither a row nor a cell, found where rows belong: an implicit row (and cell,
+    /// unless it is one) around it, its content read as the blocks of that cell.
+    private mutating func misplacedInRowGroup(_ group: Int, _ ri: Int, _ c: Child, kind: XamlNodeKind?, preserve: Bool) {
+        let row = addImplicit(.tableRow, parent: group)
+        if kind == .tableCell {
+            addElement(ri, parent: row, preserve: xmlSpacePreserve(raw.elements[ri], inherited: preserve))
+        } else {
+            let cell = addImplicit(.tableCell, parent: row)
+            processBlocks(cell, [c], preserve: preserve, contentRoot: false)
         }
     }
 

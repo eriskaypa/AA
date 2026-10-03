@@ -232,12 +232,16 @@ struct XamlWriterEmitter {
 
     private func rootAttributes() -> [XamlRawAttribute] {
         var attrs: [XamlRawAttribute]
+        // CONT-162: an invalid recognised attribute on the loaded root is never re-emitted (it would keep the note
+        // unloadable on Windows); completion below then supplies the context value for a core property it held.
+        var kept = metadata.rootAttributes
+        if case .wrapper(let kind)? = metadata.rootRole { kept.removeAll { XamlAttributeTable.isInvalid($0, on: kind) } }
         switch metadata.rootRole {
         case .wrapper(.section)?:
-            attrs = metadata.rootAttributes
+            attrs = kept
         case .wrapper?:
             attrs = XamlWriter.s1RootAttributes(context)
-            for old in metadata.rootAttributes where XamlInheritable.isInheritable(old) {
+            for old in kept where XamlInheritable.isInheritable(old) {
                 if let i = attrs.firstIndex(where: { $0.qualifiedName == old.qualifiedName }) { attrs[i] = old } else {
                     attrs.append(old)
                 }
@@ -364,7 +368,20 @@ struct XamlWriterEmitter {
         let parent = style
         var pes: [String] = []
         for a in attrs {
-            if a.qualifiedName == "#pe" { pes.append(a.value); continue }
+            if a.qualifiedName == "#pe" {
+                // A carried `X.Foreground` property element is an inheritable value like the attribute form: it
+                // takes part in the cascade the CONT-164 test compares against (else a Run equal to the root but
+                // not to this block would lose its Foreground). Where the attribute would be skipped (an empty
+                // paragraph's character properties come from its terminator), the element is dropped too.
+                if let brush = Self.foregroundPropertyElement(a.value), XamlAttributeTable.recognises("Foreground", on: kind) {
+                    if skip(XamlRawAttribute(qualifiedName: "Foreground", namespaceURI: nil, value: "")) { continue }
+                    var local = XamlLocalValues()
+                    local.foreground = brush
+                    style = style.applying(local, styleLayer: nil, node: XamlNodeID(index: -1))
+                }
+                pes.append(a.value)
+                continue
+            }
             if skip(a) || XamlAttributeTable.isInvalid(a, on: kind) { continue }
             if XamlInheritable.isInheritable(a) {
                 if XamlInheritable.same(a.qualifiedName, a.value, parent) { continue }
@@ -373,6 +390,17 @@ struct XamlWriterEmitter {
             attr(a.qualifiedName, a.value)
         }
         return pes
+    }
+
+    /// The brush of a `X.Foreground` property element slice (nil for any other property element or an unreadable
+    /// one), parsed with the DOM's own CONT-154 rules.
+    static func foregroundPropertyElement(_ raw: String) -> XamlBrush? {
+        guard let lt = raw.firstIndex(of: "<"), let end = raw[lt...].firstIndex(where: { $0 == ">" || $0 == " " || $0 == "/" || $0.isWhitespace }),
+              raw[raw.index(after: lt)..<end].hasSuffix(".Foreground") else { return nil }
+        let wrapped = "<Section xmlns=\"" + XamlXMLNamespaces.presentation + "\"><Paragraph>" + raw + "</Paragraph></Section>"
+        guard case .success(let d) = XamlDOM.parse(wrapped),
+              let p = d.allNodeIDs.first(where: { d[$0].kind == .paragraph }) else { return nil }
+        return d[p].local.foreground
     }
 
     private mutating func open(_ name: String) { out += "<" + name }

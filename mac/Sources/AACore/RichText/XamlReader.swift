@@ -408,10 +408,25 @@ struct XamlReaderBuilder {
             switch n.kind {
             case .run:
                 let attrs = projection(id)
-                Self.appendRunText(n.text ?? "", attrs: attrs, to: out)
-                for c in n.children {                               // invalid nesting inside a Run: kept opaque
-                    out.append(attachment(c, xml: doc.sourceText(of: c) ?? "", block: false))
+                guard !n.children.isEmpty else {
+                    Self.appendRunText(n.text ?? "", attrs: attrs, to: out)
+                    continue
                 }
+                // Invalid nesting inside a Run (XD.2.12), shown where it stood: a recognised inline as content,
+                // anything else as an opaque chip written back verbatim.
+                let text = n.text ?? ""
+                let u = Array(text.utf16)
+                var at = 0
+                for c in n.children {
+                    let cut = max(at, min(u.count, doc.runChildOffsets[c.index] ?? u.count))
+                    Self.appendRunText(String(decoding: u[at..<cut], as: UTF16.self), attrs: attrs, to: out)
+                    at = cut
+                    switch doc[c].kind {
+                    case .run, .span, .bold, .italic, .underline, .hyperlink, .lineBreak: inlines([c], into: out)
+                    default: out.append(attachment(c, xml: doc.sourceText(of: c) ?? "", block: false))
+                    }
+                }
+                Self.appendRunText(String(decoding: u[at...], as: UTF16.self), attrs: attrs, to: out)
             case .span, .bold, .italic, .underline, .hyperlink:
                 inlines(n.children, into: out)
             case .lineBreak:
