@@ -38,8 +38,15 @@ public struct FlashQRCode: Sendable, Equatable {
     public let mask: Int
     /// Row-major, `true` = dark.
     public let modules: [Bool]
-    /// The final codewords (data + ECC, interleaved) — for the CIQRCodeDescriptor cross-check.
+    /// The final codewords (data + ECC, interleaved) as placed in the symbol.
     public let codewords: [UInt8]
+    /// The data codewords before error correction (segments, terminator, padding).
+    public let dataCodewords: [UInt8]
+
+    /// Masks Apple's current barcode readers (Vision revisions 3–4, and so very likely the iPhone's) decode reliably
+    /// even when a frame is mostly zero bytes — the zero-padded tail chunk. With masks 0, 1, 2, 3 and 5 such symbols
+    /// are valid but unreadable by those detectors (measured, FlashQRTests); see Deviations/W-FLASH.md DEV-FLASH-05.
+    public static let appleReaderSafeMasks = [4, 6, 7]
 
     /// True when (x, y) is dark; false outside the symbol.
     public func module(_ x: Int, _ y: Int) -> Bool {
@@ -55,9 +62,10 @@ public struct FlashQRCode: Sendable, Equatable {
 
     /// Nayuki `encode_segments`: the smallest version in range that fits; ECC boosted while it still fits (when
     /// `boostEcl`); terminator, bit padding and 0xEC/0x11 pad bytes; `mask` -1 = automatic.
+    /// `maskCandidates` restricts the automatic choice (default: all eight, Nayuki parity).
     public static func encodeSegments(_ segs: [FlashQRSegment], ecl requested: FlashQREcc, minVersion: Int = 1,
-                                      maxVersion: Int = 40, mask: Int = -1,
-                                      boostEcl: Bool = true) throws(FlashQRError) -> FlashQRCode {
+                                      maxVersion: Int = 40, mask: Int = -1, boostEcl: Bool = true,
+                                      maskCandidates: [Int] = Array(0 ..< 8)) throws(FlashQRError) -> FlashQRCode {
         precondition(1 <= minVersion && minVersion <= maxVersion && maxVersion <= 40 && (-1 ... 7).contains(mask))
         var version = minVersion
         var dataUsedBits = 0
@@ -92,15 +100,23 @@ public struct FlashQRCode: Sendable, Equatable {
         }
         var data = [UInt8](repeating: 0, count: bb.count / 8)
         for (i, bit) in bb.bits.enumerated() where bit { data[i >> 3] |= UInt8(1 << (7 - (i & 7))) }
-        return FlashQRCode(version: version, ecl: ecl, dataCodewords: data, mask: mask)
+        return FlashQRCode(version: version, ecl: ecl, dataCodewords: data, mask: mask, maskCandidates: maskCandidates)
+    }
+
+    /// The Flash Sync sender's symbol: Base45 text at ECC L (boosted when it fits), automatic mask among
+    /// `appleReaderSafeMasks`.
+    public static func flashFrame(_ text: String) throws(FlashQRError) -> FlashQRCode {
+        try encodeSegments(FlashQRSegment.makeSegments(text), ecl: .low, maskCandidates: appleReaderSafeMasks)
     }
 
     // MARK: Low level
 
     /// Nayuki constructor: draws function patterns, adds ECC and interleaves, draws the codewords, then applies the
     /// given mask (0…7) or the one with the lowest penalty (-1; the lowest index wins ties).
-    public init(version: Int, ecl: FlashQREcc, dataCodewords: [UInt8], mask requestedMask: Int) {
+    public init(version: Int, ecl: FlashQREcc, dataCodewords: [UInt8], mask requestedMask: Int,
+                maskCandidates: [Int] = Array(0 ..< 8)) {
         precondition((1 ... 40).contains(version) && (-1 ... 7).contains(requestedMask))
+        precondition(!maskCandidates.isEmpty && maskCandidates.allSatisfy { (0 ... 7).contains($0) })
         precondition(dataCodewords.count == FlashQRCode.numDataCodewords(version, ecl))
         var g = FlashQRGrid(version: version, ecl: ecl)
         g.drawFunctionPatterns()
@@ -109,7 +125,7 @@ public struct FlashQRCode: Sendable, Equatable {
         var msk = requestedMask
         if msk == -1 {
             var minPenalty = Int.max
-            for i in 0 ..< 8 {
+            for i in maskCandidates.sorted() {
                 g.applyMask(i)
                 g.drawFormatBits(i)
                 let p = g.penaltyScore()
@@ -125,6 +141,29 @@ public struct FlashQRCode: Sendable, Equatable {
         mask = msk
         modules = g.modules
         codewords = all
+        self.dataCodewords = dataCodewords
+    }
+
+    /// Every block's data codewords, then every block's ECC codewords (not interleaved) — the order
+    /// `CIQRCodeDescriptor(payload:…)` expects as its error-corrected payload.
+    public var dataThenEccCodewords: [UInt8] {
+        let e = errorCorrectionLevel.rawValue
+        let numBlocks = FlashQRCode.numErrorCorrectionBlocks[e][version]
+        let eccLen = FlashQRCode.eccCodewordsPerBlock[e][version]
+        let raw = FlashQRCode.numRawDataModules(version) / 8
+        let numShort = numBlocks - raw % numBlocks
+        let shortLen = raw / numBlocks
+        let divisor = FlashQRCode.reedSolomonDivisor(degree: eccLen)
+        var dataPart: [UInt8] = [], eccPart: [UInt8] = []
+        var k = 0
+        for i in 0 ..< numBlocks {
+            let len = shortLen - eccLen + (i < numShort ? 0 : 1)
+            let dat = Array(dataCodewords[k ..< k + len])
+            k += len
+            dataPart += dat
+            eccPart += FlashQRCode.reedSolomonRemainder(dat, divisor: divisor)
+        }
+        return dataPart + eccPart
     }
 
     // MARK: Capacity
