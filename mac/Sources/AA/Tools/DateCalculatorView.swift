@@ -85,7 +85,6 @@ struct DateCalculatorView: View {
                 }
                 ToolResultBox(text: addText)
             }
-            Spacer(minLength: 0)
             HStack {
                 Spacer()
                 Button("Close") { dismiss() }
@@ -94,7 +93,10 @@ struct DateCalculatorView: View {
             }
         }
         .padding(14)
-        .frame(width: 540, height: 520, alignment: .topLeading)
+        // Design rule 16: the window hugs its two sections (540 wide like TOOLS-060; the height is the content's,
+        // not a fixed 520 that left ~170 pt blank above Close).
+        .frame(width: 540, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
         .background(AAColor.bg)
     }
 
@@ -110,7 +112,7 @@ struct DateCalculatorView: View {
     }
 }
 
-/// A date field (width 180) with a calendar popover (14 §6.8).
+/// A date field (width 180, ISO `yyyy-MM-dd`) with a calendar popover (14 §6.8).
 struct ToolDateField: View {
     @Binding var value: Date
     let calendar: Calendar
@@ -121,6 +123,7 @@ struct ToolDateField: View {
             DatePicker("", selection: $value, displayedComponents: .date)
                 .labelsHidden()
                 .datePickerStyle(.stepperField)
+                .environment(\.locale, ToolDateCalc.pickerLocale)      // ISO field (Stage V ruling, rule 14)
             Button { showsCalendar.toggle() } label: { Image(systemName: "calendar") }
                 .buttonStyle(.borderless)
                 .help("Show a calendar")

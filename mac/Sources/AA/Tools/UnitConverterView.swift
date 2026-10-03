@@ -1,4 +1,5 @@
-// Spec: 14 TOOLS-080 (window: Category combo, bottom note, scrolling rows; many independent windows), TOOLS-081…090
+// Spec: 14 TOOLS-080 (window: Category combo, bottom note, unit rows — a card that hugs the rows, design rule 16;
+//       many independent windows), TOOLS-081…090
 //       (rows, seed "1", live conversion where the edited box is never rewritten, invalid clears the others, category
 //       switch resets, nothing persisted, theme), §6.9 (popup Picker with SF Symbols, 210-pt wrapping labels, focus
 //       tracking, .NET parse/format emulations — never a NumberFormatter field, monospaced digits);
@@ -37,32 +38,33 @@ struct UnitConverterView: View {
                 .frame(width: 260)
                 Spacer(minLength: 0)
             }
-            ScrollView {
-                Grid(alignment: .leading, horizontalSpacing: AASpacing.m, verticalSpacing: 6) {
-                    ForEach(Array(state.category.units.enumerated()), id: \.offset) { i, unit in
-                        GridRow {
-                            Text(unit.name)
-                                .foregroundStyle(AAColor.fg)
-                                .fixedSize(horizontal: false, vertical: true)
-                                .frame(width: 210, alignment: .leading)
-                            TextField(unit.name, text: Binding(get: { i < state.texts.count ? state.texts[i] : "" },
-                                                               set: { new in
-                                                                   // TextChanged fires only on a real change (TOOLS-083).
-                                                                   guard i < state.texts.count, state.texts[i] != new else { return }
-                                                                   state.edit(row: i, text: new)
-                                                               }))
-                                .labelsHidden()
-                                .textFieldStyle(.roundedBorder)
-                                .font(.aaMono(AAType.body))
-                                .focused($focusedRow, equals: i)
-                                .gridColumnAlignment(.leading)
-                        }
+            // Design rule 16: the card hugs the category's rows (at most 10) instead of a scroll area stretched to
+            // the window's foot; the window follows the content height (scene `.windowResizability(.contentSize)`).
+            Grid(alignment: .leading, horizontalSpacing: AASpacing.m, verticalSpacing: 6) {
+                ForEach(Array(state.category.units.enumerated()), id: \.offset) { i, unit in
+                    GridRow {
+                        Text(unit.name)
+                            .foregroundStyle(AAColor.fg)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(width: 210, alignment: .leading)
+                        TextField(unit.name, text: Binding(get: { i < state.texts.count ? state.texts[i] : "" },
+                                                           set: { new in
+                                                               // TextChanged fires only on a real change (TOOLS-083).
+                                                               guard i < state.texts.count, state.texts[i] != new else { return }
+                                                               state.edit(row: i, text: new)
+                                                           }))
+                            .labelsHidden()
+                            .textFieldStyle(.roundedBorder)
+                            .font(.aaMono(AAType.body))
+                            .focused($focusedRow, equals: i)
+                            .gridColumnAlignment(.leading)
                     }
                 }
-                .padding(AASpacing.m)
-                .id(state.categoryIndex)
-                .transition(.opacity)
             }
+            .padding(AASpacing.m)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .id(state.categoryIndex)
+            .transition(.opacity)
             .background(AAColor.panel, in: RoundedRectangle(cornerRadius: AARadius.control, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: AARadius.control, style: .continuous).strokeBorder(AAColor.border))
             Text(ToolUnitCatalog.note)
@@ -71,7 +73,8 @@ struct UnitConverterView: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
-        .frame(minWidth: 460, idealWidth: 500, minHeight: 360, idealHeight: 660)
+        .frame(minWidth: 460, idealWidth: 500, maxWidth: .infinity, alignment: .topLeading)
+        .fixedSize(horizontal: false, vertical: true)
         .background(AAColor.bg)
     }
 }

@@ -9,6 +9,11 @@ public enum ToolDateOperation: String, CaseIterable, Sendable { case add = "Add"
 public enum ToolDateUnit: String, CaseIterable, Sendable { case days = "Days", weeks = "Weeks", months = "Months", years = "Years" }
 
 public enum ToolDateCalc {
+    /// DECISIONS "Stage V rulings": the From / To / Date pickers show ISO `yyyy-MM-dd` like the result lines. Set as
+    /// `.environment(\.locale, …)` on the date field only (its short date style is `2026-10-03` in en_CA); weekday
+    /// names in the results and the calendar popover keep `Locale.current`.
+    public static let pickerLocale = Locale(identifier: "en_CA")
+
     public static let pickBothDates = "Pick both dates."
     public static let pickADate = "Pick a date."
     public static let enterWholeNumber = "Enter a whole number."

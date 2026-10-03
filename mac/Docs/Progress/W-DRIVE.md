@@ -78,6 +78,23 @@ Not rendered: the read-only state (no snapshot switch for a read-only instance);
 router uses (`CommandRouter` context `writeGated`).
 Lead request: `Docs/DEVIATIONS.md` (lead-owned) still lists Q-3 under W-DRIVE "Kept quirks"; see crossOwnerRequests.
 
+## Verification fixes round 2 (FIX2-W-DRIVE, 2026-10-03)
+
+| Finding | By | IDs | Result |
+|---|---|---|---|
+| Production Drive transport could not be driven by a mock `URLProtocol` (no test of 308 / User-Agent / staging move) | V2-J6 | TOOLS-014…019, 14 §6.4, §3.1.14 step 6 | Fixed: `DriveURLSessionTransport.init(configuration:)` applies AA's settings on top of a given configuration (production `init()` = ephemeral). New `DriveTransportTests` (4) drive the real URLSession through a scripted `URLProtocol` that reports 3xx+Location as a redirect like CFNetwork: `User-Agent: AA/<v> (macOS)` on the wire, a 308 with `Range` + `Location` returned unfollowed (one request seen), a 70 KB download moved to `tmp/aa-drive-dl-*` intact, 403 handed back, offline → `DriveError.transport` for data and download. Mutation-checked: following the redirect, dropping the header or skipping the move each fails. |
+| PKCE `code_verifier` modulo bias (`byte % 66`) | V2-J6 | §3.1.14 step 3 | Fixed: verifier = base64url of 48 random octets (64 characters, RFC 7636 §4.1). Test `pkceVerifierIsUnbiased`: 48 octets packing 0…63 yield all 64 symbols once, round-trip decodes to the octets, 0xFF… → `_` only. |
+| Date calculator pickers showed `10/ 3/2026` beside ISO results | V2-DESIGN | TOOLS-060…062 | Fixed: the stepper date field carries `.environment(\.locale, ToolDateCalc.pickerLocale)` (en_CA, Stage V ruling); popover and weekday names keep the system locale. Test `pickerLocaleShowsISODates` (short date in the picker locale = `2026-10-03` = the `Result:` date). |
+| Tool windows stretched a card to fill the window (rule 16) | V2-DESIGN | TOOLS-060, TOOLS-080 | Fixed (W-DRIVE half): Date calculator = 540 wide, height fixed to content, no Spacer above Close; Unit converter = card hugs the rows (no stretched scroll area), root fixed vertically, width 460…∞. Scene half is F3's (REQ-W-DRIVE-04: `.windowResizability(.contentSize)` on the Unit converter; drop `.frame(width: 540, height: 520)` around the Date calculator). Login window: F3 (`Sources/AA/Shell/LoginView.swift`), forwarded. |
+
+Counts: findings 4 · fixed 4 (one needs F3's scene half) · rejected 0. Tests: 1,660 passing (+6: 4 transport, 1 PKCE,
+1 picker locale). No regression test for the layout (AA target is not testable from AACoreTests); checked by snapshot.
+Snapshots (light and dark, checked) in `scratchpad/snapshots/fix2-W-DRIVE/`: `scene-date-calculator-*`,
+`scene-unit-converter-*` (with REQ-W-DRIVE-04 applied locally, not committed: windows hug, ISO fields),
+`pre-scene-*` (as committed, without F3's half: the content is centred in the old 520 / 660-pt windows),
+`sheet-date-calculator-*` (2026-09-30 → 2027-03-01 inclusive, +1,000 days) and `sheet-unit-converter-*` (Pressure,
+10 rows, 14.7 psi). Snapshot logs show no AppKit/SwiftUI runtime warning.
+
 ## Gate
 
 `swift build -j 3 -Xswiftc -warnings-as-errors && swift test -j 3 -Xswiftc -warnings-as-errors` green;
@@ -87,4 +104,5 @@ yet (REQ-W-DRIVE-03).
 ## Open requests
 
 REQ-W-DRIVE-01 (toolbar sync indicator slot, F3), REQ-W-DRIVE-02 (tool window default sizes, F3),
-REQ-W-DRIVE-03 (`Docs/Progress/*.md` in check-ownership, F1).
+REQ-W-DRIVE-03 (`Docs/Progress/*.md` in check-ownership, F1), REQ-W-DRIVE-04 (tool windows hug content: Unit
+converter `.windowResizability(.contentSize)`, Date calculator without the fixed 540×520 frame, F3).

@@ -12,11 +12,16 @@ import Network
 public enum DrivePKCE {
     static let unreserved = Array("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~")
 
-    /// A 64-character `code_verifier` from the unreserved set (RFC 7636: 43…128).
-    public static func makeVerifier(length: Int = 64) -> String {
-        let bytes = SecureRandom.bytes(length)
-        return String(bytes.map { unreserved[Int($0) % unreserved.count] })
-    }
+    /// Random octets behind one `code_verifier`: 48 → exactly 64 base64url characters, no padding.
+    public static let verifierOctets = 48
+
+    /// A 64-character `code_verifier` (RFC 7636 §4.1: 43…128 unreserved characters): the base64url encoding of
+    /// `verifierOctets` random octets, as §4.1 recommends. Every 6-bit group maps to one character, so each of the
+    /// 64 characters is equally likely (the earlier `byte % 66` mapping favoured the first 58 characters).
+    public static func makeVerifier() -> String { verifier(from: SecureRandom.bytes(verifierOctets)) }
+
+    /// The deterministic half of `makeVerifier` (tests feed fixed octets).
+    static func verifier(from octets: Data) -> String { base64URL(octets) }
 
     /// `BASE64URL(SHA256(verifier))` without padding.
     public static func challenge(for verifier: String) -> String {
