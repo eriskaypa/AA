@@ -200,13 +200,17 @@ public enum PersistSharedText {
         let target = URL(fileURLWithPath: path)
         let tmp = URL(fileURLWithPath: path + "." + UUID().netN + ".tmp")
         let plan: PersistExportPlan
+        let pushedStamp: NetDateTime?
         do {
             host?.flushAllEditors()
             host?.captureUiState()
             try store.save()
+            // The stamp the bundle's data.json carries. An autosave while the ZIP is written advances
+            // `store.data.lastModified`; that newer edit is not in this bundle and must stay unsynced.
+            pushedStamp = store.data.lastModified
             plan = try BundleService.exportPlan(ds, to: tmp, includeAttachments: !ds.settings.values.textOnlyExport)
         } catch {
-            pushFinished(label: label, error: error, tmp: tmp)
+            pushFinished(label: label, error: error, tmp: tmp, pushedStamp: nil)
             return
         }
         Task { @MainActor [weak self] in
@@ -215,14 +219,14 @@ public enum PersistSharedText {
             }.value
             guard let self else { return }
             if let failure {
-                self.pushFinished(label: label, error: failure, tmp: tmp)
+                self.pushFinished(label: label, error: failure, tmp: tmp, pushedStamp: pushedStamp)
                 return
             }
             do {
                 try PersistFileCoordination.replace(target, with: tmp)
-                self.pushFinished(label: label, error: nil, tmp: tmp)
+                self.pushFinished(label: label, error: nil, tmp: tmp, pushedStamp: pushedStamp)
             } catch {
-                self.pushFinished(label: label, error: error, tmp: tmp)
+                self.pushFinished(label: label, error: error, tmp: tmp, pushedStamp: pushedStamp)
             }
         }
     }
@@ -233,28 +237,32 @@ public enum PersistSharedText {
         guard let path else { return }
         let target = URL(fileURLWithPath: path)
         let tmp = URL(fileURLWithPath: path + "." + UUID().netN + ".tmp")
+        var pushedStamp: NetDateTime?
         do {
             host?.flushAllEditors()
             host?.captureUiState()
             try store.save()
+            pushedStamp = store.data.lastModified
             try BundleService.exportFolderToZipSync(ds, to: tmp, includeAttachments: !ds.settings.values.textOnlyExport)
             try PersistFileCoordination.replace(target, with: tmp)
-            pushFinished(label: label, error: nil, tmp: tmp, background: false)
+            pushFinished(label: label, error: nil, tmp: tmp, pushedStamp: pushedStamp, background: false)
         } catch {
-            pushFinished(label: label, error: error, tmp: tmp, background: false)
+            pushFinished(label: label, error: error, tmp: tmp, pushedStamp: pushedStamp, background: false)
             throw error
         }
     }
 
-    private func pushFinished(label: String, error: Error?, tmp: URL, background: Bool = true) {
+    /// On success both stamps become `pushedStamp` — the `LastModified` the pushed data.json carries, captured right
+    /// after the save that fed the bundle — never the stamp current when the ZIP finished (Deviations W-PERSIST-21).
+    private func pushFinished(label: String, error: Error?, tmp: URL, pushedStamp: NetDateTime?, background: Bool = true) {
         try? FileManager.default.removeItem(at: tmp)
         if background { isPushRunning = false }
         if let error {
             host?.postStatus(PersistSharedText.failed(label, error.localizedDescription))
             setPushFailed()
         } else {
-            lastSeen = store.data.lastModified
-            lastSynced = store.data.lastModified
+            lastSeen = pushedStamp
+            lastSynced = pushedStamp
             stampsInitialized = true
             host?.postStatus(PersistSharedText.written(label, hms()))
             setOnline(true)

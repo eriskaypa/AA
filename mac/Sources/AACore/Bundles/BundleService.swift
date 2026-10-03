@@ -86,6 +86,8 @@ public enum PersistBundleError: Error, LocalizedError, Sendable, Equatable {
         let json = try PersistBundleIO.validatedJSON(ds, dataSrc)                 // D-3: nothing touched yet
         let filesSrc = staging.appending(path: "files", directoryHint: .isDirectory)
         let dataOnly = PersistBundleIO.isDataOnlyBundle(staging: staging, filesSrc: filesSrc)
+        // 01 §6.6: names a foreign bundle carries that Windows cannot create are renamed before anything is compared.
+        let renames = dataOnly ? [:] : try PersistBundleIO.makeWindowsSafe(filesSrc)
         let changed = !dataOnly && !PersistBundleIO.attachmentsMatch(bundleDir: filesSrc, localDir: ds.filesFolder)
         if changed {
             let names = try PersistBundleIO.copyTopLevelFiles(from: filesSrc, to: ds.filesFolder)
@@ -94,7 +96,7 @@ public enum PersistBundleError: Error, LocalizedError, Sendable, Equatable {
         } else {
             try applyDataFile(ds, json: json)
         }
-        try reloadMigrateRewrite(ds)
+        try reloadMigrateRewrite(ds, renames: renames)
         return changed ? .withAttachments : .dataOnly
     }
 
@@ -110,12 +112,13 @@ public enum PersistBundleError: Error, LocalizedError, Sendable, Equatable {
         guard FileManager.default.fileExists(atPath: dataSrc.path) else { throw PersistBundleError.sharedNoDataJSON }
         let json = try PersistBundleIO.validatedJSON(ds, dataSrc)                 // D-3
         let filesSrc = staging.appending(path: "files", directoryHint: .isDirectory)
+        let renames = try PersistBundleIO.makeWindowsSafe(filesSrc)                // 01 §6.6
         let names = try PersistBundleIO.copyTopLevelFiles(from: filesSrc, to: ds.filesFolder)
         try applyDataFile(ds, json: json)
         if !PersistBundleIO.isDataOnlyBundle(staging: staging, filesSrc: filesSrc) {
             PersistBundleIO.sweepOrphans(ds.filesFolder, keeping: names)
         }
-        try reloadMigrateRewrite(ds)
+        try reloadMigrateRewrite(ds, renames: renames)
     }
 
     // MARK: Legacy full-wipe import (DATA-047; not wired to UI)
@@ -230,10 +233,12 @@ public enum PersistBundleError: Error, LocalizedError, Sendable, Equatable {
         try ds.persistWriteReplacing(json, to: ds.defaultDataFile)
     }
 
-    /// `LoadFrom(Default)` → `MigrateLegacyAbsolutePaths` → rewrite (settings already persisted the active file).
-    static func reloadMigrateRewrite(_ ds: DataStore) throws {
+    /// `LoadFrom(Default)` → `MigrateLegacyAbsolutePaths` → the `files/` leaves renamed Windows-safe on import
+    /// (`renames`, old → new) → rewrite (settings already persisted the active file).
+    static func reloadMigrateRewrite(_ ds: DataStore, renames: [String: String] = [:]) throws {
         let data = try ds.loadFrom(ds.defaultDataFile)
         AttachmentStore.migrateLegacyAbsolutePaths(ds, data: data)
+        if !renames.isEmpty { PersistBundleIO.applyRenames(renames, to: data) }
         try ds.persistWriteReplacing(try ds.serializeForSave(data), to: ds.defaultDataFile)
     }
 }
@@ -354,6 +359,55 @@ enum PersistBundleIO {
             try fm.copyItem(at: f.url, to: target)
         }
         return names
+    }
+
+    /// Whether Windows refuses (or silently alters) this leaf: `< > : " / \ | ? *` or a control character, a trailing
+    /// space or dot, or a reserved device stem (`CON`, `PRN`, `AUX`, `NUL`, `COM1–9`, `LPT1–9`, any case) — 01 §6.6.
+    static func isWindowsIllegalLeaf(_ leaf: String) -> Bool {
+        for sc in leaf.unicodeScalars where sc.value < 0x20 || "<>:\"/\\|?*".unicodeScalars.contains(sc) { return true }
+        if let last = leaf.last, last == " " || last == "." { return true }
+        let stem = String(leaf.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).first ?? "")
+        return PersistPaths.isReservedDeviceName(stem)
+    }
+
+    /// 01 §6.6 for bundles from elsewhere (iOS, hand-made): renames every top-level file of the staged `files/` whose
+    /// name Windows cannot create to `AttachmentStore.windowsSafeLeaf` (`_2`, `_3`… before the extension when that name
+    /// is taken, case-insensitively), so it is never copied into the data folder — or exported again — as is. Returns
+    /// old leaf → new leaf for the data's `files/` paths. AA's own attachments are already safe (nothing renamed).
+    static func makeWindowsSafe(_ filesSrc: URL) throws -> [String: String] {
+        let files = topLevelFiles(filesSrc)
+        guard files.contains(where: { isWindowsIllegalLeaf($0.leaf) }) else { return [:] }
+        var taken = Set(files.map { key($0.leaf) })
+        var out: [String: String] = [:]
+        for f in files where isWindowsIllegalLeaf(f.leaf) {
+            let safe = AttachmentStore.windowsSafeLeaf(f.leaf)
+            var candidate = safe
+            var n = 2
+            while taken.contains(key(candidate)) {
+                let ext = (safe as NSString).pathExtension
+                let stem = ext.isEmpty ? safe : String(safe.dropLast(ext.count + 1))
+                candidate = stem + "_\(n)" + (ext.isEmpty ? "" : "." + ext)
+                n += 1
+            }
+            try FileManager.default.moveItem(at: f.url, to: filesSrc.appending(path: candidate))
+            taken.remove(key(f.leaf))
+            taken.insert(key(candidate))
+            out[f.leaf] = candidate
+        }
+        return out
+    }
+
+    /// Points every copied attachment's relative `files/<old>` (either separator, any case of `files`) at its renamed
+    /// leaf. Links and link-in-place items are never touched (DATA-061).
+    @MainActor static func applyRenames(_ renames: [String: String], to data: AppData) {
+        for c in AttachmentStore.enumerateContainers(data) {
+            for f in c.files {
+                if f.isLink || f.linkInPlace { continue }
+                let norm = f.path.replacingOccurrences(of: "\\", with: "/")
+                guard norm.utf16.count > 6, NetText.toLowerInvariant(String(norm.prefix(6))) == "files/" else { continue }
+                if let new = renames[String(norm.dropFirst(6))] { f.path = "files/" + new }
+            }
+        }
     }
 
     /// Deletes every top-level local file whose name is not in `keeping` (sub-folders and Finder metadata untouched).
