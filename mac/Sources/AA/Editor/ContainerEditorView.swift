@@ -29,20 +29,27 @@ struct ContainerEditorView: View {
     @Environment(\.dialogs) private var dialogs
     @State private var controller = EditorController()
     @State private var fileBankHeight: CGFloat = 260
+    /// Height of the format bar plus any banner above the paper (measured; the bar may fold or wrap).
+    @State private var chromeHeight: CGFloat = 33
 
     static let splitterHeight: CGFloat = 6
-    static let minEditorHeight: CGFloat = 150
+    /// The paper itself keeps at least this much height before the file bank gives way (V-05: the 260 pt bank default
+    /// squeezed the paper to ~130 pt in a short item window). CONT-001's 260 is the default bank height only.
+    static let minPaperHeight: CGFloat = 200
     static let minFileBankHeight: CGFloat = 110
+
+    /// The notes pane's minimum: the measured chrome plus the paper minimum.
+    private var minEditorHeight: CGFloat { chromeHeight + Self.minPaperHeight + 2 * EditorPane.paperInset }
 
     var body: some View {
         GeometryReader { geo in
             let total = geo.size.height
-            let bank = context.showsFileBank ? clampedBank(total) : 0
+            let bank = context.showsFileBank ? Self.clampedBank(fileBankHeight, total: total, minEditor: minEditorHeight) : 0
             VStack(spacing: 0) {
-                EditorPane(controller: controller, title: context.title)
-                    .frame(height: context.showsFileBank ? max(Self.minEditorHeight, total - bank - Self.splitterHeight) : total)
+                EditorPane(controller: controller, title: context.title) { chromeHeight = $0 }
+                    .frame(height: context.showsFileBank ? max(0, total - bank - Self.splitterHeight) : total)
                 if context.showsFileBank {
-                    EditorSplitHandle(height: $fileBankHeight, total: total)
+                    EditorSplitHandle(height: $fileBankHeight, total: total, minEditor: minEditorHeight)
                     FileBankView(container: container, context: FileBankContext(host: context.host, isEnabled: context.isEnabled))
                         .frame(height: bank)
                 }
@@ -59,9 +66,11 @@ struct ContainerEditorView: View {
         controller.bind(container: container, host: context.host, isEnabled: context.isEnabled, env: env, dialogs: dialogs)
     }
 
-    private func clampedBank(_ total: CGFloat) -> CGFloat {
-        let maxBank = max(Self.minFileBankHeight, total - Self.minEditorHeight - Self.splitterHeight)
-        return min(max(fileBankHeight, Self.minFileBankHeight), maxBank)
+    /// The bank's height: the user's (or the 260 default) clamped so the paper keeps `minPaperHeight`; the bank never
+    /// drops below its own minimum (on a very short pane the paper gives way first).
+    static func clampedBank(_ wanted: CGFloat, total: CGFloat, minEditor: CGFloat) -> CGFloat {
+        let maxBank = max(minFileBankHeight, total - minEditor - splitterHeight)
+        return min(max(wanted, minFileBankHeight), maxBank)
     }
 }
 
@@ -69,13 +78,30 @@ struct ContainerEditorView: View {
 struct EditorPane: View {
     let controller: EditorController
     var title: String = ""
+    /// Reports the height of the format bar + banners (the host keeps the paper's minimum below them).
+    var onChromeHeight: ((CGFloat) -> Void)? = nil
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    /// The paper is presented as a page: inset from the pane, rounded, hairline border, a soft shadow in dark mode
+    /// (V-DESIGN rule 9). Its colour stays #FCFCFC in both appearances (CONT-010).
+    static let paperInset: CGFloat = AASpacing.s
+    static let paperRadius: CGFloat = AARadius.boardCard
 
     var body: some View {
         VStack(spacing: 0) {
-            EditorFormatBar(controller: controller)
-            banners
+            VStack(spacing: 0) {
+                EditorFormatBar(controller: controller)
+                banners
+            }
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { onChromeHeight?($0) }
             EditorTextArea(controller: controller)
+                .clipShape(RoundedRectangle(cornerRadius: Self.paperRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Self.paperRadius, style: .continuous)
+                    .strokeBorder(AAColor.border, lineWidth: 1))
+                .shadow(color: .black.opacity(colorScheme == .dark ? 0.45 : 0), radius: 4, y: 1)
                 .overlay(alignment: .bottom) { noticeView }
+                .padding(Self.paperInset)
                 .accessibilityLabel(title.isEmpty ? "Notes" : "Notes — \(title)")
         }
         .background(AAColor.panel)
@@ -124,22 +150,22 @@ struct EditorPane: View {
                 // The lock hint's emoji are icons (ARCH §8.5): the leading 🔒 is the symbol on the left, the 🔓 in
                 // the sentence is the format bar's `lock.open` symbol inline.
                 Self.noticeText(n.text)
-                    .font(.system(size: AAType.small, weight: .medium))
+                    .font(.callout.weight(.medium))
                     .foregroundStyle(Color(nsColor: EditorFormatting.editorInk))
                     .fixedSize(horizontal: false, vertical: true)
                 Button { controller.dismissNotice() } label: {
-                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary)
+                    Image(systemName: "xmark").font(.caption2.weight(.bold)).foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
                 .help("Dismiss")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(.white.opacity(0.96), in: Capsule())
-            .overlay(Capsule().strokeBorder(Color.black.opacity(0.12), lineWidth: 1))
+            .padding(.horizontal, AASpacing.m)
+            .padding(.vertical, AASpacing.s)
+            .background(AAColor.panel, in: Capsule())          // light (the scheme is pinned below)
+            .overlay(Capsule().strokeBorder(AAColor.border, lineWidth: 1))
             .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
-            .padding(.bottom, 12)
-            .padding(.horizontal, 16)
+            .padding(.bottom, AASpacing.m)
+            .padding(.horizontal, AASpacing.l)
             .environment(\.colorScheme, .light)                 // floats on the light paper
             .transition(.move(edge: .bottom).combined(with: .opacity))
             .id(n.id)
@@ -160,6 +186,7 @@ struct EditorTextArea: NSViewRepresentable {
 struct EditorSplitHandle: View {
     @Binding var height: CGFloat
     let total: CGFloat
+    var minEditor: CGFloat = ContainerEditorView.minPaperHeight
     @State private var start: CGFloat?
     @State private var hovering = false
 
@@ -182,8 +209,7 @@ struct EditorSplitHandle: View {
                 .onChanged { g in
                     if start == nil { start = height }
                     let proposed = (start ?? height) - g.translation.height
-                    let maxBank = total - ContainerEditorView.minEditorHeight - ContainerEditorView.splitterHeight
-                    height = min(max(proposed, ContainerEditorView.minFileBankHeight), max(ContainerEditorView.minFileBankHeight, maxBank))
+                    height = ContainerEditorView.clampedBank(proposed, total: total, minEditor: minEditor)
                 }
                 .onEnded { _ in start = nil }
         )

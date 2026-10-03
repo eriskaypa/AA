@@ -28,10 +28,12 @@ struct EditorInsertLinkSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        // NSAlert layout (V-DESIGN rule 7): system 13 bold title, 11-pt body, field, buttons bottom-trailing.
+        VStack(alignment: .leading, spacing: AASpacing.s) {
             Label(EditorLinkRules.sheetTitle, systemImage: "link")
-                .font(.system(size: 14, weight: .bold))
+                .font(.body.bold())
             Text(EditorLinkRules.sheetLabel)
+                .font(.subheadline)
             ShellRawSingleLineField(text: $text, secure: false,
                                     onSubmit: { if let n = normalised { complete(n) } else { NSSound.beep() } },
                                     onCancel: { complete(nil) })
@@ -52,7 +54,7 @@ struct EditorInsertLinkSheet: View {
                     }
                 }
             }
-            .font(.system(size: AAType.caption))
+            .font(.subheadline)
             .foregroundStyle(AAColor.muted)
             .frame(minHeight: 16, alignment: .leading)
             .animation(.snappy, value: normalised == nil)
@@ -64,9 +66,9 @@ struct EditorInsertLinkSheet: View {
                     .disabled(normalised == nil)
                     .aaProminent()
             }
-            .padding(.top, 4)
+            .padding(.top, AASpacing.xs)
         }
-        .padding(14)
+        .padding(AASpacing.l)
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
         .onDisappear { complete(nil) }

@@ -302,18 +302,46 @@ public struct EditorSelectionSummary: Equatable {
         }
     }
 
-    /// CONT-043 on ordinary paragraphs: the whole paragraph moves by ±24 (head and first-line indent together,
-    /// TextIndent cleared), clamped at 0; NaN/Auto counts as 0.
+    /// CONT-043 Indent / Outdent on a non-empty document (05 §3.1 `ChangeIndent`). Caret in a list → nest / un-nest
+    /// (WPF Increase/DecreaseIndentation) + normalise. Caret in ordinary text → every touched paragraph's
+    /// `Margin.Left = max(0, Left ± 24)` (NaN/Auto = 0) and `TextIndent = 0`, written into the paragraph model the
+    /// XAML writer persists (the AppKit indents alone are not persisted for modelled paragraphs — V-05). The block
+    /// tree is re-rendered as one replacement; the caller wraps the call in one undo step. Returns the new selection.
     @discardableResult
-    public static func indentParagraphs(in s: NSMutableAttributedString, range: NSRange, increase: Bool) -> [NSRange] {
-        updateParagraphs(in: s, range: range) { p in
-            let cur = p.headIndent.isFinite ? p.headIndent : 0
+    public static func changeIndent(_ s: NSTextStorage, selection: NSRange, increase: Bool) -> NSRange {
+        guard s.length > 0 else { return selection }
+        let inList = isInList(s, at: selection.location)
+        let out = increase ? RichListFormatter.indent(s, selection: selection)
+                           : RichListFormatter.outdent(s, selection: selection)
+        if inList { RichListFormatter.normalise(s) }
+        return out
+    }
+
+    /// CONT-043 in an empty document: the typing attributes move ±24 (head and first-line together, clamped at 0,
+    /// NaN = 0). A paragraph model carried in the typing attributes (left over from deleted text) is shifted too, so
+    /// the first paragraph typed with them is written with the same `Margin.Left` it shows.
+    public static func indentTypingAttributes(_ a: [NSAttributedString.Key: Any],
+                                              increase: Bool) -> [NSAttributedString.Key: Any] {
+        var cur: CGFloat = 0
+        var out = paragraphStyle(a) { p in
+            cur = p.headIndent.isFinite ? p.headIndent : 0
             let next = max(0, cur + (increase ? indentStep : -indentStep))
-            guard next != p.headIndent || p.firstLineHeadIndent != next else { return false }
+            guard next != cur || p.firstLineHeadIndent != next else { return false }
             p.headIndent = next
             p.firstLineHeadIndent = next
             return true
         }
+        if var model = out[.richParagraphModel] as? [String: String] {
+            let m = model["Margin"].flatMap(XamlValues.parseThickness)
+                ?? XamlThickness(left: .nan, top: .nan, right: .nan, bottom: .nan)
+            let left = m.left.isFinite ? m.left : 0
+            let next = max(0, left + Double(increase ? indentStep : -indentStep))
+            model["Margin"] = XamlValues.formatThickness(XamlThickness(left: next, top: m.top, right: m.right,
+                                                                       bottom: m.bottom))
+            model["TextIndent"] = nil
+            out[.richParagraphModel] = model
+        }
+        return out
     }
 
     /// The new paragraph style of a typing-attributes dictionary for an empty document.

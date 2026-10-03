@@ -68,6 +68,23 @@ Every assigned ID re-read against 05 / 06 / 03 and the C# (`Views/ContainerEdito
   `text.badge.plus`; the family menu offers Show Fonts…; radio/checkbox labels in the Insert Saved List sheet use the
   system font (native controls); the text-colour bar keeps a visible outline in dark mode.
 
+## Fix pass FIX-W-CONT (verification findings V-05, V-DESIGN) — 4 / 4 fixed
+
+| Finding | Fix | Test / check |
+|---|---|---|
+| V-05 major — CONT-043 Indent / Outdent on ordinary paragraphs shown but not saved | `EditorFormatting.changeIndent` (AACore) runs W-RICH's `RichListFormatter.indent/outdent` for lists **and** ordinary paragraphs (Margin.Left ± 24 in the paragraph model the writer persists, TextIndent cleared, NaN/Auto = 0), one undo step via `structural`; the empty-document path (`indentTypingAttributes`) also shifts a carried paragraph model. The AppKit-only `indentParagraphs` is gone. | `paragraphIndentPersists` (stored `Margin="0,1,0,1"` → `24,1,0,1`; 0 → 24 → 48 written and reloaded; stored 24 outdents to 0 and stays 0; every touched paragraph; a user-typed paragraph), `indentInListNests`, `indentTypingAttributes`; self-test checks "Indent is persisted", "Indent on a stored paragraph is persisted", "Undo takes the stored indent back" |
+| V-05 minor — CONT-032 table written without `Margin="0,4,0,4"`, header bold on the paragraphs | `EditorTableBuilder.makeTable` builds the W-RICH block tree (Table CellSpacing 0 / Margin 0,4,0,4 / Columns → row group → rows → cells with BorderBrush, BorderThickness, Padding and `FontWeight="Bold"` on the row-0 cells) and renders it with the reader's renderer. | `tableWritesS4Shape` (written body contains the S-4 table; no paragraph-level bold; reload → identical XAML, 2 columns, collapsed borders, 4-pt margins); `tableShape` unchanged |
+| V-05 polish — item window paper squeezed to ~130 pt by the 260 pt bank | `ContainerEditorView`: the editor minimum is the measured format-bar + banner height + 200 pt of paper (+ the 8 pt page inset); the bank's 260 default and the splitter clamp to it (bank ≥ 110). | snapshots `item-{light,dark}.png` (bar on one row, paper ≈ 400 pt) |
+| V-DESIGN polish — format bar wrapping a lone group; edge-to-edge white paper in dark | `EditorFormatBar` folds by density through `ViewThatFits` (full → alignment/lists menus → overflow `ellipsis.circle` menu → + undo/redo, link/table/clear) and wraps only as a last resort; the paper is inset 8 pt, radius 6, 1-pt border, soft dark-mode shadow. | snapshots `tasks-*`, `item-*`, `editor-narrow-*`, `selftest-*` (light + dark): one row in every host |
+
+Also (design rules applied to every W-CONT view): format-bar symbols regular weight, hierarchical; popover
+help / counts in `aaMono` with tokens, button labels system; Insert hyperlink sheet in the NSAlert layout (system 13
+bold title, 11-pt body, 16 pt margins); Insert saved list sheet with `BuilderSheetHeader`, `aaMono` rows and group
+headers with a muted "(N)", Divider + 44 pt footer bar, `AAEmptyState` for "no match" / "no saved lists"; the lock
+notice uses `AAColor` tokens; the self-test list uses `aaMono`. `showPreview` (debug previews) clears the undo
+history like a load does (D-2) — the self-test's synchronous steps otherwise undid into the previous preview.
+Snapshots: `scratchpad/snapshots/fix1-W-CONT/`. Gate green: 1,589 tests.
+
 ## Post-merge (Stage V)
 
 * Gated tests `EditorSessionRealEngineTests` (real reader/writer round trip, untouched notes not rewritten).
