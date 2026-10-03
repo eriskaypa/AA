@@ -62,3 +62,29 @@ editor sheets (W-BUILD); vessel tabs and Tools ▸ Vessel actions (W-VESSEL); Ex
 - Tests: `Tests/AACoreTests/Hierarchy/HierPageStateTests.swift` (3 tests). Gate: 1,589 tests green.
 - Snapshots (light + dark): `scratchpad/snapshots/fix1-W-HIER/` — eq4 (sidebar), task-narrow (1100×760, subtasks),
   itemwin (item window); before-* for comparison.
+
+## Fix round 2 (FIX2-W-HIER, verification findings V2-SCALE / V2-COMPAT / V2-DESIGN)
+Counts: 4 findings — 2 fixed, 1 not fixed (framework), 1 rejected.
+- Fixed (V2-SCALE, HIER-121 / §3.2 reveal): the selected row is centred (`scrollTo(anchor: .center)`), the jump is
+  repeated over ~0.3 s so lazily measured wrapping rows settle on it, and the request is honoured when the sidebar
+  appears (`.task(id:)`), so the restored `Ui.Selected{Kind}Id` is revealed at launch. A collapsed group reveals
+  its header (`HierSidebar.revealRowID`). Large data (500 equipment / 5 000 tasks): Task 0245, Equipment 072
+  (Navigation), launch Equipment 000 and Task 0000 all centred.
+- Fixed (V2-COMPAT, items sharing an Id): rows, List selection and the page index are keyed by `HierRowKey` (the Id,
+  or a derived key for a later duplicate); the details are keyed by object. The "(DUP)" task shows, selects and
+  renames on its own; stored ids stay real (Deviations: "V2-COMPAT (dup Ids)").
+- Not fixed (V2-SCALE "reentrant operation in its NSTableView delegate"): a SwiftUI/AppKit defect on macOS 27.0.1.
+  A 40-line standalone app with a plain `List` of 500 `Text` rows (no AA code) logs the same warning with the same
+  stack (`OutlineListCoordinator.diffRows → NSTableRowData endUpdates → _keepTopRowStableAtLeastOnce → rowAtPoint →
+  NSTableRowHeightData _cacheRowSpansInRange`); ~200 rows or fewer do not. In AA, fixed-height single-line rows,
+  rows equal to the table's 24-pt estimate, no sections, no drag / context menu / overlay / list style / commands,
+  and a fixed sidebar width all still log it; capping the list to ~60 rows silences it. Fixed heights would only
+  have broken HIER-018 (wrapping names). Removing it means replacing the SwiftUI `List` with an AppKit table (lead
+  decision; ARCH §9.7 / HIER-019 name a lazy `List`).
+- Rejected (V2-DESIGN rule 6, item-window labels): `HierItemWindowFields.label(_:)` already is
+  `.font(.aaMono(AAType.body))`, `AAColor.muted`, trailing in a fixed 90-pt column, and item-task-light.png shows
+  mono labels.
+- Tests: `Tests/AACoreTests/Hierarchy/HierRowKeyTests.swift` (3 tests: keys, duplicate-Id journey, reveal target).
+  Gate: 1,657 tests green, check-ownership OK.
+- Snapshots (light + dark where UI changed): `scratchpad/snapshots/fix2-W-HIER/` — tasks245, eq072, eqlaunch,
+  taskslaunch (large data), dup-tasks (duplicate Ids), small-tasks / small-eq (snapdata-full); base-* = before.
