@@ -123,9 +123,10 @@ public enum PersistReadOnlyText {
     }
 }
 
-/// DATA-184: a data folder that also seems to be used by AA on Windows.
+/// DATA-184: a data folder that also seems to be used by AA on Windows. The menu path in the message uses the final
+/// titles of 03 §X-13 (01's "Shared Save File ▸ Set…" became "Shared Save ▸ Set Shared Save File…").
 @MainActor public enum PersistWindowsEvidence {
-    public static let message = "This data folder also seems to be used by AA on Windows. Two copies of AA must not edit one data folder — they overwrite each other's changes. Give each computer its own data folder and connect them with a shared save file (File ▸ Shared Save File ▸ Set…)."
+    public static let message = "This data folder also seems to be used by AA on Windows. Two copies of AA must not edit one data folder — they overwrite each other's changes. Give each computer its own data folder and connect them with a shared save file (File ▸ Shared Save ▸ Set Shared Save File…)."
     public static let showMeHow = "Show Me How", dontShowAgain = "Don't Show Again"
     public static let helpAnchor = "shared-save-setup"
 
