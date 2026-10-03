@@ -51,7 +51,7 @@ W-VESSEL W-PDF W-SIRE W-FLASH W-DRIVE"
 owner_of() {
     REPLY=""
     case "$1" in
-        Docs/Requests/*.md|Docs/Deviations/*.md)
+        Docs/Requests/*.md|Docs/Deviations/*.md|Docs/Progress/*.md)
             REPLY="${1##*/}"; REPLY="${REPLY%.md}"
             case " $(echo $KNOWN_OWNERS) " in *" $REPLY "*) ;; *) REPLY="" ;; esac ;;
         # Running record of the port; every stage appends its own row (not in the §2 table).
