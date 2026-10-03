@@ -13,8 +13,39 @@ Counts are feature IDs from `Docs/OWNERSHIP.md` §4 (1,583 total).
 | F2 domain services | F2 | done (merged) | AppStore domain operations (lookups, relations + widened purge, creation catalogue, log, Trash/undo incl. `trashSubtask` and `trashAllCrew`, recurrence with calendar-date outputs, groups), 15 services (search + XAML text, switcher, reminders, batch done/deadline/delete, saved-list order, templates, `.aasched`, DataDiff + "Other data", AgeVerdict, WorkRange, `NetDateParser`, `CrewText`), XLSX reader (OPC package, strict XML scanner, styles, strings, sheets incl. comments/tables/1904, serials, renderers A/B/B+/C); 0 `PLACEHOLDER(F2)` markers; 114 new tests (343 total / 57 suites) green; POC workbooks copied to `Tests/AACoreTests/Fixtures/xlsx/`; deviations in `Docs/Deviations/F2.md`, requests in `Docs/Requests/F2.md` |
 | F3 app shell | F3 | done (merged) | AACore Launch/Commands (args, AppFolder + pre-flight, crash log, registry of every §6.5.1 row, menu tree, pure router table, picker model); AA App/Shell/Commands/Design/Shared/Debug (launch phases, bootstrap scene + SceneOpener, all scenes, AppEnvironment, main window, menus via router + AppKit bridge, shared dialogs, quit pipeline, autosave, snapshot hook); placeholders for every AA-target contract (71 files, 14 wave owners); 285 tests green (56 F3 tests); 80 snapshots (every section and scene, both appearances, F3 sheets); deviations `Docs/Deviations/F3.md`, requests `Docs/Requests/F3.md` |
 | Foundation integration | INTEGRATOR | done | `stage/F2` and `stage/F3` merged into `mac-port` (`--no-ff`); one conflict (`Docs/PROGRESS.md`, both rows kept), no code fix needed. Feature IDs owned (OWNERSHIP §4): F1 73, F2 112, F3 295 = 480 of 1,583. Swift: 291 files / 29,923 lines — Sources 250 files / 21,590 lines (AACore 144 / 14,624; AA 106 / 6,966), Tests 41 files / 8,333 lines. Gate from a clean `.build`: warnings-as-errors build clean, 399 tests / 68 suites pass, `check-ownership.sh` OK, `check-placeholders.sh` F1/F2/F3 empty; 364 `PLACEHOLDER(...)` markers left in 112 files for 15 wave owners (W-SHELL 28, W-PERSIST 77, W-RICH 43, W-CONT 6, W-FILES 16, W-HIER 23, W-BUILD 23, W-PLAN 18, W-QUICK 26, W-CREW 15, W-VESSEL 23, W-PDF 9, W-SIRE 16, W-FLASH 8, W-DRIVE 33). Rule zero: no change outside `mac/` against `main`; original-source checksums pass. Debug snapshot hook renders the main window (TabEquipment) in light and dark. |
-| Wave (16 vertical slices) | W-* | pending | |
-| Verification | V | pending | |
+| Wave (16 vertical slices) | W-* | done (merged) | 16 wave branches built, audited in their worktrees and merged into `mac-port` (`--no-ff`, OWNERSHIP order W-RICH … W-DRIVE; W-RICH's post-audit commit merged last); per-owner counts below; every `<Area>ContractStatus` flag `true` |
+| Wave integration | INTEGRATOR | done | No file conflicts (merge commits ae7b9cd…47c7463, then W-RICH's post-audit commit); warnings-as-errors build of the merged tree green; one integration fix (W-GOLD's `GoldMacOutTests`, see log). Clean-build gate: build clean, **1,582 tests / 234 suites pass** (cross-owner `ContractStatus`-gated tests now run for real; only environment-gated suites skip: Windows goldens/captures absent, dump switches), `check-ownership.sh` OK, `check-placeholders.sh` prints nothing (0 `PLACEHOLDER(` markers in `Sources`, `Tests`, `Tools`). Rule zero: no change outside `mac/` against `main`; original-source checksums pass. Swift: 595 files — Sources 433 files / 79,706 lines (AACore 276 / 45,849; AA 157 / 33,857), Tests 161 files / 33,954 lines, Tools 1. Snapshots: every section (13) and scene (16 + item ×2) in light and dark from one merged fixture folder (64 PNGs). Deviations consolidated into `Docs/DEVIATIONS.md` |
+| Verification | V | pending | Stage V: manual / person-only checks and the open items below |
+
+## Feature IDs by owner (OWNERSHIP.md §4; 1,583 IDs)
+
+Done = implemented and verified in the owner's worktree audit (and, after the merge, by the gated tests); N/A = not
+applicable by a DECISIONS / Deviations ruling. Source: the owner's progress record (`Docs/Progress/<id>.md`; W-PLAN and
+W-GOLD keep theirs in `Docs/Deviations/<id>.md`, W-FLASH's was kept outside the repo and is summarised here because
+`check-ownership.sh` refused the path until f556cb5).
+
+| Owner | Done / total | Partial | Not done | N/A | Open items |
+|---|---|---|---|---|---|
+| F1 | 73 / 73 | 0 | 0 | 0 | — |
+| F2 | 112 / 112 | 0 | 0 | 0 | REQ-F2-01, REQ-F2-02 |
+| F3 | 295 / 295 | 0 | 0 | 0 | REQ-F3-01…04; snapshot hook layer-render artefacts with nested split views (REQ-W-PLAN-03, REQ-W-CREW-02, REQ-W-SIRE-02); no XCUITest menu walk |
+| W-SHELL | 58 / 61 | 1 (SHELL-204 — person-only launch checklist steps) | 2 (SHELL-206 cross-version data smoke: needs a Windows-written data folder; SHELL-207 clean-machine / Intel runs: needs another Mac, Rosetta absent) | 0 | REQ-W-SHELL-01, 02, 04 |
+| W-PERSIST | 41 / 49 | 1 (DATA-174 — read-only subtitle, greyed commands, settings suffix live in F3/W-SHELL code, REQ-W-PERSIST-02) | 0 | 7 (DATA-160…166, replaced by the Mac instance model DATA-170…182) | REQ-W-PERSIST-01…04; lease mode not exercised on a real SMB server |
+| W-GOLD | 23 / 27 | 2 (DATA-319, DATA-320 — some must-case reproducers wait on REQ-W-GOLD-01…04) | 2 (DATA-322, DATA-323 — need a person on Windows) | 0 | Windows goldens not generated (no .NET 10 SDK on this Mac): 12 WinFixtures suites skip; `Scripts/fixtures.sh emit-mac-out` to be re-run now W-PERSIST / W-RICH have flipped (adds `mac-out/bundles/`, `mac-out/xaml/`) |
+| W-RICH | 22 / 23 | 0 | 0 | 1 (CONT-169, reserved range bound) | 05 §7.7 item 10 (Mac output loads in WPF) needs the W-GOLD Windows harness; release-build 1 MB parse budget to re-confirm on an idle machine |
+| W-CONT | 51 / 51 | 0 | 0 | 0 | REQ-W-CONT-02…05; T-KB-07/15/21/28/30/31/48/52 manual checks |
+| W-FILES | 22 / 22 | 0 | 0 | 0 | Quick Look panel with the app frontmost (manual); REQ-W-FILES-01 |
+| W-HIER | 98 / 98 | 0 | 0 | 0 | REQ-W-HIER-02 (W-BUILD) |
+| W-BUILD | 90 / 90 | 0 | 0 | 0 | REQ-W-BUILD-01 |
+| W-PLAN | 103 / 103 | 0 | 0 | 0 | REQ-W-PLAN-02, 03 |
+| W-QUICK | 109 / 109 | 0 | 0 | 0 | live key handling (Trash ⌘⌫, switcher ↑↓↩⎋, Search ↩) checked by snapshot / manual run only |
+| W-CREW | 77 / 77 | 0 | 0 | 0 | REQ-W-CREW-01 (HSplitView ignores the shell's bottom safe-area inset), REQ-W-CREW-02 |
+| W-VESSEL | 91 / 91 | 0 | 0 | 0 | Quick Look of file cards and work-order notifications: manual checks |
+| W-PDF | 82 / 82 | 0 | 0 | 0 | REQ-W-PDF-02 |
+| W-SIRE | 53 / 53 | 0 | 0 | 0 | REQ-W-SIRE-02 |
+| W-FLASH | 81 / 82 | 0 | 0 | 1 (FLASH-133, screen-capture receive: DECISIONS 13 "no for v1") | camera receive with a real iPhone (manual) |
+| W-DRIVE | 85 / 85 | 0 | 0 | 0 | REQ-W-DRIVE-01, 02; live Google sign-in (manual) |
+| **all** | **1,566 / 1,583** | **4** | **4** | **9** | 49 contract requests filed (`Docs/Requests/`), 17 of them about the progress-record path (settled by the REQ-F1-01 ruling and f556cb5) |
 
 ## Log
 - 2026-09-29/30 — specs, decisions, architecture committed on `mac-port`.
@@ -30,8 +61,37 @@ Counts are feature IDs from `Docs/OWNERSHIP.md` §4 (1,583 total).
 - 2026-10-02 — F2 finished on `stage/F2`: every ARCH §5.3 domain operation and §6.5 service real, XLSX reader per 10 Addendum X (X.8.1 Kind/A/B/B+/C matrix, X.8.2–X.8.8, POC used ranges; 2 524 × 16 sheet < 50 ms optimised), every 02 §7 vector (except T-LOG-4, the Activity-log CSV of W-QUICK), 01 §7.8/7.9/7.11, 04 §7.2/7.4–7.6, 06 §7.1/7.4/7.10/7.11, 08 §7.3/7.4/7.7, 09 §7.1; P2 fixes D-1/D-2/D-3/D-10/D-17, DECISIONS 02 Q-4, 07 Q-02, 08 OQ-7/OQ-8, 01 Q-3 applied. Post-merge: XlsxGolden comparison test is gated on `Fixtures/winfixtures/xlsx/` (W-GOLD).
 - 2026-10-02 — F3 finished in its worktree (`stage/F3`): app plumbing, menu bar per 03 §6.5.1 (live menu dump matches §6.5.1.6), design system, shared dialogs, snapshot hook; `check-placeholders.sh F3` empty.
 - 2026-10-02 — Foundation integrated on `mac-port`: merged `stage/F2` then `stage/F3`; gate green from a clean build after each merge (343 tests / 57 suites after F2; 399 tests / 68 suites after F3); rule-zero diff empty, checksums pass, no F1/F2/F3 placeholders left; main-window snapshots (light, dark) produced by the debug hook.
+- 2026-10-03 — Stage W integrated on `mac-port`: the 16 wave branches merged (`--no-ff`) in OWNERSHIP order (ae7b9cd…47c7463), no file conflicts; W-RICH's post-audit commit (6d0349c: input-mutation fuzzing, root-attribute filtering, carried Foreground cascade) merged last. `check-ownership.sh` maps `Docs/Progress/<id>.md` to its owner (f556cb5). Clean-build gate: 1,582 tests / 234 suites; the one failure was an integration mismatch in W-GOLD's `GoldMacOutTests` — it exported its bundles into the data folder, which W-PERSIST's real `BundleService` refuses (DATA-041 / D-13), and passed `&report.skipped` while its write closure appended to `report` (a Swift exclusivity trap once W-RICH emits `xaml/`); fixed in the test (b8fe439). Placeholders: none left. Rule zero and checksums pass. 64 snapshots of every section and scene (light + dark) from one merged fixture folder; `Docs/DEVIATIONS.md` consolidated from `Docs/Deviations/*.md`.
 
-## Known remaining problems (after foundation)
+## Known remaining problems (after Stage W integration, 2026-10-03)
+
+Visual (from the integrated snapshots, scratchpad `snapshots/integrated/`):
+- The hierarchy sidebar lists (Equipment/Area, Tasks, Procedures) and the SIRE question list run under the keyboard
+  shortcut bar at the bottom of the main window: the last rows draw through the bar's text (light and dark). Lists
+  that respect the bar (Calendar, Board, Planner, Ports, Buckets, Map) stop above it. Same cause as REQ-W-CREW-01
+  (bottom safe-area inset not honoured by the hosted list); owners F3 (bar as a safe-area inset) / W-HIER / W-SIRE.
+- Snapshot hook (F3): with the default layer rendering, sections hosted in an `HSplitView` (Crew, Saved Lists) lose the
+  window header and draw their panes as floating cards with stray clipped text between them; `AA_SNAPSHOT_CACHE_DISPLAY=1`
+  renders them correctly (`cd-main-*.png`). The SIRE tab is captured while "Loading SIRE 2.0 question bank…" unless
+  `AA_SIRE_SELECT` is set (the hook's 1 s idle is shorter than the debug-build bank load). Hook limits, not app defects.
+- Date pickers in the Quick work builder (Deadline `10/18/2026`) and the Date calculator (`10/ 3/2026`) follow the
+  system locale while the rest of the app shows `yyyy-MM-dd` — check against ARCH §9.8 / specs 08, 14.
+- Planner "Unscheduled Jobs" truncates titles to about 12 characters in its default column width ("Order replac…") —
+  check against 07.
+
+Other:
+- Not done / partial IDs: SHELL-204 (partial), SHELL-206, SHELL-207, DATA-174 (partial), DATA-319 / DATA-320 (partial),
+  DATA-322, DATA-323 — see the owner table above.
+- Windows goldens (WinFixtures, WinCapture, XlsxGolden) not generated: no .NET 10 SDK here; 12 WinFixtures suites skip
+  until `Scripts/fixtures.sh generate` / WinCapture run on Windows. `Fixtures/mac-out/` still lacks `bundles/` and `xaml/`.
+- Person-only checks (Stage V): Finder / Gatekeeper launch, camera prompt and iPhone Flash Sync, Google sign-in, Quick
+  Look with the app frontmost, notifications and MenuBarExtra, real SMB lease mode, T-KB keyboard rows, no XCUITest
+  menu walk (03 §6.5.1.14).
+- MetricKit next-launch crash dialog and signal-marker path tested only at string/format level.
+- Snapshots render Liquid Glass/materials as flat fills and prominent buttons grey (window not key).
+
+## Known remaining problems (after foundation) — superseded
+
 - 02 T-LOG-4 (Activity-log CSV quoting) untested: the CSV writer is W-QUICK's `ActivityLogCSV` (QUICK-155).
 - XLSX golden comparison (10 X.7.6) runs only once W-GOLD supplies `Tests/AACoreTests/Fixtures/winfixtures/xlsx/`.
 - 2 524 × 16 sheet budget (< 200 ms) met only in optimised builds; the debug gate checks < 1.5 s (`Docs/Deviations/F2.md`).
