@@ -1,6 +1,7 @@
 // Spec: 02 §2.J, §3.2 (REPO-100…105), §7.7; 08 §3.4, §7.4 (T-SR-*); OC-11 (a gated item: Name and Tags only);
 //       DECISIONS 02 Q-11 (a hit carries the matched child's id); 10 VESSEL-283 (vessel work orders, quick cards and
-//       ports are not searched); ARCHITECTURE.md §6.5, §9.7 (documents are built on the main actor, scanned off it).
+//       ports are not searched); ARCHITECTURE.md §6.5, §9.7 (the snapshot is taken on the main actor; Stage V2
+//       V2-SCALE: the XAML → plain-text conversion and the scan run off it, memoised by `SearchTextCache`).
 // Offsets (`matchStart`, `matchLength`) are UTF-16 code units, exactly as in C#.
 import Foundation
 
@@ -28,6 +29,72 @@ public struct SearchDocument: Sendable {
 
     public init(ownerID: UUID, ownerKind: ItemKind, ownerHeader: String, fields: [SearchField]) {
         self.ownerID = ownerID; self.ownerKind = ownerKind; self.ownerHeader = ownerHeader; self.fields = fields
+    }
+}
+
+/// V2-SCALE: the main-actor snapshot of the search scope — each field's raw text, container XAML still unconverted
+/// (`SearchService.snapshot` → `SearchService.documents(from:)` off the main actor).
+public struct SearchSnapshot: Sendable {
+    public struct Field: Sendable {
+        public var kind: SearchHitKind
+        public var whereLabel: String
+        public var raw: String
+        /// `raw` is container XAML (REPO-104 plain text is taken off-main).
+        public var isXaml: Bool
+        public var childID: UUID?
+    }
+
+    public struct Document: Sendable {
+        public var ownerID: UUID
+        public var ownerKind: ItemKind
+        public var ownerHeader: String
+        public var fields: [Field]
+    }
+
+    public var documents: [Document]
+}
+
+/// V2-SCALE: XAML → search plain text memo shared by every `SearchService.documents(from:)` pass. Thread-safe; each
+/// pass replaces the table with the entries it used, so it holds the current database's notes only.
+public final class SearchTextCache: @unchecked Sendable {
+    public static let shared = SearchTextCache()
+
+    private let lock = NSLock()
+    private var table: [String: String] = [:]
+    private var parsedTotal = 0
+
+    public init() {}
+
+    /// Entries currently held.
+    public var count: Int { lock.lock(); defer { lock.unlock() }; return table.count }
+
+    /// XAML strings actually parsed since creation (cache misses).
+    public var conversions: Int { lock.lock(); defer { lock.unlock() }; return parsedTotal }
+
+    struct Pass {
+        let cache: SearchTextCache
+        let previous: [String: String]
+        var used: [String: String] = [:]
+        var parsed = 0
+
+        init(_ cache: SearchTextCache) {
+            self.cache = cache
+            cache.lock.lock(); previous = cache.table; cache.lock.unlock()
+        }
+
+        mutating func plainText(_ xaml: String) -> String {
+            if let t = used[xaml] { return t }
+            let t: String
+            if let hit = previous[xaml] { t = hit } else { t = XamlPlainText.searchText(xaml); parsed += 1 }
+            used[xaml] = t
+            return t
+        }
+
+        func commit() {
+            cache.lock.lock(); defer { cache.lock.unlock() }
+            cache.table = used
+            cache.parsedTotal += parsed
+        }
     }
 }
 
@@ -62,12 +129,25 @@ public enum SearchService {
     /// children — components (`Component › Name/Notes/Container/File`), nested subtasks depth-first
     /// (`Subtask › Name/Description/Container/File`), steps (`Step › Title/Container/File`). Empty fields are
     /// dropped (they can never match). The document header is `"[{Kind}] {Name}"` (enum name).
+    /// Synchronous convenience = `documents(from: snapshot(…))` — the whole XAML → plain-text conversion runs on the
+    /// caller's (main) actor. The Search window takes the `snapshot` on main and calls `documents(from:)` off it
+    /// (Stage V2 V2-SCALE: 779 ms of main-thread blocking per query on a full ship database otherwise).
     @MainActor public static func makeDocuments(store: AppStore, isGated: (HierarchyItem) -> Bool) -> [SearchDocument] {
-        var docs: [SearchDocument] = []
+        documents(from: snapshot(store: store, isGated: isGated))
+    }
+
+    /// V2-SCALE, main-actor half: walks the live graph and copies every field's RAW text (container XAML is NOT
+    /// converted here; Swift strings are copy-on-write, so this is a reference walk). The gate is decided here, on
+    /// the main actor. Cheap enough to run per query (no XML parsing).
+    @MainActor public static func snapshot(store: AppStore, isGated: (HierarchyItem) -> Bool) -> SearchSnapshot {
+        var docs: [SearchSnapshot.Document] = []
         for item in store.allItems() {
-            var fields: [SearchField] = []
-            func add(_ kind: SearchHitKind, _ label: String, _ text: String, _ child: UUID? = nil) {
-                if !text.isEmpty { fields.append(SearchField(kind: kind, whereLabel: label, text: text, childID: child)) }
+            var fields: [SearchSnapshot.Field] = []
+            func add(_ kind: SearchHitKind, _ label: String, _ text: String, _ child: UUID? = nil, xaml: Bool = false) {
+                if !text.isEmpty {
+                    fields.append(SearchSnapshot.Field(kind: kind, whereLabel: label, raw: text, isXaml: xaml,
+                                                       childID: child))
+                }
             }
             func addFiles(_ c: Container, _ kind: SearchHitKind, _ label: String, _ child: UUID) {
                 for f in c.files { add(kind, label, f.name, child) }
@@ -76,7 +156,7 @@ public enum SearchService {
             if !item.tags.isEmpty { add(.item, "Tags", item.tags.joined(separator: ", ")) }
             if !isGated(item) {
                 add(.item, "Description", item.description)
-                add(.item, "Notes", XamlPlainText.searchText(item.container.richTextXaml))
+                add(.item, "Notes", item.container.richTextXaml, xaml: true)
                 for f in item.container.files {
                     add(.file, "File \u{203A} \(f.kind.name)", f.name)
                     add(.file, "File \u{203A} \(f.kind.name) \u{203A} Path", f.path)
@@ -86,7 +166,7 @@ public enum SearchService {
                     for c in e.components {
                         add(.component, "Component \u{203A} Name", c.name, c.id)
                         add(.component, "Component \u{203A} Notes", c.notes, c.id)
-                        add(.component, "Component \u{203A} Container", XamlPlainText.searchText(c.container.richTextXaml), c.id)
+                        add(.component, "Component \u{203A} Container", c.container.richTextXaml, c.id, xaml: true)
                         addFiles(c.container, .component, "Component \u{203A} File", c.id)
                     }
                 case let t as TaskItem:
@@ -95,7 +175,7 @@ public enum SearchService {
                         for s in parent.subtasks where seen.insert(ObjectIdentifier(s)).inserted {
                             add(.subtask, "Subtask \u{203A} Name", s.name, s.id)
                             add(.subtask, "Subtask \u{203A} Description", s.description, s.id)
-                            add(.subtask, "Subtask \u{203A} Container", XamlPlainText.searchText(s.container.richTextXaml), s.id)
+                            add(.subtask, "Subtask \u{203A} Container", s.container.richTextXaml, s.id, xaml: true)
                             addFiles(s.container, .subtask, "Subtask \u{203A} File", s.id)
                             walk(s)
                         }
@@ -104,16 +184,39 @@ public enum SearchService {
                 case let p as Procedure:
                     for s in p.steps {
                         add(.step, "Step \u{203A} Title", s.title, s.id)
-                        add(.step, "Step \u{203A} Container", XamlPlainText.searchText(s.container.richTextXaml), s.id)
+                        add(.step, "Step \u{203A} Container", s.container.richTextXaml, s.id, xaml: true)
                         addFiles(s.container, .step, "Step \u{203A} File", s.id)
                     }
                 default:
                     break
                 }
             }
-            docs.append(SearchDocument(ownerID: item.id, ownerKind: item.kind,
-                                       ownerHeader: "[\(item.kind.name)] \(item.name)", fields: fields))
+            docs.append(SearchSnapshot.Document(ownerID: item.id, ownerKind: item.kind,
+                                                ownerHeader: "[\(item.kind.name)] \(item.name)", fields: fields))
         }
+        return SearchSnapshot(documents: docs)
+    }
+
+    /// V2-SCALE, off-main half (any thread): converts every XAML field to its REPO-104 plain text
+    /// (`XamlPlainText.searchText`) and drops fields that end up empty. Conversions are memoised in `cache` by the
+    /// raw XAML, so a repeat query over an unchanged database parses nothing; the cache keeps only the XAML of the
+    /// latest pass (edited notes do not accumulate).
+    public static func documents(from snapshot: SearchSnapshot,
+                                 cache: SearchTextCache = .shared) -> [SearchDocument] {
+        var pass = SearchTextCache.Pass(cache)
+        let docs = snapshot.documents.map { d -> SearchDocument in
+            var fields: [SearchField] = []
+            fields.reserveCapacity(d.fields.count)
+            for f in d.fields {
+                let text = f.isXaml ? pass.plainText(f.raw) : f.raw
+                if !text.isEmpty {
+                    fields.append(SearchField(kind: f.kind, whereLabel: f.whereLabel, text: text, childID: f.childID))
+                }
+            }
+            return SearchDocument(ownerID: d.ownerID, ownerKind: d.ownerKind, ownerHeader: d.ownerHeader,
+                                  fields: fields)
+        }
+        pass.commit()
         return docs
     }
 

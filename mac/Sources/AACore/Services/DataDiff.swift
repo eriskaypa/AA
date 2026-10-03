@@ -34,9 +34,7 @@ public struct DiffResult: Sendable {
     /// their content, removed items likewise, matched items list field / file / child differences; roots ordered
     /// Added → Changed → Removed, then by text (OrdinalIgnoreCase, stable). Counts are top-level only.
     public static func compare(current: AppData, incoming: AppData) -> DiffResult {
-        var names: [UUID: String] = [:]
-        for i in items(current) { names[i.id] = i.name }
-        for i in items(incoming) { names[i.id] = i.name }
+        let names = itemNames(current, incoming)
         let cur = SvcOrderedIndex(items(current), id: \.id)
         let inc = SvcOrderedIndex(items(incoming), id: \.id)
         var r = DiffResult()
@@ -75,7 +73,7 @@ public struct DiffResult: Sendable {
                 r.roots.append(n)
             }
         }
-        tally(SvcOtherDataDiff.crew(current.crew, incoming.crew))
+        tally(SvcOtherDataDiff.crew(current.crew, incoming.crew, names: itemNames(current, incoming)))
         tally(SvcOtherDataDiff.savedLists(current, incoming))
         tally(SvcOtherDataDiff.schedules(current.scheduleTemplates, incoming.scheduleTemplates))
         tally(SvcOtherDataDiff.ports(current.ports, incoming.ports))
@@ -106,6 +104,14 @@ public struct DiffResult: Sendable {
             let c = NetText.compareIgnoreCase(a.element.text, b.element.text)
             return c == .orderedSame ? a.offset < b.offset : c == .orderedAscending
         }.map(\.element)
+    }
+
+    /// Top-level item id → name over both sides (incoming wins), for `linked …` nodes.
+    static func itemNames(_ current: AppData, _ incoming: AppData) -> [UUID: String] {
+        var names: [UUID: String] = [:]
+        for i in items(current) { names[i.id] = i.name }
+        for i in items(incoming) { names[i.id] = i.name }
+        return names
     }
 
     private static func items(_ d: AppData) -> [HierarchyItem] {
@@ -201,14 +207,14 @@ public struct DiffResult: Sendable {
         return n
     }
 
-    private static func notesNode(_ a: Container, _ b: Container, into n: inout [DiffNode]) {
+    static func notesNode(_ a: Container, _ b: Container, into n: inout [DiffNode]) {
         let an = XamlPlainText.diffText(a.richTextXaml), bn = XamlPlainText.diffText(b.richTextXaml)
         if !Ordinal.equals(an, bn) { n.append(field("notes: \"\(snip(an))\" \u{2192} \"\(snip(bn))\"")) }
     }
 
     /// OC-13: count-aware per key `Name|Path` — k = count(b) − count(a) Added nodes when k > 0 (b's first-occurrence
     /// order), −k Removed nodes when k < 0 (a's order). Identical to Windows when there are no duplicate keys.
-    private static func diffFiles(_ a: Container, _ b: Container, into n: inout [DiffNode]) {
+    static func diffFiles(_ a: Container, _ b: Container, into n: inout [DiffNode]) {
         func counts(_ c: Container) -> (order: [String], count: [String: Int], name: [String: String]) {
             var order: [String] = [], count: [String: Int] = [:], name: [String: String] = [:]
             for f in c.files {
@@ -287,7 +293,7 @@ public struct DiffResult: Sendable {
     }
 
     /// Set semantics; first occurrences in collection order (OC-13).
-    private static func diffLinks(_ a: [UUID], _ b: [UUID], _ names: [UUID: String], _ label: String,
+    static func diffLinks(_ a: [UUID], _ b: [UUID], _ names: [UUID: String], _ label: String,
                                   into n: inout [DiffNode]) {
         let aset = Set(a), bset = Set(b)
         var seen = Set<UUID>()
@@ -336,7 +342,7 @@ struct SvcOrderedIndex<Value> {
         return n.isEmpty ? "(unnamed)" : n
     }
 
-    static func crew(_ a: [CrewMember], _ b: [CrewMember]) -> [DiffNode] {
+    static func crew(_ a: [CrewMember], _ b: [CrewMember], names: [UUID: String] = [:]) -> [DiffNode] {
         let ai = SvcOrderedIndex(a, id: \.id), bi = SvcOrderedIndex(b, id: \.id)
         var out: [DiffNode] = []
         for (id, m) in bi.entries where ai[id] == nil {
@@ -354,14 +360,18 @@ struct SvcOrderedIndex<Value> {
                 if !Ordinal.equals(va, vb) { kids.append(arrow(key, va, vb)) }
             }
             if ma.scheduleVesselId != mb.scheduleVesselId { kids.append(field("schedule vessel changed")) }
-            kids += steps(ma.checklist, mb.checklist, label: "checklist item")
+            kids += steps(ma.checklist, mb.checklist, label: "checklist item", names: names)
             kids += entries(ma.schedule, mb.schedule)
             if !kids.isEmpty { out.append(DiffNode(change: .changed, text: "[Crew member] \(crewName(mb))", children: kids)) }
         }
         return out
     }
 
-    static func steps(_ a: [ChecklistStep], _ b: [ChecklistStep], label: String) -> [DiffNode] {
+    /// Crew checklist items: title, done, deadline, then (V2-J4) notes, the count-aware file bank and the linked
+    /// tasks / equipment — the same nodes a hierarchy step shows, so a bundle that drops a crew member's scanned
+    /// passport or certificate is previewed as a change, never as "no change".
+    static func steps(_ a: [ChecklistStep], _ b: [ChecklistStep], label: String,
+                      names: [UUID: String] = [:]) -> [DiffNode] {
         let ai = SvcOrderedIndex(a, id: \.id), bi = SvcOrderedIndex(b, id: \.id)
         var out: [DiffNode] = []
         for (id, s) in bi.entries where ai[id] == nil { out.append(DiffNode(change: .added, text: "\(label): \(s.title)")) }
@@ -374,6 +384,10 @@ struct SvcOrderedIndex<Value> {
             if sa.deadline != sb.deadline {
                 kids.append(field("deadline: \(sa.deadline?.format(.isoDate) ?? "(none)") \u{2192} \(sb.deadline?.format(.isoDate) ?? "(none)")"))
             }
+            DataDiff.notesNode(sa.container, sb.container, into: &kids)
+            DataDiff.diffFiles(sa.container, sb.container, into: &kids)
+            DataDiff.diffLinks(sa.taskIds, sb.taskIds, names, "linked task", into: &kids)
+            DataDiff.diffLinks(sa.equipmentIds, sb.equipmentIds, names, "linked equipment/area", into: &kids)
             if !kids.isEmpty { out.append(DiffNode(change: .changed, text: "\(label): \(sb.title)", children: kids)) }
         }
         return out
