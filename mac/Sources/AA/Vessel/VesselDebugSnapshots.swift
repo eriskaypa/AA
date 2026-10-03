@@ -10,13 +10,24 @@ extension SnapshotRegistry {
             AnyView(VesselSnapshotFrame(width: 1180, height: 720) { id in QuickCardsPanel(vesselID: id) }.environment(env))
         }
         register("w-vessel.work-orders") { env in
-            AnyView(VesselSnapshotFrame(width: 1320, height: 760) { id in WorkOrdersPanel(vesselID: id) }.environment(env))
+            AnyView(VesselSnapshotFrame(width: 1180, height: 700) { id in WorkOrdersPanel(vesselID: id) }.environment(env))
         }
         register("w-vessel.ports") { env in
-            AnyView(VesselSnapshotFrame(width: 1320, height: 640) { id in VesselPortsPanel(vesselID: id) }.environment(env))
+            AnyView(VesselSnapshotFrame(width: 1180, height: 620) { id in VesselPortsPanel(vesselID: id) }.environment(env))
+        }
+        // DATA-174 check: the same panel in a read-only copy (imports, drops and "Import a copy" disabled).
+        register("w-vessel.work-orders-readonly") { env in
+            env.isReadOnlyInstance = true
+            return AnyView(VesselSnapshotFrame(width: 1180, height: 700) { id in WorkOrdersPanel(vesselID: id) }.environment(env))
+        }
+        register("w-vessel.quick-card-editor-readonly") { env in
+            env.isReadOnlyInstance = true
+            let card = env.store.data.vessels.lazy.compactMap(\.quickCards.first).first?.clone()
+                ?? QuickCardLayout.newCard(existingCount: 0)
+            return AnyView(QuickCardEditorSheet(card: card) { _ in }.environment(env))
         }
         register("w-vessel.quick-card-editor") { env in
-            let source = env.store.data.vessels.first?.quickCards.first
+            let source = env.store.data.vessels.lazy.compactMap(\.quickCards.first).first
             let card = source?.clone() ?? QuickCardLayout.newCard(existingCount: 0)
             return AnyView(QuickCardEditorSheet(card: card) { _ in }.environment(env))
         }
@@ -26,7 +37,7 @@ extension SnapshotRegistry {
     }
 }
 
-/// Hosts a panel for the first vessel of the data folder (or `AA_SNAPSHOT_VESSEL` = a vessel name).
+/// Hosts a panel for a vessel of the data folder (see `wanted` below).
 private struct VesselSnapshotFrame<Content: View>: View {
     let width: CGFloat
     let height: CGFloat
@@ -34,8 +45,12 @@ private struct VesselSnapshotFrame<Content: View>: View {
     @Environment(AppEnvironment.self) private var env
 
     var body: some View {
+        // `AA_SNAPSHOT_VESSEL` = a vessel name or Id; otherwise the first vessel that has cards, jobs or ports.
         let wanted = ProcessInfo.processInfo.environment["AA_SNAPSHOT_VESSEL"]
-        let vessel = env.store.data.vessels.first { wanted == nil || $0.name == wanted } ?? env.store.data.vessels.first
+        let all = env.store.data.vessels
+        let vessel = wanted.flatMap { w in all.first { $0.id.uuidString.lowercased() == w.lowercased() || $0.name == w } }
+            ?? all.first { !$0.quickCards.isEmpty || !$0.jobs.isEmpty || !$0.portCalls.isEmpty }
+            ?? all.first
         Group {
             if let vessel { content(vessel.id) } else { VesselMissingPlaceholder() }
         }

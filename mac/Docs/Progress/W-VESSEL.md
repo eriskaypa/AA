@@ -53,3 +53,21 @@ X.7.3 Finder drop-to-import on Work Orders / Ports; added exact-string tests.
 `swift build` and `swift test` (-j 3, warnings as errors) green: 460 tests, 0 failures (3 W-PERSIST-gated skipped).
 `Scripts/check-placeholders.sh W-VESSEL` prints nothing. `Scripts/check-ownership.sh` fails on one path only:
 `Docs/Progress/W-VESSEL.md` (required by DECISIONS REQ-F1-01, not encoded in F1's script — REQ-W-VESSEL-01).
+
+## Fix round 1 (FIX-W-VESSEL, verifier findings V-03 / V-10 / V-DESIGN)
+
+| Finding | Result |
+|---|---|
+| V-03 SHELL-157: 03 §7.1 boundary vectors untested | Fixed — `readableForegroundBoundaryVectors` asserts all six rows (#999999 → white at exactly 0.6, #9A9A9A → #1A1A1A, #FDD835, #26A69A, #9E9E9E, #EEEEEE) and the boundary expression. |
+| V-10 VESSEL-025: UNC targets had no Connect to Server… / retry | Fixed in W-VESSEL code — `QuickCardOpen` (AACore) + `VesselFlows.openQuickCard`: Connect to Server… (UNC, polls 15 s, then retries), Locate… (stores mapping, retries), Open File Links Settings…, Cancel, keeping the VESSEL-025 `Open failed` / `Not found:` texts. `PersistOpenFlow.recover` is private and uses other titles, so it is not reused (no cross-owner change needed). |
+| V-10 VESSEL-051: opening Edit… rewrote Width/Height | Fixed — the size fields are populated through `State(initialValue:)` in the sheet's init, so no `onChange` fires; only typing changes the card. |
+| V-10 DATA-174: vessel imports / drops / Import a copy ignored the write gate | Fixed — `VesselFlows.isWriteGated` (read-only instance or Stop Editing Here); buttons disabled with the DATA-174 help, drops accept nothing, flows refuse as a backstop. Snapshot `w-vessel.work-orders-readonly`, `w-vessel.quick-card-editor-readonly`. |
+| V-10 VESSEL-025: folder cards revealed the folder in its parent | Fixed — existing folder targets open with `NSWorkspace.open` (`QuickCardOpenStep.openFolder`). |
+| V-10 VESSEL-109/207: wrapped columns truncated | Fixed — the five columns wrap. |
+| V-DESIGN: Ports Database in system font | Fixed — aaMono hierarchy (title 16 bold, heading 13 semibold, rows 13, counts 11 muted). |
+| V-DESIGN: striped empty tables, flush-left text | Fixed — no stripes on any vessel table/list; empty vessels show AAEmptyState instead of the table; 16-pt pane margins. The x = 0 text in the old snapshot came from 1320-wide snapshot frames clipped by the 1280 window — frames are now 1180 wide and pick the first vessel with data (or `AA_SNAPSHOT_VESSEL` = name or Id). |
+
+Also per the design rules: quick-card header in mono, editor header = `BuilderSheetHeader` with a 44-pt footer.
+Tests: +7 (`VesselQuickCardOpenTests` 6, boundary vectors 1). Snapshots (light + dark, looked at):
+`w-vessel.work-orders`, `-readonly`, `w-vessel.ports`, `w-vessel.quick-cards`, `w-vessel.quick-card-editor`,
+`-readonly`, `TabPorts` (with and without selection).

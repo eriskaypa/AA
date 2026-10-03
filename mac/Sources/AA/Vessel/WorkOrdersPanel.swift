@@ -155,18 +155,29 @@ struct WorkOrdersPanelContent: View {
     private var session: VesselSessionState { VesselSessionState.shared }
     private var today: CivilDate { env.clock.today() }
     private var busy: Bool { session.busyWorkOrders.contains(vessel.id) }
+    /// DATA-174 / DATA-180: the in-panel import and the workbook drop follow the menu rows' write gate.
+    private var gated: Bool { VesselFlows.isWriteGated(env) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AASpacing.s) {
             toolbar
             notificationsBar
             VesselSummaryBox(text: busy ? WorkOrderAnalysis.readingSummary : model.summary, busy: busy)
-            table
+            if vessel.jobs.isEmpty {
+                // No zebra table behind the empty state (design rule 5): a plain surface with AAEmptyState.
+                AAEmptyState(title: "No work orders", symbol: "wrench.and.screwdriver",
+                             message: busy ? WorkOrderAnalysis.readingSummary
+                                           : "Import a Shippalm Work Order List export to analyse and track this ship's jobs.")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                table
+            }
         }
-        .padding(AASpacing.m)
+        .padding(AASpacing.l)
         .overlay { VesselDropHighlight(active: dropTargeted).padding(4) }
-        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
-            VesselWorkbookDrop.handle(providers) { url in
+        .onDrop(of: gated ? [] : [.fileURL], isTargeted: $dropTargeted) { providers in
+            guard !gated else { return false }
+            return VesselWorkbookDrop.handle(providers) { url in
                 Task { await VesselFlows.importWorkOrders(vesselID: vessel.id, env: env, dialogs: dialogs, file: url) }
             }
         }
@@ -217,8 +228,9 @@ struct WorkOrdersPanelContent: View {
                     Label("Import Shippalm (.xlsx)…", systemImage: AASymbol.importFile)
                 }
                 .aaProminent()
-                .disabled(busy)
-                .help("Import a Shippalm Work Order List export into THIS ship. Jobs are keyed by job number (No.).")
+                .disabled(busy || gated)
+                .help(gated ? PersistReadOnlyText.disabledHelp
+                            : "Import a Shippalm Work Order List export into THIS ship. Jobs are keyed by job number (No.).")
                 Button {
                     Task { await VesselFlows.exportWorkOrders(vesselID: vessel.id, env: env, dialogs: dialogs) }
                 } label: {
@@ -285,13 +297,13 @@ struct WorkOrdersPanelContent: View {
             Toggle(isOn: Binding(get: { vessel.notificationsEnabled }, set: { setMasterSwitch($0) })) {
                 Label(WorkOrderAnalysis.masterSwitchTitle.replacingOccurrences(of: "🔔 ", with: ""),
                       systemImage: vessel.notificationsEnabled ? AASymbol.notifyOn : AASymbol.notifyOff)
-                    .font(.system(size: AAType.small, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
             }
             .toggleStyle(.checkbox)
             .help(WorkOrderAnalysis.masterSwitchHelp)
             .fixedSize()
             Text(bar.text)
-                .font(.system(size: AAType.small, weight: bar.borderTone == .red || bar.borderTone == .orange ? .semibold : .regular))
+                .font(.aaMono(AAType.small, weight: bar.borderTone == .red || bar.borderTone == .orange ? .semibold : .regular))
                 .foregroundStyle(bar.textTone.map(VesselTone.color) ?? AAColor.fg)
                 .fixedSize(horizontal: false, vertical: true)
                 .textSelection(.enabled)
@@ -327,20 +339,26 @@ struct WorkOrdersPanelContent: View {
             }
             .width(min: 44, ideal: 52, max: 64)
             TableColumn("Job No.", sortUsing: WorkOrderRowItem.comparator(.jobNo, descending: false)) { row in
-                Text(row.job.jobNo).font(.aaMono(AAType.small)).textSelection(.enabled)
+                Text(row.job.jobNo).monospacedDigit().textSelection(.enabled)
             }
-            .width(min: 80, ideal: 110)
+            .width(min: 80, ideal: 100)
             TableColumn("Title", sortUsing: WorkOrderRowItem.comparator(.title, descending: false)) { row in
-                AAStrikeText(row.job.title, struck: row.job.isCompleted).help(row.job.title)
+                AAStrikeText(row.job.title, struck: row.job.isCompleted)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)          // wrapped (VESSEL-109)
+                    .help(row.job.title)
             }
-            .width(min: 120, ideal: 260)
+            .width(min: 120, ideal: 230)
             TableColumn("Due", sortUsing: WorkOrderRowItem.comparator(.due, descending: false)) { row in
                 Text(row.dueText)
-                    .font(.system(size: AAType.small, weight: .bold))
+                    .font(.aaMono(AAType.small, weight: .bold))
+                    .monospacedDigit()
                     .foregroundStyle(VesselTone.color(row.tone))
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)          // bold, coloured, wrapped (VESSEL-109)
                     .help(row.dueText)
             }
-            .width(min: 120, ideal: 205)
+            .width(min: 120, ideal: 190)
             }
             Group {
             TableColumn("Interval", sortUsing: WorkOrderRowItem.comparator(.interval, descending: false)) { row in
@@ -362,15 +380,19 @@ struct WorkOrdersPanelContent: View {
             TableColumn("Responsible", sortUsing: WorkOrderRowItem.comparator(.responsible, descending: false)) { row in
                 Text(row.job.responsibleRank)
             }
-            .width(min: 70, ideal: 130)
+            .width(min: 70, ideal: 110)
             TableColumn("Function", sortUsing: WorkOrderRowItem.comparator(.function, descending: false)) { row in
-                Text(row.job.functionDescription).help(row.job.functionDescription)
+                Text(row.job.functionDescription)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)          // wrapped (VESSEL-109)
+                    .help(row.job.functionDescription)
             }
-            .width(min: 100, ideal: 220)
+            .width(min: 100, ideal: 200)
             }
         }
-        .tableStyle(.inset(alternatesRowBackgrounds: true))
-        .font(.system(size: AAType.small))
+        .tableStyle(.inset)
+        .alternatingRowBackgrounds(.disabled)
+        .font(.aaMono(AAType.small))                 // dense tables: the crew-table cell size
         .contextMenu(forSelectionType: ObjectIdentifier.self) { ids in
             let target = ids.isEmpty ? selection : ids
             Button { setCompleted(true, ids: target) } label: { Label("Mark completed", systemImage: AASymbol.markDone) }
@@ -387,9 +409,6 @@ struct WorkOrdersPanelContent: View {
             if model.rows.isEmpty && !vessel.jobs.isEmpty {
                 AAEmptyState(title: "No matching work orders", symbol: "line.3.horizontal.decrease.circle",
                              message: "Clear the search or filters to see this ship's work orders.")
-            } else if vessel.jobs.isEmpty && !busy {
-                AAEmptyState(title: "No work orders", symbol: "wrench.and.screwdriver",
-                             message: "Import a Shippalm Work Order List export to analyse and track this ship's jobs.")
             }
         }
     }

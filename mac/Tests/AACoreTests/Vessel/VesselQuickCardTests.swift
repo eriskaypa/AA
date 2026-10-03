@@ -43,6 +43,24 @@ struct VesselMaritimeIconsTests {
         #expect(MaritimeIcons.readableForegroundIsDark(ARGB(a: 0, r: 255, g: 255, b: 255)))
     }
 
+    // TV: 03 §7.1 "Card readable foreground" — `luma/255 > 0.6` → #1A1A1A, IEEE-754 doubles, same expression order.
+    // #999999 sits exactly on the boundary (0.6 > 0.6 is false → white); #9A9A9A is the first grey above it.
+    @Test func readableForegroundBoundaryVectors() {
+        let white = ARGB(a: 0xFF, r: 0xFF, g: 0xFF, b: 0xFF)
+        let dark = ARGB(a: 0xFF, r: 0x1A, g: 0x1A, b: 0x1A)
+        let rows: [(String, ARGB)] = [
+            ("#999999", white), ("#9A9A9A", dark), ("#FDD835", dark),
+            ("#26A69A", white), ("#9E9E9E", dark), ("#EEEEEE", dark),
+        ]
+        for (hex, fg) in rows {
+            #expect(MaritimeIcons.readableForeground(MaritimeIcons.parseColor(hex)) == fg, "\(hex)")
+            #expect(MaritimeIcons.readableForegroundIsDark(MaritimeIcons.parseColor(hex)) == (fg == dark), "\(hex)")
+        }
+        // The boundary itself, in the spec's expression order.
+        let luma = (0.299 * 153.0 + 0.587 * 153.0 + 0.114 * 153.0) / 255.0
+        #expect(!(luma > 0.6))
+    }
+
     // TV: 10 §7.14 ParseColor
     @Test func parseColorVectors() {
         #expect(MaritimeIcons.parseColor("") == ARGB(a: 0xFF, r: 0x1E, g: 0x88, b: 0xE5))

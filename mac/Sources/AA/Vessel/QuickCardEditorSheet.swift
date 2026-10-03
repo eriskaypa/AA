@@ -15,32 +15,46 @@ struct QuickCardEditorSheet: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dialogs) private var dialogs
     @FocusState private var titleFocused: Bool
-    @State private var widthText = ""
-    @State private var heightText = ""
+    @State private var widthText: String
+    @State private var heightText: String
     @State private var customColor = Color.blue
     @State private var suppressColorChange = true
+
+    /// The size fields start populated (§3.1.11 "suppress change events while populating Title, Width, Height"): an
+    /// initial State value fires no `onChange`, so opening the editor never rewrites the card's stored size (a
+    /// fractional drag size such as 213.51, or a drag size beyond the 900×700 field cap, VESSEL-018/051) — only the
+    /// user's typing does.
+    init(card: QuickCard, finish: @escaping (Bool) -> Void) {
+        self.card = card
+        self.finish = finish
+        _widthText = State(initialValue: QuickCardLayout.editorSizeText(card.width))
+        _heightText = State(initialValue: QuickCardLayout.editorSizeText(card.height))
+    }
+
+    private var writeGated: Bool { VesselFlows.isWriteGated(env) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // VESSEL-040: the Windows window title `Quick card` (a sheet has no title bar).
-            HStack(spacing: AASpacing.s) {
-                Image(systemName: "square.grid.2x2.fill").foregroundStyle(AAColor.accent)
-                Text(QuickCardLayout.noTargetTitle).font(.system(size: AAType.title, weight: .bold))
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
+            BuilderSheetHeader(title: QuickCardLayout.noTargetTitle, symbol: "square.grid.2x2")
+                .padding(.horizontal, AASpacing.l)
+                .padding(.top, AASpacing.l)
+                .padding(.bottom, AASpacing.m)
             Divider()
             HStack(alignment: .top, spacing: 14) {
                 form
                 previewColumn.frame(width: 210)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 14)
+            .padding(.horizontal, AASpacing.l)
+            .padding(.top, AASpacing.m)
             Spacer(minLength: AASpacing.m)
             Divider()
             HStack {
+                if writeGated {
+                    Label(PersistReadOnlyText.disabledHelp, systemImage: "lock")
+                        .font(.aaMono(AAType.caption))
+                        .foregroundStyle(AAColor.muted)
+                }
                 Spacer()
                 Button { finish(false) } label: { Text("Cancel").frame(minWidth: 76) }
                     .keyboardShortcut(.cancelAction)
@@ -48,15 +62,13 @@ struct QuickCardEditorSheet: View {
                     .keyboardShortcut(.defaultAction)
                     .aaProminent()
             }
-            .padding(.horizontal, 20)
-            .padding(.vertical, 12)
+            .padding(.horizontal, AASpacing.l)
+            .frame(height: 44)
         }
         .frame(width: 660, height: 620)
         .background(AAColor.panel)
         .aaSheet(.decision)
         .onAppear {
-            widthText = QuickCardLayout.editorSizeText(card.width)
-            heightText = QuickCardLayout.editorSizeText(card.height)
             customColor = AAColor.color(MaritimeIcons.parseColor(card.color))
             DispatchQueue.main.async { titleFocused = true; suppressColorChange = false }
         }
@@ -86,7 +98,7 @@ struct QuickCardEditorSheet: View {
                     .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).strokeBorder(AAColor.border, lineWidth: 1))
                     .help(card.target)
                 Text(QuickCardLayout.targetTypeLabel(target: card.target, kind: QuickCardLayout.kind(of: card)))
-                    .font(.system(size: AAType.caption))
+                    .font(.aaMono(AAType.caption))
                     .foregroundStyle(AAColor.muted)
                     .fixedSize()
             }
@@ -99,7 +111,8 @@ struct QuickCardEditorSheet: View {
                     Button { Task { await importCopy() } } label: {
                         Label("Import a copy", systemImage: "doc.on.doc").frame(maxWidth: .infinity)
                     }
-                    .help("Copy the file into the app data folder.")
+                    .disabled(writeGated)                       // DATA-174: adding attachments ("Import copy")
+                    .help(writeGated ? PersistReadOnlyText.disabledHelp : "Copy the file into the app data folder.")
                 }
                 GridRow {
                     Button { Task { await linkFolder() } } label: {
@@ -138,7 +151,7 @@ struct QuickCardEditorSheet: View {
             }
             HStack(spacing: AASpacing.s) {
                 ColorPicker(selection: $customColor, supportsOpacity: false) {
-                    Text("Custom colour…").font(.system(size: AAType.small)).fixedSize()
+                    Text("Custom colour…").fixedSize()
                 }
                 .fixedSize()
                 .onChange(of: customColor) { _, c in
@@ -200,7 +213,7 @@ struct QuickCardEditorSheet: View {
     }
 
     private func label(_ s: String) -> some View {
-        Text(s).font(.system(size: AAType.small, weight: .bold)).foregroundStyle(AAColor.fg)
+        Text(s).font(.aaMono(AAType.small, weight: .bold)).foregroundStyle(AAColor.fg)
     }
 
     // MARK: Target actions (VESSEL-043…047)
@@ -213,6 +226,7 @@ struct QuickCardEditorSheet: View {
     }
 
     private func importCopy() async {
+        guard !writeGated else { return }
         let urls = await dialogs.openPanel(OpenPanelConfig(message: "Import a copy of a file"))
         guard let url = urls.first else { return }
         do {
