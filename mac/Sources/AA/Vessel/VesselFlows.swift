@@ -24,11 +24,28 @@ import AACore
         do { try env.store.save() } catch { env.reportError(error, context: "Saving the data file") }
     }
 
+    // MARK: Write gate (01 DATA-174, DATA-180)
+
+    /// True while this window may not write into the data folder: a read-only instance (DATA-174) or "Stop Editing
+    /// Here" (DATA-180) — the same condition as the menu rows' `writeGated` (F3 `CommandRouter`). In-window import
+    /// controls, workbook drops and "Import a copy" are disabled with `PersistReadOnlyText.disabledHelp`.
+    static func isWriteGated(_ env: AppEnvironment) -> Bool {
+        env.isReadOnlyInstance || env.dataFileGuard?.state.mode == .stoppedEditing
+    }
+
+    /// Backstop for a gated import reached any other way (nothing is parsed, merged or reported as imported).
+    private static func refuseWhenGated(_ env: AppEnvironment, dialogs: DialogPresenter) async -> Bool {
+        guard isWriteGated(env) else { return false }
+        await dialogs.info("Import", PersistReadOnlyText.disabledHelp)
+        return true
+    }
+
     // MARK: Work orders (VESSEL-101, VESSEL-103)
 
     /// `file` = a workbook dropped from Finder (X.7.3); nil shows the open panel. Both go through the same gate.
     static func importWorkOrders(vesselID: UUID, env: AppEnvironment, dialogs: DialogPresenter, file: URL? = nil) async {
         guard let vessel = env.store.vessel(id: vesselID) else { return }
+        if await refuseWhenGated(env, dialogs: dialogs) { return }
         let session = VesselSessionState.shared
         guard !session.busyWorkOrders.contains(vesselID) else { return }
         var picked = file
@@ -89,6 +106,7 @@ import AACore
     /// the same different-vessel confirmation.
     static func importPorts(vesselID: UUID, env: AppEnvironment, dialogs: DialogPresenter, file: URL? = nil) async {
         guard let vessel = env.store.vessel(id: vesselID) else { return }
+        if await refuseWhenGated(env, dialogs: dialogs) { return }
         let session = VesselSessionState.shared
         guard !session.busyPorts.contains(vesselID) else { return }
         var picked = file
@@ -232,11 +250,22 @@ import AACore
         VesselSessionState.shared.bump()
     }
 
-    /// VESSEL-025 through `AttachmentOpener` (path mapping for Windows paths, `smb://` for UNC, ARCH §9.4).
+    /// VESSEL-025: folders open in Finder (their contents, like Explorer); everything else goes through
+    /// `AttachmentOpener` (path-mapping table, `/Volumes/<share>` for UNC, ARCH §9.4). An unmapped Windows path offers
+    /// the shared recovery — Connect to Server… (UNC, then retry once Finder has mounted the share), Locate… (stores a
+    /// mapping, then retry), Open File Links Settings… — with the VESSEL-025 `Open failed` / `Not found:` texts.
     static func openQuickCard(_ card: QuickCard, env: AppEnvironment, dialogs: DialogPresenter) async {
-        if NetText.isBlank(card.target) {
+        switch QuickCardOpen.step(card, dataStore: env.dataStore) {
+        case .noTarget:
             await dialogs.info(QuickCardLayout.noTargetTitle, QuickCardLayout.noTargetMessage)
             return
+        case .openFolder(let url):
+            if !NSWorkspace.shared.open(url) {
+                await dialogs.error(QuickCardLayout.openFailedTitle, QuickCardOpen.folderOpenFailed(url))
+            }
+            return
+        case .attachment:
+            break
         }
         switch AttachmentOpener.open(stored: card.target, isLink: card.isLink, dataStore: env.dataStore) {
         case .opened:
@@ -244,14 +273,50 @@ import AACore
         case .notFound(let path):
             await dialogs.warning(QuickCardLayout.openFailedTitle, "Not found:\n\(path)")
         case .windowsPathUnmapped(let path):
-            let choice = await dialogs.alert(AlertSpec(
-                title: QuickCardLayout.openFailedTitle,
-                message: "Not found:\n\(path)\n\nThis is a Windows path. Map its drive or server share to a folder on this Mac in Settings ▸ File Links.",
-                style: .warning,
-                buttons: [AlertButton(title: "OK", role: .default), AlertButton(title: "Open File Links Settings…")]))
-            if choice == 1 { env.open(.settings(tab: .fileLinks)) }
+            if await recoverUnmapped(path, env: env, dialogs: dialogs) {
+                await openQuickCard(card, env: env, dialogs: dialogs)
+            }
         case .failed(let message):
             await dialogs.error(QuickCardLayout.openFailedTitle, message)
+        }
+    }
+
+    /// The unmapped-Windows-path alert of a quick card. True when the path now resolves and the open is retried.
+    private static func recoverUnmapped(_ path: String, env: AppEnvironment, dialogs: DialogPresenter) async -> Bool {
+        let choices = QuickCardOpen.recoveryChoices(for: path)
+        let buttons = choices.enumerated().map { i, c in
+            AlertButton(title: c.title, role: c == .cancel ? .cancel : (i == 0 ? .default : .normal))
+        }
+        let picked = await dialogs.alert(AlertSpec(title: QuickCardLayout.openFailedTitle,
+                                                   message: QuickCardOpen.unmappedMessage(path),
+                                                   style: .warning, buttons: buttons))
+        guard picked >= 0, picked < choices.count else { return false }
+        switch choices[picked] {
+        case .connectToServer:
+            guard let share = PathMapper.smbShareURL(forUNC: path) else { return false }
+            NSWorkspace.shared.open(share)                       // Finder mounts it under /Volumes
+            let polls = QuickCardOpen.mountWaitSeconds * 1000 / QuickCardOpen.mountPollMilliseconds
+            for _ in 0..<polls {
+                try? await Task.sleep(for: .milliseconds(QuickCardOpen.mountPollMilliseconds))
+                if Task.isCancelled { return false }
+                if QuickCardOpen.resolves(path, dataStore: env.dataStore) { return true }
+            }
+            env.status.post(QuickCardOpen.mountTimeoutStatus(path))
+            return false
+        case .locate:
+            let urls = await dialogs.openPanel(OpenPanelConfig(message: QuickCardOpen.locateMessage(path),
+                                                               canChooseFiles: true, canChooseDirectories: true))
+            guard let chosen = urls.first, let m = PathMapper.inferredMapping(windowsPath: path, chosen: chosen) else {
+                return false
+            }
+            PathMapper.shared.upsert(m)
+            env.status.post(QuickCardOpen.mappedStatus(m))
+            return QuickCardOpen.resolves(path, dataStore: env.dataStore)
+        case .fileLinksSettings:
+            env.open(.settings(tab: .fileLinks))
+            return false
+        case .cancel:
+            return false
         }
     }
 

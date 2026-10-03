@@ -88,17 +88,28 @@ struct VesselPortsPanelContent: View {
 
     private var session: VesselSessionState { VesselSessionState.shared }
     private var busy: Bool { session.busyPorts.contains(vessel.id) }
+    /// DATA-174 / DATA-180: the in-panel import and the workbook drop follow the menu rows' write gate.
+    private var gated: Bool { VesselFlows.isWriteGated(env) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: AASpacing.s) {
             toolbar
             VesselSummaryBox(text: summary, busy: busy)
-            table
+            if vessel.portCalls.isEmpty {
+                // No zebra table behind the empty state (design rule 5): a plain surface with AAEmptyState.
+                AAEmptyState(title: "No ports of call", symbol: "mappin.and.ellipse",
+                             message: "Import a 'Last Ports of Call' or 'Port of Call List' workbook for this vessel.")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .opacity(busy ? 0.5 : 1)
+            } else {
+                table
+            }
         }
-        .padding(AASpacing.m)
+        .padding(AASpacing.l)
         .overlay { VesselDropHighlight(active: dropTargeted).padding(4) }
-        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
-            VesselWorkbookDrop.handle(providers) { url in
+        .onDrop(of: gated ? [] : [.fileURL], isTargeted: $dropTargeted) { providers in
+            guard !gated else { return false }
+            return VesselWorkbookDrop.handle(providers) { url in
                 Task { await VesselFlows.importPorts(vesselID: vessel.id, env: env, dialogs: dialogs, file: url) }
             }
         }
@@ -131,8 +142,9 @@ struct VesselPortsPanelContent: View {
                 Label("Import ports (.xlsx)…", systemImage: AASymbol.importFile)
             }
             .aaProminent()
-            .disabled(busy)
-            .help("Import a ports-of-call list for THIS vessel. Both the 'Last Ports of Call' and the 'Port of Call List' layouts are auto-detected.")
+            .disabled(busy || gated)
+            .help(gated ? PersistReadOnlyText.disabledHelp
+                        : "Import a ports-of-call list for THIS vessel. Both the 'Last Ports of Call' and the 'Port of Call List' layouts are auto-detected.")
             Button {
                 Task { await VesselFlows.exportPorts(vesselID: vessel.id, env: env, dialogs: dialogs) }
             } label: {
@@ -153,51 +165,58 @@ struct VesselPortsPanelContent: View {
         Table(rows, selection: $selection, sortOrder: $sortOrder) {
             Group {
                 TableColumn("Port", sortUsing: PortCallRowItem.comparator(.port, descending: false)) { r in
-                    Text(r.call.portName).fontWeight(.medium)
+                    Text(r.call.portName)
                 }
-                .width(min: 90, ideal: 150)
+                .width(min: 90, ideal: 130)
                 TableColumn("Country", sortUsing: PortCallRowItem.comparator(.country, descending: false)) { r in
                     Text(r.call.country)
                 }
-                .width(min: 70, ideal: 120)
+                .width(min: 70, ideal: 110)
                 TableColumn("UN/LOCODE", sortUsing: PortCallRowItem.comparator(.unLocode, descending: false)) { r in
-                    Text(r.call.unLocode).font(.aaMono(AAType.small))
+                    Text(r.call.unLocode)
                 }
-                .width(min: 60, ideal: 90)
+                .width(min: 60, ideal: 80)
                 TableColumn("Arrival", sortUsing: PortCallRowItem.comparator(.arrival, descending: false)) { r in
-                    Text(r.call.arrivalDisplay).font(.aaMono(AAType.small))
+                    Text(r.call.arrivalDisplay).monospacedDigit()
                 }
-                .width(min: 100, ideal: 130)
+                .width(min: 100, ideal: 124)
                 TableColumn("Departure", sortUsing: PortCallRowItem.comparator(.departure, descending: false)) { r in
-                    Text(r.call.departureDisplay).font(.aaMono(AAType.small))
+                    Text(r.call.departureDisplay).monospacedDigit()
                 }
-                .width(min: 100, ideal: 130)
+                .width(min: 100, ideal: 124)
             }
             Group {
                 TableColumn("Sec P", sortUsing: PortCallRowItem.comparator(.secPort, descending: false)) { r in
                     Text(r.call.securityLevelPort)
                 }
-                .width(min: 40, ideal: 55)
+                .width(min: 40, ideal: 48)
                 TableColumn("Sec V", sortUsing: PortCallRowItem.comparator(.secVessel, descending: false)) { r in
                     Text(r.call.securityLevelVessel)
                 }
-                .width(min: 40, ideal: 55)
+                .width(min: 40, ideal: 48)
                 TableColumn("SSP", sortUsing: PortCallRowItem.comparator(.ssp, descending: false)) { r in
                     Text(r.call.sspFollowed)
                 }
-                .width(min: 36, ideal: 50)
+                .width(min: 36, ideal: 42)
                 TableColumn("Port Facility", sortUsing: PortCallRowItem.comparator(.facility, descending: false)) { r in
-                    Text(r.call.portFacility).help(r.call.portFacility)
+                    Text(r.call.portFacility)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)      // wrapped (VESSEL-207)
+                        .help(r.call.portFacility)
                 }
-                .width(min: 90, ideal: 180)
+                .width(min: 90, ideal: 170)
                 TableColumn("Special measures", sortUsing: PortCallRowItem.comparator(.special, descending: false)) { r in
-                    Text(r.call.specialMeasures).help(r.call.specialMeasures)
+                    Text(r.call.specialMeasures)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)      // wrapped (VESSEL-207)
+                        .help(r.call.specialMeasures)
                 }
                 .width(min: 90, ideal: 200)
             }
         }
-        .tableStyle(.inset(alternatesRowBackgrounds: true))
-        .font(.system(size: AAType.small))
+        .tableStyle(.inset)
+        .alternatingRowBackgrounds(.disabled)
+        .font(.aaMono(AAType.small))                 // dense tables: the crew-table cell size
         .contextMenu(forSelectionType: ObjectIdentifier.self) { ids in
             Button(role: .destructive) { delete(ids: ids.isEmpty ? selection : ids) } label: {
                 Label("Delete…", systemImage: AASymbol.delete)
@@ -207,10 +226,7 @@ struct VesselPortsPanelContent: View {
         .aaListCommands(ListCommands(role: .portsOfCall, selectionCount: selection.count,
                                      deleteTitle: "Delete Port Calls…", delete: { delete(ids: selection) }))
         .overlay {
-            if vessel.portCalls.isEmpty && !busy {
-                AAEmptyState(title: "No ports of call", symbol: "mappin.and.ellipse",
-                             message: "Import a 'Last Ports of Call' or 'Port of Call List' workbook for this vessel.")
-            } else if rows.isEmpty && !vessel.portCalls.isEmpty {
+            if rows.isEmpty && !vessel.portCalls.isEmpty {
                 AAEmptyState(title: "No matching ports", symbol: "magnifyingglass",
                              message: "Clear the search to see every port call.")
             }

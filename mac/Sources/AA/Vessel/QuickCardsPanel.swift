@@ -57,11 +57,11 @@ struct QuickCardsPanelContent: View {
     private var header: some View {
         HStack(spacing: 14) {
             Text(QuickCardLayout.headerTitle)
-                .font(.system(size: AAType.title, weight: .bold))
+                .font(.aaMono(AAType.title, weight: .bold))
                 .foregroundStyle(AAColor.accent)
                 .fixedSize()
             Text(QuickCardLayout.headerHint)
-                .font(.system(size: AAType.small))
+                .font(.aaMono(AAType.caption))
                 .foregroundStyle(AAColor.muted)
                 .lineLimit(1)
                 .truncationMode(.tail)
@@ -105,18 +105,12 @@ struct QuickCardsPanelContent: View {
         .background(AAColor.bg)
         .overlay {
             if vessel.quickCards.isEmpty {
-                VStack(spacing: AASpacing.m) {
-                    Image(systemName: "square.grid.2x2")
-                        .font(.system(size: 34, weight: .light))
-                        .foregroundStyle(AAColor.muted.opacity(0.7))
-                    Text(QuickCardLayout.emptyText)
-                        .font(.system(size: AAType.body))
-                        .foregroundStyle(AAColor.muted)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(AASpacing.xl)
-                .allowsHitTesting(false)
+                // VESSEL-012 text: its first line is the title, the second the next action.
+                let lines = QuickCardLayout.emptyText.components(separatedBy: "\n")
+                AAEmptyState(title: lines[0], symbol: "square.grid.2x2",
+                             message: lines.dropFirst().joined(separator: "\n"))
+                    .padding(AASpacing.xl)
+                    .allowsHitTesting(false)
             }
         }
         .overlay {
@@ -128,7 +122,8 @@ struct QuickCardsPanelContent: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: AARadius.control, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: AARadius.control, style: .continuous).strokeBorder(AAColor.border, lineWidth: 1))
-        .onDrop(of: [.fileURL, .url], isTargeted: $dropTargeted) { providers in
+        // DATA-174: no drag-in while the write gate is closed (a plain file drop imports a copy into files/).
+        .onDrop(of: VesselFlows.isWriteGated(env) ? [] : [.fileURL, .url], isTargeted: $dropTargeted) { providers in
             handleDrop(providers)
         }
     }
@@ -141,7 +136,7 @@ struct QuickCardsPanelContent: View {
     // MARK: Drag-in (10 §6.2 optional enhancement: a Finder file / folder / URL opens the editor pre-filled)
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
-        guard let provider = providers.first else { return false }
+        guard !VesselFlows.isWriteGated(env), let provider = providers.first else { return false }
         let linkInPlace = NSEvent.modifierFlags.contains(.option) || NSEvent.modifierFlags.contains(.shift)
         let vesselID = vessel.id
         if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {

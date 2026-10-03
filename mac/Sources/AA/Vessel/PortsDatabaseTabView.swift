@@ -56,11 +56,11 @@ struct PortsDatabaseTabView: View {
         @Bindable var s = session
         return VStack(alignment: .leading, spacing: 0) {
             Label(PortsAnalysis.dbTitle.replacingOccurrences(of: "⚓ ", with: ""), systemImage: AASymbol.portsHeader)
-                .font(.system(size: 15, weight: .bold))
+                .font(.aaMono(AAType.title, weight: .bold))
                 .foregroundStyle(AAColor.accent)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .symbolRenderingMode(.hierarchical)
+                .padding(.horizontal, AASpacing.m)
+                .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                 .background(AAColor.panelAlt)
                 .overlay(alignment: .bottom) { Rectangle().fill(AAColor.border).frame(height: 1) }
             VStack(alignment: .leading, spacing: AASpacing.s) {
@@ -68,28 +68,34 @@ struct PortsDatabaseTabView: View {
                 AASearchField(text: $s.databaseQuery, prompt: PortsAnalysis.searchPlaceholder)
                     .aaFilterField(for: .main)
             }
-            .padding(10)
+            .padding(AASpacing.m)
             List(selection: $s.databaseSelection) {
                 ForEach(ports) { port in
                     PortsDatabaseRow(port: port).tag(port.id)
                 }
             }
             .listStyle(.inset)
+            .alternatingRowBackgrounds(.disabled)
             .scrollContentBackground(.hidden)
             .overlay {
                 if ports.isEmpty {
-                    Text(env.store.data.ports.isEmpty ? "No ports yet" : "No matching ports")
-                        .font(.system(size: AAType.small))
-                        .foregroundStyle(AAColor.muted)
+                    if env.store.data.ports.isEmpty {
+                        AAEmptyState(title: "No ports yet", symbol: AASymbol.portsHeader,
+                                     message: "Import a ports-of-call list on any vessel’s “Ports” tab.")
+                    } else {
+                        AAEmptyState(title: "No matching ports", symbol: "magnifyingglass",
+                                     message: "Clear the search to see every port.")
+                    }
                 }
             }
             Divider()
             Text(status)
-                .font(.system(size: AAType.caption))
+                .font(.aaMono(AAType.caption))
+                .monospacedDigit()
                 .foregroundStyle(AAColor.muted)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
+                .padding(.horizontal, AASpacing.m)
+                .padding(.vertical, AASpacing.s)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .background(AAColor.panel, in: RoundedRectangle(cornerRadius: AARadius.control, style: .continuous))
@@ -104,14 +110,14 @@ struct PortsDatabaseTabView: View {
         VStack(alignment: .leading, spacing: AASpacing.m) {
             if let port = selectedPort {
                 Text(PortsAnalysis.visitsHeader(port))
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.aaMono(AAType.body, weight: .semibold))
                     .foregroundStyle(AAColor.fg)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 PortsDatabaseVisitsTable(visits: PortsAnalysis.orderedVisits(port))
             } else {
                 Text(PortsAnalysis.dbNoSelectionHeader)
-                    .font(.system(size: 17, weight: .bold))
+                    .font(.aaMono(AAType.body, weight: .semibold))
                     .foregroundStyle(AAColor.fg)
                     .fixedSize(horizontal: false, vertical: true)
                 AAEmptyState(title: "No port selected", symbol: AASymbol.portsHeader,
@@ -119,7 +125,7 @@ struct PortsDatabaseTabView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .padding(10)
+        .padding(AASpacing.m)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(AAColor.panel, in: RoundedRectangle(cornerRadius: AARadius.control, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: AARadius.control, style: .continuous).strokeBorder(AAColor.border, lineWidth: 1))
@@ -134,16 +140,18 @@ struct PortsDatabaseRow: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
             Text(port.display)
-                .font(.system(size: AAType.body, weight: .semibold))
+                .font(.aaMono(AAType.body))
+                .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: AASpacing.s)
             Text(PortsAnalysis.visitCountText(port.visits.count))
-                .font(.system(size: AAType.caption))
-                .foregroundStyle(.secondary)
+                .font(.aaMono(AAType.caption))
+                .foregroundStyle(AAColor.muted)
                 .monospacedDigit()
                 .fixedSize()
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, AASpacing.xs)
+        .frame(minHeight: 22)
     }
 }
 
@@ -159,16 +167,19 @@ struct PortsDatabaseVisitsTable: View {
     var body: some View {
         let rows = visits.enumerated().map { Row(id: $0.offset, visit: $0.element) }
         Table(rows) {
-            TableColumn("Vessel") { r in Text(r.visit.vesselName).fontWeight(.medium) }
+            TableColumn("Vessel") { r in Text(r.visit.vesselName) }
                 .width(min: 100)
-            TableColumn("Arrival") { r in Text(r.visit.arrivalDisplay).font(.aaMono(AAType.small)) }
+            TableColumn("Arrival") { r in Text(r.visit.arrivalDisplay).monospacedDigit() }
                 .width(130)
-            TableColumn("Departure") { r in Text(r.visit.departureDisplay).font(.aaMono(AAType.small)) }
+            TableColumn("Departure") { r in Text(r.visit.departureDisplay).monospacedDigit() }
                 .width(130)
-            TableColumn("Imported") { r in Text(r.visit.importedAt).font(.aaMono(AAType.caption)).foregroundStyle(.secondary) }
+            TableColumn("Imported") { r in
+                Text(r.visit.importedAt).font(.aaMono(AAType.caption)).monospacedDigit().foregroundStyle(AAColor.muted)
+            }
                 .width(126)
         }
-        .tableStyle(.inset(alternatesRowBackgrounds: true))
-        .font(.system(size: AAType.small))
+        .tableStyle(.inset)
+        .alternatingRowBackgrounds(.disabled)
+        .font(.aaMono(AAType.body))
     }
 }
