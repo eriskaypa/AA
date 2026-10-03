@@ -183,6 +183,29 @@ public enum HierPageOps {
         return true
     }
 
+    // MARK: Navigation to a child (DECISIONS 02 Q-11)
+
+    /// The DIRECT subtask of `task` that is, or contains (at any depth, cycle-guarded), `childID` — the row the
+    /// Schedule & Subtasks table selects when a search hit names a nested subtask. nil when not in the tree.
+    public static func directSubtask(of task: TaskItem, revealing childID: UUID) -> TaskItem? {
+        for s in task.subtasks {
+            if s.id == childID { return s }
+            var seen = Set<ObjectIdentifier>([ObjectIdentifier(s)])
+            var stack = Array(s.subtasks)
+            while let n = stack.popLast() {
+                guard seen.insert(ObjectIdentifier(n)).inserted else { continue }
+                if n.id == childID { return s }
+                stack.append(contentsOf: n.subtasks)
+            }
+        }
+        return nil
+    }
+
+    /// The component of `equipment` with `childID`, if any.
+    public static func component(of equipment: Equipment, id childID: UUID) -> Component? {
+        equipment.components.first { $0.id == childID }
+    }
+
     // MARK: Subtasks (HIER-086)
 
     /// `+ Add`: nil for a blank name; logged `Added / "Subtask" / name / {parent}` (REPO-035).

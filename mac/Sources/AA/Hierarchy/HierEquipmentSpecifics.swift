@@ -9,6 +9,7 @@ import AACore
 
 struct HierEquipmentSpecifics: View {
     let equipment: Equipment
+    let model: HierPageModel
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dialogs) private var dialogs
     @State private var selectedComponent: UUID?
@@ -26,6 +27,15 @@ struct HierEquipmentSpecifics: View {
             }
             .padding(AASpacing.l)
         }
+        .onAppear { revealChild() }
+        .onChange(of: model.pendingChildID) { _, _ in revealChild() }
+    }
+
+    /// A navigation that names a component selects its row (DECISIONS 02 Q-11).
+    private func revealChild() {
+        guard let child = model.pendingChildID else { return }
+        model.pendingChildID = nil
+        if let c = HierPageOps.component(of: equipment, id: child) { selectedComponent = c.id }
     }
 
     // MARK: Components (HIER-070)

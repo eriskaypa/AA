@@ -227,4 +227,24 @@ import Testing
         store.removeSubtask(s, from: t)
         #expect(t.subtasks.isEmpty && store.data.log.last?.action == "Removed")
     }
+
+    // DECISIONS 02 Q-11 — a navigation naming a child selects its row: the direct subtask containing a nested hit
+    // (cycle-guarded), or the named component
+    @Test func childReveal() throws {
+        let made = make(); let store = made.store
+        let t = try #require(store.createItem(kind: .task, name: "Parent") as? TaskItem)
+        let a = store.addSubtask(named: "A", to: t)
+        let b = store.addSubtask(named: "B", to: t)
+        let b1 = store.addSubtask(named: "B1", to: b)
+        let b2 = store.addSubtask(named: "B2", to: b1)
+        #expect(HierPageOps.directSubtask(of: t, revealing: a.id) === a)
+        #expect(HierPageOps.directSubtask(of: t, revealing: b2.id) === b)
+        #expect(HierPageOps.directSubtask(of: t, revealing: UUID()) == nil)
+        b2.subtasks.append(b1)                                                   // malformed cycle: no hang
+        #expect(HierPageOps.directSubtask(of: t, revealing: UUID()) == nil)
+        let e = try #require(store.createItem(kind: .equipment, name: "Pump") as? Equipment)
+        let c = store.addComponent(named: "Seal", to: e)
+        #expect(HierPageOps.component(of: e, id: c.id) === c)
+        #expect(HierPageOps.component(of: e, id: UUID()) == nil)
+    }
 }

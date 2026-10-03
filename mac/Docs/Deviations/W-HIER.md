@@ -36,3 +36,7 @@
 | additive | 04 §6.2 | Sidebar header shows the item count; rows with an empty name display "(unnamed)" (display only); section headers have a disclosure chevron (double-click toggles too). |
 | additive | 02 REPO-051 | The Task specifics show "range · {n} days" next to the start date while a range exists. |
 | HIER-001 | 04 §6.3 | The details tabs are a segmented control (a pop-up menu when the pane is too narrow); the Specifics header text per kind is kept, "Container" kept (DECISIONS 04 Q-H). |
+| Q-11 (02) | DECISIONS 02 Q-11, HIER-120 | A navigation naming a child selects it: a subtask (a nested one selects the direct subtask containing it) on the Schedule & Subtasks tab, a component on the Equipment specifics tab; checklist steps wait for REQ-W-HIER-02. |
+| HIER-056 | 04 HIER-056, §6.7 | Hosted container editors (main pane and item window) are keyed on the container AND the app-password session, so Tools ▸ Lock Now re-loads the editor of a non-gated item (Windows `RelockCurrent`); a detached item's main pane never re-binds (Q-17). |
+| HIER-112 | 04 HIER-112, §6.7 | The item window binds its editor only after its id is in `AppStore.detachedItemIDs` (the main pane has parked), so one container never has two live editors, even for one frame. |
+| M03 | 04 HIER-M03 | Double-clicking empty sidebar space does nothing (it never opens the details item in a window). |

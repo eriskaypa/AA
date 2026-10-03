@@ -67,7 +67,8 @@ struct HierItemDetail: View {
             } else {
                 ContainerEditorView(container: item.container,
                                     context: ContainerEditorContext(title: item.name, host: .mainPane(item.kind)))
-                    .id(ObjectIdentifier(item.container))
+                    .id(HierEditorKey(container: ObjectIdentifier(item.container),
+                                      passwordSession: env.passwords.isUnlocked))
             }
         case .relationships:
             HierRelationshipsTab(model: model, item: item)
@@ -75,9 +76,9 @@ struct HierItemDetail: View {
         case .specifics:
             Group {
                 switch item {
-                case let e as Equipment: HierEquipmentSpecifics(equipment: e)
+                case let e as Equipment: HierEquipmentSpecifics(equipment: e, model: model)
                 case let t as TaskItem: HierTaskSpecifics(task: t, model: model)
-                case let p as Procedure: HierProcedureSpecifics(procedure: p)
+                case let p as Procedure: HierProcedureSpecifics(procedure: p, model: model)
                 default: AAEmptyState(title: HierText.specificsHeader(item.kind), symbol: "square.dashed")
                 }
             }
@@ -90,6 +91,13 @@ struct HierItemDetail: View {
             VesselPortsPanel(vesselID: item.id).disabled(detached)
         }
     }
+}
+
+/// The identity of a hosted container editor: the container (ARCH §2.4) and the app-password session, so Tools ▸
+/// Lock Now re-loads the editor of a non-gated item and text-level locks re-render (HIER-056 `RelockCurrent`).
+struct HierEditorKey: Hashable {
+    var container: ObjectIdentifier
+    var passwordSession: Bool
 }
 
 /// HIER-042 tab order as a centred segmented control.

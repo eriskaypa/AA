@@ -28,10 +28,13 @@ struct ItemWindowView: View {
                 if env.locks.isGated(item) {
                     LockGateView(itemID: item.id)
                         .transition(.opacity)
-                } else {
+                } else if env.store.detachedItemIDs.contains(itemID) {
+                    // HIER-112: the editor binds only once the main pane has parked (one editor per container).
                     HierItemWindowContent(item: item)
                         .id(ObjectIdentifier(item))
                         .transition(.opacity)
+                } else {
+                    Color.clear
                 }
             } else {
                 orphaned
@@ -103,7 +106,8 @@ struct HierItemWindowContent: View {
                                  tagsFocused: $tagsFocused)
             ContainerEditorView(container: item.container,
                                 context: ContainerEditorContext(title: item.name, host: .itemWindow(item.id)))
-                .id(ObjectIdentifier(item.container))
+                .id(HierEditorKey(container: ObjectIdentifier(item.container),
+                                  passwordSession: env.passwords.isUnlocked))
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             Text(HierText.itemWindowFooter)
                 .font(.aaMono(AAType.caption))

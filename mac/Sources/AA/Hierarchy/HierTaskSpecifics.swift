@@ -186,9 +186,10 @@ struct HierTaskSpecifics: View {
     }
 
     private func revealChild() {
-        guard let child = model.pendingChildID, task.subtasks.contains(where: { $0.id == child }) else { return }
-        selectedSubtasks = [child]
+        guard let child = model.pendingChildID else { return }
         model.pendingChildID = nil
+        // A nested hit selects the direct subtask that contains it (DECISIONS 02 Q-11).
+        if let row = HierPageOps.directSubtask(of: task, revealing: child) { selectedSubtasks = [row.id] }
     }
 
     private func addSubtask() async {

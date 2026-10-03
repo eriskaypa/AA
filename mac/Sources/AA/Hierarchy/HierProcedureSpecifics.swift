@@ -7,6 +7,7 @@ import AACore
 
 struct HierProcedureSpecifics: View {
     let procedure: Procedure
+    let model: HierPageModel
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dialogs) private var dialogs
     @State private var durationText = ""
@@ -71,7 +72,12 @@ struct HierProcedureSpecifics: View {
             ProcedureChecklistSection(procedureID: procedure.id)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .onAppear { durationText = String(procedure.durationMinutes) }
+        .onAppear {
+            durationText = String(procedure.durationMinutes)
+            // The step grid is W-BUILD's ProcedureChecklistSection, whose contract takes no child to select
+            // (REQ-W-HIER-02): the Checklist tab is fronted and the request is consumed here.
+            model.pendingChildID = nil
+        }
         .onChange(of: procedure.durationMinutes) { _, v in
             if HierDuration.parse(durationText) != v { durationText = String(v) }
         }

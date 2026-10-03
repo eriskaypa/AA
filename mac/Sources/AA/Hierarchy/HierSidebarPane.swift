@@ -185,6 +185,7 @@ struct HierSidebarList: View {
             .contextMenu(forSelectionType: UUID.self) { ids in
                 menu(for: ids)
             } primaryAction: { ids in
+                guard !ids.isEmpty else { return }                                          // not on a row
                 model.openInWindow(model.items(for: ids), dialogs: dialogs)                     // M03 / T-KB-25
             }
             .onKeyPress(.return) {                                                          // T-KB-24, 03 X-8
