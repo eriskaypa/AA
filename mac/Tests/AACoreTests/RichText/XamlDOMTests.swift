@@ -16,6 +16,27 @@ import Testing
 
     static func kinds(_ d: XamlDocument) -> [XamlNodeKind] { d.nodes.map(\.kind) }
 
+    // MARK: Shapes the PDF renderer reads (REQ-W-PDF-02; 05 CONT-152…154)
+
+    @Test func pdfConsumerShapes() throws {
+        let d = try #require(Self.parse(Self.wrap(##"<Table><Table.Columns><TableColumn Width="120"/><TableColumn Width="*"/></Table.Columns><TableRowGroup><TableRow><TableCell><Paragraph><Run>a</Run></Paragraph></TableCell></TableRow></TableRowGroup></Table><Paragraph><Run>plain</Run><Run><Run.Background><SolidColorBrush Color="#FFFFE699"/></Run.Background>hl</Run></Paragraph>"##)))
+        // (1) TableColumn nodes are children of their Table; width = absolute px, nil for star / auto.
+        let table = try #require(d.allNodeIDs.first { d[$0].kind == .table })
+        let cols = d[table].children.filter { d[$0].kind == .tableColumn }
+        #expect(cols.count == 2)
+        #expect(d[cols[0]].local.width == 120)
+        #expect(d[cols[1]].local.width == nil || d[cols[1]].local.width?.isNaN == true)
+        // (2) a Run's text: on the Run itself or in `.text` children.
+        let runs = d.allNodeIDs.filter { d[$0].kind == .run }
+        func text(_ id: XamlNodeID) -> String {
+            d[id].text ?? d[id].children.filter { d[$0].kind == .text }.compactMap { d[$0].text }.joined()
+        }
+        #expect(runs.map(text) == ["a", "plain", "hl"])
+        // (3) a property-element Background is reflected on the node (local value or the property element's brush).
+        let hl = runs[2]
+        #expect(d[hl].local.background != nil || d[hl].propertyElements.contains { $0.propertyName == "Background" && $0.brush != nil })
+    }
+
     // MARK: Fatal errors
 
     @Test func fatalErrors() {
