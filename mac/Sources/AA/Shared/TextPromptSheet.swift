@@ -7,34 +7,28 @@ import AACore
 
 struct TextPromptSheet: View {
     let request: TextPromptRequest
-    let finish: (TextPromptResult) -> Void
-    @State private var text: String
+    @State private var session: TextPromptSession
     @State private var reveal = false
-    @State private var done = false
 
     init(request: TextPromptRequest, finish: @escaping (TextPromptResult) -> Void) {
         self.request = request
-        self.finish = finish
-        _text = State(initialValue: ShellPromptText.singleLine(request.initial))
-    }
-
-    private func complete(_ r: TextPromptResult) {
-        guard !done else { return }                          // BUILD-139: fire exactly once
-        done = true
-        finish(r)
+        _session = State(initialValue: TextPromptSession(request: request, onFinish: finish))  // fires once (BUILD-139)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(request.title).font(.system(size: 14, weight: .bold))
+        VStack(alignment: .leading, spacing: AASpacing.s) {
+            // NSAlert layout: system 13 bold title, 11-pt body, field, then the buttons bottom-trailing.
+            Text(request.title).font(.headline)
             Text(request.prompt)
+                .font(.subheadline)
                 .fixedSize(horizontal: false, vertical: true)    // wraps (BUILD-141)
-            ShellRawSingleLineField(text: $text, secure: request.isSecure && !reveal,
-                                    onSubmit: { complete(.ok(text)) }, onCancel: { complete(.cancelled) })
-                .frame(height: 24)
+            ShellRawSingleLineField(text: Binding(get: { session.text }, set: { session.setText($0) }),
+                                    secure: request.isSecure && !reveal,
+                                    onSubmit: { session.ok() }, onCancel: { session.cancel() })
+                .frame(height: 22)
                 .accessibilityLabel(request.prompt)
             if let help = request.helpText {
-                Text(help).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(help).font(.subheadline).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             HStack {
                 if request.isSecure {
@@ -43,31 +37,19 @@ struct TextPromptSheet: View {
                         .help(reveal ? "Hide the key" : "Show the key")
                 }
                 Spacer()
-                Button("Cancel") { complete(.cancelled) }.keyboardShortcut(.cancelAction)
-                Button("OK") { complete(.ok(text)) }
+                Button("Cancel") { session.cancel() }.keyboardShortcut(.cancelAction)
+                Button("OK") { session.ok() }
                     .keyboardShortcut(.defaultAction)                 // never .disabled — BUILD-137
                     .aaProminent()
             }
-            .padding(.top, 4)
+            .padding(.top, AASpacing.xs)
         }
-        .padding(14)
-        .frame(minWidth: 440, idealWidth: 440)
+        .padding(AASpacing.l)
+        .frame(minWidth: TextPromptLayout.minWidth, idealWidth: TextPromptLayout.minWidth)
         .fixedSize(horizontal: false, vertical: true)
-        .onDisappear { complete(.cancelled) }                     // any other dismissal = Cancel
+        .onDisappear { session.cancel() }                         // any other dismissal = Cancel
         .accessibilityLabel(request.title)
         .aaSheet(.decision)
-    }
-}
-
-/// BUILD-A28 single-line filtering.
-enum ShellPromptText {
-    /// `\n`, `\r`, `\v`, `\f`, U+0085, U+2028, U+2029 — the WPF `TextEditor._FilterText` set.
-    static let lineBreaks: Set<Character> = ["\n", "\r", "\r\n", "\u{0B}", "\u{0C}", "\u{85}", "\u{2028}", "\u{2029}"]
-
-    /// Text cut at the first line break.
-    static func singleLine(_ s: String) -> String {
-        if let i = s.firstIndex(where: { lineBreaks.contains($0) }) { return String(s[..<i]) }
-        return s
     }
 }
 
@@ -100,9 +82,9 @@ struct ShellRawSingleLineField: NSViewRepresentable {
     private func install(in container: NSView, context: Context, focus: Bool) {
         let field: NSTextField = secure ? NSSecureTextField() : NSTextField()
         field.stringValue = text
-        field.delegate = context.coordinator
+        field.delegate = context.coordinator.delegate
+        field.isBezeled = true                                      // native rounded bezel (never isBordered)
         field.bezelStyle = .roundedBezel
-        field.isBordered = true
         field.lineBreakMode = .byClipping
         field.usesSingleLineMode = true
         field.cell?.wraps = false
@@ -126,47 +108,18 @@ struct ShellRawSingleLineField: NSViewRepresentable {
         }
     }
 
-    @MainActor final class Coordinator: NSObject, NSTextFieldDelegate {
+    @MainActor final class Coordinator {
         var parent: ShellRawSingleLineField
         weak var field: NSTextField?
         var isSecure = false
+        /// The field-editor rules and line-break cut (AACore, unit-tested by TV-PR-07…09).
+        lazy var delegate = ShellRawFieldDelegate(
+            onChange: { [weak self] cut in if self?.parent.text != cut { self?.parent.text = cut } },
+            onSubmit: { [weak self] cut in self?.parent.text = cut; self?.parent.onSubmit() },
+            onCancel: { [weak self] in self?.parent.onCancel() })
 
         init(_ p: ShellRawSingleLineField) { parent = p }
 
-        static func configure(_ editor: NSText?) {
-            guard let tv = editor as? NSTextView else { return }
-            tv.isAutomaticQuoteSubstitutionEnabled = false
-            tv.isAutomaticDashSubstitutionEnabled = false
-            tv.isAutomaticTextReplacementEnabled = false
-            tv.isAutomaticSpellingCorrectionEnabled = false
-            tv.isAutomaticLinkDetectionEnabled = false
-            tv.isAutomaticDataDetectionEnabled = false
-            tv.smartInsertDeleteEnabled = false
-        }
-
-        func controlTextDidBeginEditing(_ obj: Notification) {
-            Coordinator.configure(obj.userInfo?["NSFieldEditor"] as? NSText)
-        }
-
-        func controlTextDidChange(_ obj: Notification) {
-            guard let f = field else { return }
-            let cut = ShellPromptText.singleLine(f.stringValue)
-            if cut != f.stringValue { f.stringValue = cut }
-            if parent.text != cut { parent.text = cut }
-        }
-
-        func control(_ control: NSControl, textView: NSTextView, doCommandBy sel: Selector) -> Bool {
-            if sel == #selector(NSResponder.insertNewline(_:)) || sel == #selector(NSResponder.insertLineBreak(_:))
-                || sel == #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)) {
-                parent.text = ShellPromptText.singleLine(control.stringValue)
-                parent.onSubmit()
-                return true
-            }
-            if sel == #selector(NSResponder.cancelOperation(_:)) {
-                parent.onCancel()
-                return true
-            }
-            return false
-        }
+        static func configure(_ editor: NSText?) { ShellRawFieldEditing.configure(editor) }
     }
 }

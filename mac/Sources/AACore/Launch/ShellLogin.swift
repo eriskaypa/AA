@@ -33,7 +33,7 @@ public enum ShellPasswordMode: Sendable, Equatable {
         switch self {
         case .unlock: return "Enter the app password to unlock locked containers:"
         case .setNew: return "Pick a password (used to lock/unlock every container).\nConfirm it on the second line."
-        case .changeExisting: return "Enter the new password and confirm it on the second line."
+        case .changeExisting: return "Enter the new password and confirm it on the line below."
         }
     }
 

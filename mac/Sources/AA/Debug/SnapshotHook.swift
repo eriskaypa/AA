@@ -46,7 +46,10 @@ enum SnapshotHook {
             coordinator.enterMain()
             await waitFor { env.mainLoaded && SceneOpener.shared.window(for: .main) != nil }
             env.navigator.selectSilently(section)
-            if let id = opts.select { env.navigator.navigate(to: id) }
+            if let id = opts.select {
+                // A crew member id selects that roster card (CREW-005); anything else is a hierarchy item.
+                if env.store.crewMember(id: id) != nil { env.navigator.navigateToCrew(id) } else { env.navigator.navigate(to: id) }
+            }
             window = SceneOpener.shared.window(for: .main)
         } else if let scene = SceneID(rawValue: target) {
             switch scene {
@@ -209,6 +212,25 @@ enum SnapshotHook {
                 ctx.addPath(CGPath(roundedRect: card, cornerWidth: 16, cornerHeight: 16, transform: nil))
                 ctx.fillPath()
                 ctx.restoreGState()
+                // The column's own SwiftUI drawing (content outside the list, e.g. the fixed sidebar brand header):
+                // its hosting view's layer tree, then every leaf-ish piece on top.
+                // Only the part above the column's list is drawn this way (the list's own selection material renders
+                // opaque in a layer render; its rows come from the pieces below).
+                for host in columnHosts(in: item) {
+                    let hr = host.convert(host.bounds, to: view)
+                    guard let cg = layerImage(host, scale: scale) else { continue }
+                    let lists = scrollViews(in: host).map { $0.convert($0.bounds, to: view) }
+                    let listTop = lists.map { view.isFlipped ? $0.minY : $0.maxY }
+                    ctx.saveGState()
+                    if let top = view.isFlipped ? listTop.min() : listTop.max() {
+                        let header = view.isFlipped
+                            ? NSRect(x: hr.minX, y: hr.minY, width: hr.width, height: max(0, top - hr.minY))
+                            : NSRect(x: hr.minX, y: top, width: hr.width, height: max(0, hr.maxY - top))
+                        ctx.clip(to: flip(header, in: bounds, view))
+                    }
+                    ctx.draw(cg, in: flip(hr, in: bounds, view))
+                    ctx.restoreGState()
+                }
                 // Draw every leaf-ish piece (row backgrounds, cells, headers) with cacheDisplay at its place.
                 for piece in drawablePieces(in: item) {
                     let pr = piece.convert(piece.bounds, to: view)
@@ -258,6 +280,29 @@ enum SnapshotHook {
 
     private static func flip(_ r: NSRect, in bounds: NSRect, _ view: NSView) -> CGRect {
         view.isFlipped ? CGRect(x: r.minX, y: bounds.height - r.maxY, width: r.width, height: r.height) : r
+    }
+
+    /// The `ColumnView` hosting views of a column (the column's own SwiftUI content).
+    private static func columnHosts(in root: NSView) -> [NSView] {
+        var out: [NSView] = []
+        func walk(_ v: NSView) {
+            guard !v.isHidden else { return }
+            let name = String(describing: type(of: v))
+            if name.hasPrefix("NSHostingView") && name.contains("ColumnView") { out.append(v); return }
+            for s in v.subviews { walk(s) }
+        }
+        walk(root)
+        return out
+    }
+
+    private static func scrollViews(in root: NSView) -> [NSView] {
+        var out: [NSView] = []
+        func walk(_ v: NSView) {
+            if v is NSScrollView, !v.isHidden { out.append(v); return }
+            for s in v.subviews { walk(s) }
+        }
+        walk(root)
+        return out
     }
 
     /// Selected-row highlights, cells and headers of the lists inside a column.

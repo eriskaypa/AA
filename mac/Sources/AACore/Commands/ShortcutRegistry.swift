@@ -103,7 +103,7 @@ public enum ShortcutRegistry {
           "Encr_ypt local data file (this PC)", "APP", "CMD", symbol: "lock.doc",
           help: "Encrypt this Mac's data file at rest with the macOS Keychain (tied to your user account on this Mac). Shared, exported and Google Drive copies stay portable plaintext, so sync between machines is unaffected."),
         r("SHELL-552", .setSharedSaveFile, "Set Shared Save File…", "", shared, "Set s_hared save file...", "APP", "CMD",
-          help: "Use ONE save file at a location you choose (e.g. a network drive or a synced folder). AA autosaves there every minute and auto-reloads when another copy of AA updates it — point every PC at the same file to keep them in sync."),
+          help: "Use ONE save file at a location you choose (e.g. a network drive or a synced folder). AA autosaves there every minute and auto-reloads when another copy of AA updates it — point every computer at the same file to keep them in sync."),
         r("SHELL-553", .stopSharedSaveFile, "Stop Shared Save File", "", shared, "Stop shared save file", "APP", "CMD",
           help: "Go back to saving locally on this Mac only."),
         r("SHELL-554", .checkSharedSaveNow, "Check Shared Save Now", "", shared,

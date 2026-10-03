@@ -179,7 +179,10 @@ final class AppEnvironment: SharedSaveHost, DataFileConflictHost {
                 try? await Task.sleep(for: interval)
                 guard !Task.isCancelled, let self else { return }
                 self.doAutosave()
-                await self.driveSync.checkRemoteNewer(interactive: false)
+                // TOOLS-024 (MW:244-247): the background Drive check is fire-and-forget, so a slow listing or an open
+                // review sheet never holds back the next 5-minute autosave (overlaps are refused by the coordinator).
+                let drive = self.driveSync
+                Task { @MainActor in await drive.checkRemoteNewer(interactive: false) }
             }
         }
     }
@@ -208,10 +211,21 @@ final class AppEnvironment: SharedSaveHost, DataFileConflictHost {
             status.post(ShellStatusText.nothingToUndo)
             return
         }
-        _ = store.undoLastDelete()
-        try? store.save()
-        status.post(ShellStatusText.restored(n))
+        // REPO-077 (MainWindow.xaml.cs:1461-1471): nothing came back (unreadable payload, unknown type) → "Nothing to
+        // undo." and no save; otherwise save, surfacing a failure like every other immediate save (D5).
+        let types = store.undoLastDelete()
         refreshAfterTrashChange()
+        guard !types.isEmpty else {
+            status.post(ShellStatusText.nothingToUndo)
+            return
+        }
+        do {
+            try store.save()
+            status.post(ShellStatusText.restored(n))
+        } catch {
+            let message = error.localizedDescription
+            Task { @MainActor in await mainDialogs.error(ShellStatusText.saveFailedTitle, message) }
+        }
     }
 
     func refreshAfterTrashChange() {
@@ -244,7 +258,8 @@ final class AppEnvironment: SharedSaveHost, DataFileConflictHost {
         router.pendingUndoCount = store.pendingUndoCount()
         router.conflictCopiesExist = !ConflictCopies.list(dataStore).isEmpty
         let path = dataStore.currentDataFile.path
-        status.post(statusText ?? (safeMode ? ShellStatusText.safeModeStatus : ShellStatusText.loaded(path)))
+        status.post(statusText ?? (safeMode ? ShellStatusText.safeModeStatus(cause: dataStore.lastLoadError)
+                                                       : ShellStatusText.loaded(path)))
     }
 
     // MARK: Import review gate (SHELL-120, DATA-104, QUICK-190)
@@ -255,7 +270,7 @@ final class AppEnvironment: SharedSaveHost, DataFileConflictHost {
         guard let incoming else {
             let spec = AlertSpec(title: ShellStatusText.confirmImportTitle,
                                  message: ShellStatusText.confirmImportMessage(sourceName: sourceName), style: .warning,
-                                 buttons: [AlertButton(title: "Replace", role: .default), AlertButton(title: "Cancel", role: .cancel)])
+                                 buttons: [AlertButton(title: "Yes", role: .default), AlertButton(title: "No", role: .cancel)])
             return await dialogs.alert(spec) == 0
         }
         let diff = DataDiff.compare(current: store.data, incoming: incoming)

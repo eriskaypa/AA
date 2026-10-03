@@ -19,9 +19,11 @@ struct MainWindowView: View {
             // The shortcut strip / bottom bar is laid out BELOW the sections, not as a safe-area inset: the AppKit
             // split views behind a section's `HSplitView` ignore SwiftUI insets, so their panes (and lists) would
             // run under the strip (REQ-W-CREW-01).
+            // The banners are laid out ABOVE the sections for the same reason (01 DATA-021, §6.8, §6.10, DATA-174,
+            // DATA-180, DATA-184): one banner row under the toolbar, the content below it.
             VStack(spacing: 0) {
+                ShellBanners()
                 SectionContentHost()
-                    .safeAreaInset(edge: .top, spacing: 0) { ShellBanners() }
                 ShellBottomBar(toolbarHidden: chrome.toolbarHidden)
             }
         }
@@ -33,10 +35,11 @@ struct MainWindowView: View {
         .frame(minWidth: 860, minHeight: 560)
     }
 
-    /// SHELL-022 status line; a read-only copy leads with `"Read-Only"` (01 DATA-174, REQ-W-PERSIST-02).
+    /// SHELL-022 status line; a read-only copy leads with `"Read-Only"` (01 DATA-174, REQ-W-PERSIST-02). Paths are shown
+    /// abbreviated (`~`, middle-truncated); the full text is the status button's help and the history popover.
     private var subtitle: String {
-        guard env.isReadOnlyInstance else { return env.status.message }
-        let m = env.status.message
+        let m = ShellStatusText.subtitleDisplay(env.status.message)
+        guard env.isReadOnlyInstance else { return m }
         return m.isEmpty ? PersistReadOnlyText.windowSubtitle : "\(PersistReadOnlyText.windowSubtitle) — \(m)"
     }
 }
@@ -79,17 +82,63 @@ struct SectionContentHost: View {
                 ShellSectionRoot(section: s)
                     .opacity(s == selected ? 1 : 0)
                     .allowsHitTesting(s == selected)
+                    // A hidden page keeps its state but leaves the key-view loop and its keyboard shortcuts (HIER-025).
+                    .disabled(s != selected)
                     .accessibilityHidden(s != selected)
                     .zIndex(s == selected ? 1 : 0)
             }
         }
         .animation(.easeInOut(duration: 0.12), value: selected)
         .onAppear { visit(selected) }
-        .onChange(of: selected) { _, s in visit(s) }
+        .onChange(of: selected) { _, s in
+            visit(s)
+            // HIER-025/040/120: keystrokes after a section switch must never reach the page just hidden (WPF removes
+            // an unselected tab from the visual tree, so it cannot keep keyboard focus).
+            DispatchQueue.main.async { ShellFocus.leaveHiddenSection(in: LaunchCoordinator.shared.mainWindow) }
+        }
     }
 
     private func visit(_ s: SectionID) {
         if !visited.contains(s) { visited.append(s) }
+    }
+}
+
+/// Keyboard focus in the main window: after a section switch (and at launch) the first responder moves to the section
+/// sidebar unless it is already there, so it can never stay in a page that is kept alive but hidden.
+@MainActor
+enum ShellFocus {
+    /// The sidebar list (the first column of the main window's `NavigationSplitView`).
+    static func sidebarList(in window: NSWindow) -> NSView? {
+        guard let root = window.contentView else { return nil }
+        func firstSplit(_ v: NSView) -> NSSplitView? {
+            if let s = v as? NSSplitView, s.arrangedSubviews.count >= 2 { return s }
+            for sv in v.subviews { if let r = firstSplit(sv) { return r } }
+            return nil
+        }
+        func firstTable(_ v: NSView) -> NSView? {
+            if v is NSTableView { return v }
+            for sv in v.subviews { if let r = firstTable(sv) { return r } }
+            return nil
+        }
+        guard let split = firstSplit(root), let column = split.arrangedSubviews.first else { return nil }
+        return firstTable(column)
+    }
+
+    /// The view that currently has keyboard focus (the field editor resolves to the field it edits).
+    static func focusedView(in window: NSWindow) -> NSView? {
+        guard let r = window.firstResponder else { return nil }
+        if let tv = r as? NSTextView, tv.isFieldEditor, let owner = tv.delegate as? NSView { return owner }
+        return r as? NSView
+    }
+
+    static func leaveHiddenSection(in window: NSWindow?) {
+        guard let window else { return }
+        let sidebar = sidebarList(in: window)
+        if let sidebar, let focused = focusedView(in: window), focused === sidebar || focused.isDescendant(of: sidebar) {
+            return
+        }
+        if let sidebar, window.makeFirstResponder(sidebar) { return }
+        window.makeFirstResponder(nil)
     }
 }
 
@@ -126,7 +175,7 @@ struct ShellBanners: View {
     @State private var foreignDismissed = MacPreferences.shared.bool(.shellForeignPathsBannerDismissed, default: false)
 
     var body: some View {
-        VStack(spacing: 0) {
+        ShellBannerStack {
             if env.isSafeMode {
                 AABanner(style: .danger,
                          text: "Read-only safe mode — the data file couldn't be read; nothing will be saved.")
@@ -153,6 +202,35 @@ struct ShellBanners: View {
         }
         .animation(.snappy, value: env.isSafeMode)
         .animation(.snappy, value: env.isReadOnlyInstance)
+    }
+}
+
+/// Stacks the banners vertically at the detail column's width. The wrapping banner texts use
+/// `fixedSize(horizontal: false, vertical: true)`; when AppKit asks the hosting view for its minimum size it proposes a
+/// near-zero width, at which such a text is thousands of points tall — and the split view then grew past the window
+/// (V-01: 1045 pt with one banner, 4211 pt with two). Measuring never narrower than `minMeasureWidth` keeps every banner
+/// one or two lines high whatever the query.
+struct ShellBannerStack: Layout {
+    static let minMeasureWidth: CGFloat = 560
+
+    private func measureWidth(_ proposal: ProposedViewSize) -> CGFloat {
+        max(proposal.width ?? Self.minMeasureWidth, Self.minMeasureWidth)
+    }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let w = measureWidth(proposal)
+        let h = subviews.reduce(0) { $0 + $1.sizeThatFits(ProposedViewSize(width: w, height: nil)).height }
+        return CGSize(width: proposal.width ?? w, height: h)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let w = max(bounds.width, 1)
+        var y = bounds.minY
+        for v in subviews {
+            let h = v.sizeThatFits(ProposedViewSize(width: max(w, Self.minMeasureWidth), height: nil)).height
+            v.place(at: CGPoint(x: bounds.minX, y: y), anchor: .topLeading, proposal: ProposedViewSize(width: w, height: h))
+            y += h
+        }
     }
 }
 

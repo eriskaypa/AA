@@ -108,18 +108,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppKitMenuBridge.shared.start()
 
         var result = instanceResult
-        if result == .editor, externalResult != .editor { result = externalResult }
+        // DATA-179: the folder lock is ours but another AA (editing a DIFFERENT data folder) holds the external
+        // CurrentDataFile — the single-instance forward does not apply (the holder ignores other folders' requests);
+        // show the DATA-172 alert with the external-file wording instead.
+        let externalOnly = result == .editor && externalResult != .editor
+        if externalOnly { result = externalResult }
         switch result {
         case .editor:
             coordinator.instanceCheckPassed()
         case .unguarded(let why):
             AALog.logger("startup").notice("instance guard unavailable: \(why, privacy: .public)")
             coordinator.instanceCheckPassed()
-        case .runningHere(let pid):
+        case .runningHere(let pid) where !externalOnly:
             // DECISIONS: a second launch activates the running instance (documents forwarded) and quits.
             _ = InstanceGuard.forwardToRunningInstance(pid: pid, documents: coordinator.takePendingDocuments())
             exit(0)
-        case .otherUser, .remote, .sameUserNoApp:
+        case .otherUser, .remote, .sameUserNoApp, .runningHere:
             coordinator.setBlocked()
             switch InstanceAlerts.presentBlocked(result, appFolder: folder) {
             case .quit, .switchToRunning:

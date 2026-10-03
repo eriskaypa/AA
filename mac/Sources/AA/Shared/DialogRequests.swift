@@ -8,15 +8,8 @@ import AACore
 
 enum SheetKind { case decision, closeType }
 
-struct TextPromptRequest: Equatable, Sendable {
-    var title: String
-    var prompt: String
-    var initial: String = ""
-    var isSecure = false
-    var helpText: String? = nil
-}
-
-enum TextPromptResult: Equatable, Sendable { case ok(String), cancelled }
+// TextPromptRequest / TextPromptResult / TextPrompting live in AACore (Commands/ShellTextPrompt.swift) so the prompt
+// rules are unit-testable (06 §Add.6/§Add.7).
 
 struct DatePromptRequest: Equatable {
     var title: String

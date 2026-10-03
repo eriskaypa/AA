@@ -81,7 +81,7 @@ final class DialogPresenter {
 
     func register(_ item: ShellPresentedSheet) { pendingFinish[item.id] = item.finish }
 
-    // MARK: Text prompt (06 BUILD-136…150)
+    // MARK: Text prompt (06 BUILD-136…150; the presenter is the app's `TextPrompting`)
 
     func prompt(_ r: TextPromptRequest) async -> TextPromptResult {
         if unboundCall("prompt") { return .cancelled }
@@ -328,3 +328,6 @@ struct ShellNestedDialogRoot<Content: View>: View {
             .modifier(ShellSheetModifier(kind: kind, role: nil, onClose: nil, explicit: false))
     }
 }
+
+/// 06 BUILD-A22: callers may take a `TextPrompting` (tests inject `ScriptedPrompter`).
+extension DialogPresenter: TextPrompting {}
