@@ -162,7 +162,11 @@ enum GoldXlsxInputs {
                 check("shippalm") { try XlsxRender.shippalmCell(cell, workbook: wb) }
                 if let b = try? XlsxRender.shippalmCell(cell, workbook: wb) { check("shippalmDate") { ShippalmDates.excelDate(b, today: today) } }
                 check("ports") { try XlsxRender.portsCell(cell, workbook: wb) }
-                // portsDate / portsTime are the Ports reader's NormDate/NormTime (W-VESSEL's private code).
+                // Ports reader NormDate / NormTime over the cell text (10 §3.3.5–3.3.6; REQ-W-GOLD-04).
+                if let c = try? XlsxRender.portsCell(cell, workbook: wb) {
+                    check("portsDate") { VesselText.normDate(c, today: today) }
+                    check("portsTime") { VesselText.normTime(c) }
+                }
             }
         }
         return problems
@@ -235,7 +239,11 @@ struct GoldXlsxInputEmitter {
                 e.set("shippalm", .string(v))
                 e.set("shippalmDate", .string(ShippalmDates.excelDate(v, today: CivilDate(year: 2026, month: 9, day: 29)!)))
             }
-            if let v = try? XlsxRender.portsCell(cell, workbook: wb) { e.set("ports", .string(v)) }
+            if let v = try? XlsxRender.portsCell(cell, workbook: wb) {
+                e.set("ports", .string(v))
+                e.set("portsDate", .string(VesselText.normDate(v, today: CivilDate(year: 2026, month: 9, day: 29)!)))
+                e.set("portsTime", .string(VesselText.normTime(v)))
+            }
             cells.set(address, .object(e))
         }
         let range = "\(GoldXlsxInputs.letters(used.firstColumn))\(used.firstRow):\(GoldXlsxInputs.letters(used.lastColumn))\(used.lastRow)"
