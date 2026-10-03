@@ -35,6 +35,20 @@ MP.7.9, DATA-175 session incl. Stay Read-Only, path mapping / opener. Gate: 496 
   `ShortcutRegistry.row(.setSharedSaveFile)` and checks the banner quotes it. Snapshot `w-persist.banners` re-checked in
   light and dark: the three-line banner fits, no clipping. Gate: 1,587 tests green, ownership check OK.
 
+## Fix round 2 (FIX2-W-PERSIST, verifiers V2-J6, V2-SCALE, V2-COMPAT) — 3 findings: 3 fixed, 0 rejected
+* V2-J6 (major) + V2-SCALE (blocker), one defect: an edit autosaved while a background shared-save push was zipping
+  was recorded as synced (`pushFinished` took `store.data.lastModified` when the ZIP finished), so later ticks never
+  pushed it and the next pull from another copy dropped it without a prompt. `pushInBackground` and `push(label:)` now
+  capture the stamp right after the save that feeds the bundle and set `lastSeen`/`lastSynced` from it (Deviations
+  W-PERSIST-21, a Windows-bug fix). Tests `PersistSharedSaveRaceTests` (both verifiers' journeys adopted, plus the
+  synchronous push) — they fail on the old code.
+* V2-COMPAT (minor): attachment names Windows cannot create, arriving in foreign bundles, were extracted and re-exported
+  as is. Smart and shared imports now rename such top-level `files/` leaves to the Windows-safe form in staging (collision
+  suffix `_2`…) and repoint the data's `files/` paths (Deviations W-PERSIST-22). Tests `PersistWindowsSafeImportTests`
+  (the verifier's `winreserved.zip` names, re-import is DataOnly, the re-export has no illegal leaf, shared import,
+  predicate table). Note: `abc_CON` is legal on Windows (the stem is not a device name) and is kept.
+* 6 new tests in 2 new suites. No UI touched (AACore only), so no snapshots this round. Gate: build + tests (-warnings-as-errors) + ownership check green.
+
 ## Snapshots (both appearances, `--sheet w-persist.*`)
 `conflict-changed`, `conflict-unreadable`, `conflict-deleted`, `conflict-copies` (fixture `Fixtures/ui/w-persist/conflicts/`),
 `path-mappings`, `path-mappings-empty`, `path-mappings-unc`, `path-mapping-editor`, `path-mapping-invalid`, `banners`
