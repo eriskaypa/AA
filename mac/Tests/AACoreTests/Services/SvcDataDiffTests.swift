@@ -35,6 +35,19 @@ import Testing
         ])
     }
 
+    @Test func statusAndRecurrenceUseFriendlyLabels() {
+        // DECISIONS 08 OQ-10: the change list shows "In Progress" / "To Do", never the raw enum names
+        let cur = AppData(), inc = AppData()
+        let t = TaskItem(name: "Survey"); t.status = .inProgress
+        let tb = TaskItem(id: t.id, name: "Survey"); tb.status = .todo; tb.recurrence = .weekly
+        cur.tasks = [t]; inc.tasks = [tb]
+        let lines = render(DataDiff.compare(current: cur, incoming: inc).roots)
+        #expect(lines == ["~ [Task] Survey", "  ~ recurrence: None \u{2192} Weekly",
+                          "  ~ status: In Progress \u{2192} To Do"])
+        #expect(!lines.contains { $0.contains("InProgress") || $0.contains("Todo") })
+        #expect(tb.status.rawValue == 0 && t.status.rawValue == 1)
+    }
+
     @Test func taskFieldChangesAndOrdering() {
         // TV: 08 T-DF-1, T-DF-6, T-DF-11
         let cur = AppData(), inc = AppData()
@@ -42,7 +55,7 @@ import Testing
         let tb = TaskItem(id: t.id, name: "Pump check"); tb.deadline = d("2026-09-05"); tb.status = .done
         cur.tasks = [t]; inc.tasks = [tb]
         let r = DataDiff.compare(current: cur, incoming: inc)
-        #expect(render(r.roots) == ["~ [Task] Pump check", "  ~ deadline: 2026-09-01 \u{2192} 2026-09-05", "  ~ status: Todo \u{2192} Done"])
+        #expect(render(r.roots) == ["~ [Task] Pump check", "  ~ deadline: 2026-09-01 \u{2192} 2026-09-05", "  ~ status: To Do \u{2192} Done"])
         #expect(r.added == 0 && r.changed == 1 && r.removed == 0)
 
         let tc = TaskItem(id: t.id, name: "Pump check")

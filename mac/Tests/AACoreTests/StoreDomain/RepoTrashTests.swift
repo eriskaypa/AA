@@ -211,6 +211,22 @@ import Testing
         #expect(store.trashAllCrew() == 0)
     }
 
+    @Test func trashAllCrewUndoKeepsRosterOrderWithAMovingClock() {
+        // DECISIONS 09 / CREW-061/062: every entry of the "Clear all" batch shares ONE DeletedUtc, so ⌘Z restores
+        // [A, B, C] as [A, B, C] even when the clock moves between reads (the system clock does).
+        let clock = RepoTickingClock()
+        let store = StoreFactory.make(clock: clock).store
+        let members = ["A", "B", "C"].map { n -> CrewMember in let m = CrewMember(); m.lastName = n; return m }
+        store.data.crew = members
+        let readsBefore = clock.reads
+        #expect(store.trashAllCrew() == 3)
+        #expect(Set(store.data.trash.map(\.deletedUtc.ticks)).count == 1)
+        #expect(clock.reads > readsBefore)
+        #expect(store.undoLastDelete() == [.crew])
+        #expect(store.data.crew.map(\.lastName) == ["A", "B", "C"])
+        #expect(store.data.crew.map(\.id) == members.map(\.id))
+    }
+
     @Test func purgeAndEmptyScrubTheSubtree() throws {
         // TV: 02 T-TR-16; 08 T-TR-5; DECISIONS 07 Q-02
         let made = make(); let store = made.store
@@ -311,4 +327,22 @@ import Testing
         #expect(store.restore(e) == .vessel)
         #expect(JSONValue.deepEquals(.object(store.data.vessels[0].toJSON()), .object(before)))
     }
+}
+
+/// A clock that moves forward 1 ms on every read (the system clock's behaviour between successive calls).
+private final class RepoTickingClock: AppClock, @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = FixedClock(local: "2026-09-29T14:05:00", zone: TZ.athens).instant()
+    private(set) var reads = 0
+    let timeZone = TZ.athens
+
+    func instant() -> Date {
+        lock.lock(); defer { lock.unlock() }
+        reads += 1
+        current = current.addingTimeInterval(0.001)
+        return current
+    }
+    func now() -> NetDateTime { NetDateTime(date: instant(), kind: .local, zone: timeZone) }
+    func utcNow() -> NetDateTime { NetDateTime(date: instant(), kind: .utc, zone: timeZone) }
+    func today() -> CivilDate { now().civilDate }
 }
