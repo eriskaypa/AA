@@ -1,0 +1,1029 @@
+{
+ "source": "QR_SYNC_PROTOCOL.md §3, §5, §6, §7 and 13-flash-sync.md §7.1–7.8 (copied; the protocol file itself is outside mac/)",
+ "base45Encode": [
+  {
+   "hex": "",
+   "text": ""
+  },
+  {
+   "hex": "41",
+   "text": "K1"
+  },
+  {
+   "hex": "4142",
+   "text": "BB8"
+  },
+  {
+   "hex": "48656c6c6f2121",
+   "text": "%69 VD92EX0"
+  },
+  {
+   "hex": "626173652d3435",
+   "text": "UJCLQE7W581"
+  },
+  {
+   "hex": "0001feff",
+   "text": "100TAW"
+  }
+ ],
+ "base45DecodeExtra": [
+  {
+   "text": "A",
+   "hex": null
+  },
+  {
+   "text": "GGW",
+   "hex": null
+  },
+  {
+   "text": "FGW",
+   "hex": "ffff"
+  },
+  {
+   "text": "Z5",
+   "hex": null
+  },
+  {
+   "text": "YR",
+   "hex": null
+  },
+  {
+   "text": "abc",
+   "hex": null
+  },
+  {
+   "text": "HELLO WORLD!",
+   "hex": null
+  },
+  {
+   "text": "AB8$AAé",
+   "hex": null
+  }
+ ],
+ "crc32": [
+  {
+   "ascii": "",
+   "crc": "00000000"
+  },
+  {
+   "ascii": "123456789",
+   "crc": "CBF43926"
+  },
+  {
+   "ascii": "AA flash sync",
+   "crc": "CD539EA5"
+  },
+  {
+   "zeros": 900,
+   "crc": "D5B7BCEC"
+  }
+ ],
+ "xorshift": [
+  {
+   "seed": 1,
+   "out": [
+    270369,
+    67634689,
+    2647435461,
+    307599695,
+    2398689233,
+    745495504,
+    632435482,
+    435756210
+   ]
+  },
+  {
+   "seed": 12345,
+   "out": [
+    3336926330,
+    1697253807,
+    2816511904,
+    1955480042,
+    718842323,
+    3283620450,
+    4285686168,
+    3680911160
+   ]
+  },
+  {
+   "seed": 0,
+   "out": [
+    1359758873,
+    3761132862,
+    2075758394,
+    25405621,
+    3862129951,
+    4186559031,
+    3122997712,
+    4244368831
+   ]
+  },
+  {
+   "seed": 4294967295,
+   "out": [
+    253983,
+    4228382207,
+    1958451267,
+    4056713434,
+    2049502865,
+    2560970988,
+    1705115568,
+    279806459
+   ]
+  },
+  {
+   "seed": 100,
+   "out": [
+    27036706,
+    2466775534,
+    4119103220,
+    3457990521
+   ]
+  }
+ ],
+ "degree": [
+  {
+   "r": 0,
+   "k": 1000,
+   "d": 1
+  },
+  {
+   "r": 83,
+   "k": 1000,
+   "d": 1
+  },
+  {
+   "r": 84,
+   "k": 1000,
+   "d": 2
+  },
+  {
+   "r": 553,
+   "k": 1000,
+   "d": 2
+  },
+  {
+   "r": 554,
+   "k": 1000,
+   "d": 3
+  },
+  {
+   "r": 1023,
+   "k": 1000,
+   "d": 60
+  },
+  {
+   "r": 1024,
+   "k": 1000,
+   "d": 1
+  },
+  {
+   "r": 4294967295,
+   "k": 1000,
+   "d": 60
+  },
+  {
+   "r": 918,
+   "k": 1000,
+   "d": 12
+  },
+  {
+   "r": 962,
+   "k": 1000,
+   "d": 20
+  },
+  {
+   "r": 999,
+   "k": 1000,
+   "d": 35
+  },
+  {
+   "r": 1023,
+   "k": 10,
+   "d": 10
+  },
+  {
+   "r": 941,
+   "k": 9,
+   "d": 9
+  }
+ ],
+ "indicesProtocol": [
+  {
+   "seed": 0,
+   "k": 5,
+   "idx": [
+    0
+   ]
+  },
+  {
+   "seed": 3,
+   "k": 5,
+   "idx": [
+    3
+   ]
+  },
+  {
+   "seed": 7,
+   "k": 5,
+   "idx": [
+    2
+   ]
+  },
+  {
+   "seed": 99,
+   "k": 5,
+   "idx": [
+    4
+   ]
+  },
+  {
+   "seed": 0,
+   "k": 100,
+   "idx": [
+    0
+   ]
+  },
+  {
+   "seed": 99,
+   "k": 100,
+   "idx": [
+    99
+   ]
+  },
+  {
+   "seed": 100,
+   "k": 100,
+   "idx": [
+    34
+   ]
+  },
+  {
+   "seed": 101,
+   "k": 100,
+   "idx": [
+    47
+   ]
+  },
+  {
+   "seed": 5000,
+   "k": 100,
+   "idx": [
+    64,
+    90
+   ]
+  },
+  {
+   "seed": 65535,
+   "k": 100,
+   "idx": [
+    50
+   ]
+  }
+ ],
+ "indicesExtra": [
+  {
+   "seed": 0,
+   "k": 8,
+   "idx": [
+    0
+   ]
+  },
+  {
+   "seed": 7,
+   "k": 8,
+   "idx": [
+    7
+   ]
+  },
+  {
+   "seed": 8,
+   "k": 8,
+   "idx": [
+    0
+   ]
+  },
+  {
+   "seed": 9,
+   "k": 8,
+   "idx": [
+    1
+   ]
+  },
+  {
+   "seed": 15,
+   "k": 8,
+   "idx": [
+    7
+   ]
+  },
+  {
+   "seed": 4294967295,
+   "k": 8,
+   "idx": [
+    7
+   ]
+  },
+  {
+   "seed": 8,
+   "k": 9,
+   "idx": [
+    8
+   ]
+  },
+  {
+   "seed": 9,
+   "k": 9,
+   "idx": [
+    6,
+    7
+   ]
+  },
+  {
+   "seed": 10,
+   "k": 9,
+   "idx": [
+    6,
+    7
+   ]
+  },
+  {
+   "seed": 11,
+   "k": 9,
+   "idx": [
+    0,
+    5
+   ]
+  },
+  {
+   "seed": 12,
+   "k": 9,
+   "idx": [
+    4,
+    7
+   ]
+  },
+  {
+   "seed": 1000,
+   "k": 9,
+   "idx": [
+    0,
+    7
+   ]
+  },
+  {
+   "seed": 4294967295,
+   "k": 9,
+   "idx": [
+    2
+   ]
+  },
+  {
+   "seed": 9,
+   "k": 10,
+   "idx": [
+    9
+   ]
+  },
+  {
+   "seed": 10,
+   "k": 10,
+   "idx": [
+    0,
+    1
+   ]
+  },
+  {
+   "seed": 11,
+   "k": 10,
+   "idx": [
+    1,
+    6
+   ]
+  },
+  {
+   "seed": 12,
+   "k": 10,
+   "idx": [
+    3,
+    8
+   ]
+  },
+  {
+   "seed": 13,
+   "k": 10,
+   "idx": [
+    2,
+    7
+   ]
+  },
+  {
+   "seed": 1000,
+   "k": 10,
+   "idx": [
+    0,
+    7
+   ]
+  },
+  {
+   "seed": 4294967295,
+   "k": 10,
+   "idx": [
+    7
+   ]
+  },
+  {
+   "seed": 11,
+   "k": 12,
+   "idx": [
+    11
+   ]
+  },
+  {
+   "seed": 12,
+   "k": 12,
+   "idx": [
+    1,
+    4
+   ]
+  },
+  {
+   "seed": 13,
+   "k": 12,
+   "idx": [
+    5,
+    8
+   ]
+  },
+  {
+   "seed": 14,
+   "k": 12,
+   "idx": [
+    6,
+    11
+   ]
+  },
+  {
+   "seed": 15,
+   "k": 12,
+   "idx": [
+    10,
+    11
+   ]
+  },
+  {
+   "seed": 1000,
+   "k": 12,
+   "idx": [
+    4,
+    9
+   ]
+  },
+  {
+   "seed": 4294967295,
+   "k": 12,
+   "idx": [
+    11
+   ]
+  },
+  {
+   "seed": 19,
+   "k": 20,
+   "idx": [
+    19
+   ]
+  },
+  {
+   "seed": 20,
+   "k": 20,
+   "idx": [
+    0,
+    7,
+    18
+   ]
+  },
+  {
+   "seed": 21,
+   "k": 20,
+   "idx": [
+    5,
+    6,
+    17
+   ]
+  },
+  {
+   "seed": 22,
+   "k": 20,
+   "idx": [
+    0,
+    2,
+    9,
+    15
+   ]
+  },
+  {
+   "seed": 23,
+   "k": 20,
+   "idx": [
+    2,
+    11,
+    16,
+    19
+   ]
+  },
+  {
+   "seed": 1000,
+   "k": 20,
+   "idx": [
+    0,
+    17
+   ]
+  },
+  {
+   "seed": 4294967295,
+   "k": 20,
+   "idx": [
+    7
+   ]
+  },
+  {
+   "seed": 102,
+   "k": 100,
+   "idx": [
+    0,
+    10
+   ]
+  },
+  {
+   "seed": 103,
+   "k": 100,
+   "idx": [
+    65
+   ]
+  },
+  {
+   "seed": 1000,
+   "k": 100,
+   "idx": [
+    40,
+    77
+   ]
+  },
+  {
+   "seed": 4294967295,
+   "k": 100,
+   "idx": [
+    7
+   ]
+  },
+  {
+   "seed": 164,
+   "k": 165,
+   "idx": [
+    164
+   ]
+  },
+  {
+   "seed": 165,
+   "k": 165,
+   "idx": [
+    11,
+    155
+   ]
+  },
+  {
+   "seed": 166,
+   "k": 165,
+   "idx": [
+    105,
+    148
+   ]
+  },
+  {
+   "seed": 167,
+   "k": 165,
+   "idx": [
+    1,
+    73
+   ]
+  },
+  {
+   "seed": 168,
+   "k": 165,
+   "idx": [
+    23,
+    157
+   ]
+  },
+  {
+   "seed": 1000,
+   "k": 165,
+   "idx": [
+    40,
+    72
+   ]
+  },
+  {
+   "seed": 4294967295,
+   "k": 165,
+   "idx": [
+    137
+   ]
+  },
+  {
+   "seed": 999,
+   "k": 1000,
+   "idx": [
+    999
+   ]
+  },
+  {
+   "seed": 1000,
+   "k": 1000,
+   "idx": [
+    340,
+    577
+   ]
+  },
+  {
+   "seed": 1001,
+   "k": 1000,
+   "idx": [
+    369,
+    488
+   ]
+  },
+  {
+   "seed": 1002,
+   "k": 1000,
+   "idx": [
+    107,
+    382
+   ]
+  },
+  {
+   "seed": 1003,
+   "k": 1000,
+   "idx": [
+    66,
+    427
+   ]
+  },
+  {
+   "seed": 4294967295,
+   "k": 1000,
+   "idx": [
+    207
+   ]
+  },
+  {
+   "seed": 65534,
+   "k": 65535,
+   "idx": [
+    65534
+   ]
+  },
+  {
+   "seed": 65535,
+   "k": 65535,
+   "idx": [
+    4745
+   ]
+  },
+  {
+   "seed": 65536,
+   "k": 65535,
+   "idx": [
+    6518
+   ]
+  },
+  {
+   "seed": 65537,
+   "k": 65535,
+   "idx": [
+    6013
+   ]
+  },
+  {
+   "seed": 65538,
+   "k": 65535,
+   "idx": [
+    44408
+   ]
+  },
+  {
+   "seed": 1000,
+   "k": 65535,
+   "idx": [
+    1000
+   ]
+  },
+  {
+   "seed": 4294967295,
+   "k": 65535,
+   "idx": [
+    64007
+   ]
+  }
+ ],
+ "frames": [
+  {
+   "type": "manifest",
+   "session": 4660,
+   "codedBytes": 1129,
+   "rawBytes": 3075,
+   "chunkSize": 900,
+   "chunkCount": 2,
+   "crc32": "3D3150F8",
+   "kind": 0,
+   "label": "1 equipment",
+   "hex": "414151010012340000046900000C03038400023D3150F8000B312065717569706D656E74",
+   "text": "AB8$AAI00$P6400FCDC006H0.UGXC0OA6%FVUI1D44KFE$EDF$DG/D"
+  },
+  {
+   "type": "data",
+   "session": 4660,
+   "seed": 7,
+   "payload": "000102030405060708090A0B0C0D0E0F",
+   "hex": "4141510101123400000007000102030405060708090A0B0C0D0E0F",
+   "text": "AB8$AA460$P6000$*0X507H0QS00+0J61%H1CT1F0"
+  },
+  {
+   "type": "manifest",
+   "session": 48879,
+   "codedBytes": 437000,
+   "rawBytes": 3100000,
+   "chunkSize": 900,
+   "chunkCount": 486,
+   "crc32": "DEADBEEF",
+   "kind": 1,
+   "label": "full database",
+   "hex": "4141510100BEEF0006AB08002F4D60038401E6DEADBEEF010D66756C6C206461746162617365",
+   "text": "AB8$AAA40T9U.$0N014:596C/UGH8TI/LU9UAV10%E5UD2VC3WEUJCLQE"
+  }
+ ],
+ "deflate": {
+  "ios": "73748401273870860300",
+  "raw": "414141414141414141414242424242424242424243434343434343434343"
+ },
+ "fountainK10": {
+  "coded": "030A11181F262D343B424950575E656C737A81888F969DA4ABB2B9C0C7CED5DCE3EAF1F8FF06",
+  "chunkSize": 4,
+  "crc": "F7549EBA",
+  "session": 258,
+  "rawBytes": 123,
+  "kind": 0,
+  "label": "test",
+  "manifestHex": "41415101000102000000260000007B0004000AF7549EBA000474657374",
+  "manifestText": "AB8$AA100HB00008 4000XOFYM0HH1HVA6NNFP06$CQ2",
+  "data": [
+   [
+    0,
+    [
+     0
+    ],
+    "030A1118",
+    "AB8$AAW50HB0000300CC1O0"
+   ],
+   [
+    1,
+    [
+     1
+    ],
+    "1F262D34",
+    "AB8$AAW50HB0000H608$471"
+   ],
+   [
+    2,
+    [
+     2
+    ],
+    "3B424950",
+    "AB8$AAW50HB0000VC04H8Z1"
+   ],
+   [
+    3,
+    [
+     3
+    ],
+    "575E656C",
+    "AB8$AAW50HB00000J00.BI2"
+   ],
+   [
+    4,
+    [
+     4
+    ],
+    "737A8188",
+    "AB8$AAW50HB0000EP0-LF13"
+   ],
+   [
+    5,
+    [
+     5
+    ],
+    "8F969DA4",
+    "AB8$AAW50HB0000SV0$1JT3"
+   ],
+   [
+    6,
+    [
+     6
+    ],
+    "ABB2B9C0",
+    "AB8$AAW50HB0000.$0XQMC4"
+   ],
+   [
+    7,
+    [
+     7
+    ],
+    "C7CED5DC",
+    "AB8$AAW50HB0000B:0T6Q+4"
+   ],
+   [
+    8,
+    [
+     8
+    ],
+    "E3EAF1F8",
+    "AB8$AAW50HB0000P51PVTN5"
+   ],
+   [
+    9,
+    [
+     9
+    ],
+    "FF060000",
+    "AB8$AAW50HB0000*B16Y000"
+   ],
+   [
+    10,
+    [
+     0,
+     1
+    ],
+    "1C2C3C2C",
+    "AB8$AAW50HB0000NC1TQ5:0"
+   ],
+   [
+    11,
+    [
+     1,
+     6
+    ],
+    "B49494F4",
+    "AB8$AAW50HB0000QL1BZIJ5"
+   ],
+   [
+    12,
+    [
+     3,
+     8
+    ],
+    "B4B49494",
+    "AB8$AAW50HB0000CR1D$MD3"
+   ],
+   [
+    13,
+    [
+     2,
+     7
+    ],
+    "FC8C9C8C",
+    "AB8$AAW50HB0000PY1-YH53"
+   ],
+   [
+    1000,
+    [
+     0,
+     7
+    ],
+    "C4C4C4C4",
+    "AB8$AAW50HB03008JTH*OG4"
+   ]
+  ]
+ },
+ "changeSets": {
+  "CS-1": {
+   "op": "build",
+   "baseline": "{\"Tasks\":[{\"Id\":\"a\",\"Name\":\"A\"},{\"Id\":\"b\",\"Name\":\"B\"}],\"Log\":[{\"Action\":\"Added\",\"Name\":\"A\"}],\"Ui\":{\"WindowLeft\":10,\"TabColors\":{\"TabTasks\":\"#FF0000\"},\"SelectedMainTabIndex\":2},\"LastModified\":\"2026-09-01T10:00:00\",\"SchemaVersion\":1,\"Sire\":{\"Bookmarks\":[]}}",
+   "current": "{\"Tasks\":[{\"Id\":\"c\",\"Name\":\"C\"},{\"Id\":\"b\",\"Name\":\"B2\"}],\"Log\":[{\"Action\":\"Added\",\"Name\":\"A\"},{\"Action\":\"Added\",\"Name\":\"C\"}],\"Ui\":{\"WindowLeft\":20,\"TabColors\":{\"TabTasks\":\"#00FF00\"},\"SelectedMainTabIndex\":3,\"TabOrder\":[\"TabTasks\"]},\"LastModified\":\"2026-09-02T10:00:00\",\"SchemaVersion\":1,\"Sire\":{\"Bookmarks\":[]}}",
+   "baselineSettings": "{\"DarkMode\":false,\"PasswordHash\":\"x\",\"AppIdentity\":\"PC1\",\"SyncOnSave\":false}",
+   "currentSettings": "{\"DarkMode\":true,\"PasswordHash\":\"y\",\"AppIdentity\":\"PC1\",\"SyncOnSave\":true}",
+   "out": "{\"V\":1,\"From\":\"Windows\",\"Created\":\"2026-09-27T12:00:00\",\"Sets\":{\"Tasks\":[{\"Id\":\"c\",\"Name\":\"C\"},{\"Id\":\"b\",\"Name\":\"B2\"}]},\"Deletes\":{\"Tasks\":[\"a\"]},\"Blocks\":{\"Log\":[{\"Action\":\"Added\",\"Name\":\"A\"},{\"Action\":\"Added\",\"Name\":\"C\"}]},\"Order\":{\"Tasks\":[\"c\",\"b\"]},\"Settings\":{\"DarkMode\":true},\"UiChanges\":{\"TabColors\":{\"TabTasks\":\"#00FF00\"},\"TabOrder\":[\"TabTasks\"]}}",
+   "summary": "2 Tasks, 1 deleted, Log, layout, settings"
+  },
+  "CS-2": {
+   "op": "apply",
+   "changeSet": "{\"V\":1,\"From\":\"Windows\",\"Created\":\"2026-09-27T12:00:00\",\"Sets\":{\"Tasks\":[{\"Id\":\"c\",\"Name\":\"C\"},{\"Id\":\"b\",\"Name\":\"B2\"}]},\"Deletes\":{\"Tasks\":[\"a\"]},\"Blocks\":{\"Log\":[{\"Action\":\"Added\",\"Name\":\"A\"},{\"Action\":\"Added\",\"Name\":\"C\"}]},\"Order\":{\"Tasks\":[\"c\",\"b\"]},\"Settings\":{\"DarkMode\":true},\"UiChanges\":{\"TabColors\":{\"TabTasks\":\"#00FF00\"},\"TabOrder\":[\"TabTasks\"]}}",
+   "data": "{\"Tasks\":[{\"Id\":\"a\",\"Name\":\"A\"},{\"Id\":\"b\",\"Name\":\"B\"},{\"Id\":\"z\",\"Name\":\"Z\"}],\"Ui\":{\"WindowLeft\":500,\"SelectedMainTabIndex\":0,\"TabColors\":{}},\"LastModified\":\"2026-09-20T08:00:00\",\"SchemaVersion\":1}",
+   "settings": "{\"DarkMode\":false,\"PasswordHash\":\"mine\",\"AppIdentity\":\"MAC1\"}",
+   "outData": "{\"Tasks\":[{\"Id\":\"c\",\"Name\":\"C\"},{\"Id\":\"b\",\"Name\":\"B2\"},{\"Id\":\"z\",\"Name\":\"Z\"}],\"Ui\":{\"WindowLeft\":500,\"SelectedMainTabIndex\":0,\"TabColors\":{\"TabTasks\":\"#00FF00\"},\"TabOrder\":[\"TabTasks\"]},\"LastModified\":\"2026-09-27T12:00:00.0000000\",\"SchemaVersion\":1,\"Log\":[{\"Action\":\"Added\",\"Name\":\"A\"},{\"Action\":\"Added\",\"Name\":\"C\"}]}",
+   "outSettings": "{\"DarkMode\":true,\"PasswordHash\":\"mine\",\"AppIdentity\":\"MAC1\"}"
+  },
+  "CS-3": {
+   "op": "apply",
+   "changeSet": "{\"V\":1,\"From\":\"iOS\",\"Created\":\"2026-09-27T12:00:00\",\"Blocks\":{\"Ui\":{\"WindowLeft\":1,\"WindowWidth\":390,\"SelectedMainTabIndex\":4,\"TabColors\":{\"TabCrew\":\"#123456\"},\"ShowShortcutBar\":false}}}",
+   "data": "{\"Ui\":{\"WindowLeft\":500,\"WindowWidth\":1200,\"SelectedMainTabIndex\":0,\"ShowShortcutBar\":true},\"Tasks\":[]}",
+   "settings": "{}",
+   "outData": "{\"Ui\":{\"WindowLeft\":500,\"WindowWidth\":1200,\"SelectedMainTabIndex\":0,\"ShowShortcutBar\":false,\"TabColors\":{\"TabCrew\":\"#123456\"}},\"Tasks\":[],\"LastModified\":\"2026-09-27T12:00:00.0000000\"}",
+   "outSettings": "{}",
+   "summary": "Ui"
+  },
+  "CS-4": {
+   "op": "build",
+   "baseline": "{\"Sire\":{\"Bookmarks\":[\"1.1\"]},\"X\":1,\"Y\":null}",
+   "current": "{\"X\":null,\"Y\":null}",
+   "out": "{\"V\":1,\"From\":\"Windows\",\"Created\":\"2026-09-27T12:00:00\",\"BlockDeletes\":[\"X\",\"Sire\"]}",
+   "summary": "REMOVES X, Sire"
+  },
+  "CS-5": {
+   "op": "build",
+   "baseline": "{\"Tasks\":[{\"Id\":\"a\"}]}",
+   "current": "{\"Tasks\":[{\"Id\":\"a\"},{\"Name\":\"no id\"}]}",
+   "out": "{\"V\":1,\"From\":\"Windows\",\"Created\":\"2026-09-27T12:00:00\",\"Blocks\":{\"Tasks\":[{\"Id\":\"a\"},{\"Name\":\"no id\"}]}}",
+   "summary": "Tasks"
+  },
+  "CS-6": {
+   "op": "build",
+   "baseline": "{}",
+   "current": "{}",
+   "currentSettings": "{\"GeminiApiKey\":\"k2\"}",
+   "baselineSettings": "{\"GeminiApiKey\":\"k\",\"Foo\":1}",
+   "out": "{\"V\":1,\"From\":\"Windows\",\"Created\":\"2026-09-27T12:00:00\",\"Settings\":{},\"SettingsDeletes\":[\"Foo\"]}",
+   "summary": "settings, clears 1 setting"
+  },
+  "CS-7": {
+   "op": "build",
+   "current": "{\"LastModified\":\"2\",\"Ui\":{\"WindowLeft\":5}}",
+   "baseline": "{\"LastModified\":\"1\",\"Ui\":{\"WindowLeft\":4}}",
+   "currentSettings": "{\"AppIdentity\":\"B\"}",
+   "baselineSettings": "{\"AppIdentity\":\"A\"}",
+   "out": null
+  },
+  "CS-8": {
+   "op": "build",
+   "current": "{\"N\":1}",
+   "baseline": "{\"N\":1.0}",
+   "out": "{\"V\":1,\"From\":\"Windows\",\"Created\":\"2026-09-27T12:00:00\",\"Blocks\":{\"N\":1}}",
+   "summary": "N"
+  },
+  "CS-9": {
+   "op": "build",
+   "baseline": "{\"Tasks\":[{\"Id\":\"a\"},{\"Id\":\"b\"}]}",
+   "current": "{\"Tasks\":[{\"Id\":\"a\"},{\"Id\":\"b\"},{\"Id\":\"c\"}]}",
+   "out": "{\"V\":1,\"From\":\"Windows\",\"Created\":\"2026-09-27T12:00:00\",\"Sets\":{\"Tasks\":[{\"Id\":\"c\"}]}}",
+   "summary": "1 Tasks"
+  },
+  "CS-10": {
+   "op": "build",
+   "baseline": "{\"Tasks\":[{\"Id\":\"a\"},{\"Id\":\"b\"}]}",
+   "current": "{\"Tasks\":[{\"Id\":\"b\"},{\"Id\":\"a\"}]}",
+   "out": "{\"V\":1,\"From\":\"Windows\",\"Created\":\"2026-09-27T12:00:00\",\"Order\":{\"Tasks\":[\"b\",\"a\"]}}",
+   "summary": "other changes"
+  },
+  "CS-11": {
+   "op": "snap-build",
+   "data": "{\"Tasks\":[{\"Id\":\"a\"}],\"Ui\":{\"WindowLeft\":3,\"TabColors\":{\"TabTasks\":\"#FF0000\"},\"GroupExpanded\":{\"Task|G\":false}},\"LastModified\":\"2026-09-02T10:00:00\",\"SchemaVersion\":1}",
+   "settings": "{\"DarkMode\":true,\"PasswordHash\":\"h\",\"PasswordSalt\":\"s\",\"CurrentDataFile\":\"C:\\\\x\\\\data.json\",\"AppIdentity\":\"PC1\",\"GeminiApiKey\":\"k\",\"NewKey\":7}",
+   "out": "{\"V\":1,\"Data\":{\"Tasks\":[{\"Id\":\"a\"}],\"SchemaVersion\":1,\"Ui\":{\"TabColors\":{\"TabTasks\":\"#FF0000\"}}},\"Settings\":{\"DarkMode\":true,\"NewKey\":7}}"
+  },
+  "CS-12": {
+   "op": "snap-apply",
+   "payload": "{\"V\":1,\"Data\":{\"Tasks\":[{\"Id\":\"a\"}],\"SchemaVersion\":1,\"Ui\":{\"TabColors\":{\"TabTasks\":\"#FF0000\"}}},\"Settings\":{\"DarkMode\":true,\"NewKey\":7}}",
+   "existing": "{\"Tasks\":[{\"Id\":\"q\"}],\"Ui\":{\"WindowLeft\":900,\"TabColors\":{},\"GroupExpanded\":{\"Task|H\":true},\"CrewSortMode\":\"Name\"},\"LastModified\":\"2026-09-25T10:00:00\"}",
+   "settings": "{\"DarkMode\":false,\"PasswordHash\":\"mine\",\"OnlyHere\":1}",
+   "outData": "{\"Tasks\":[{\"Id\":\"a\"}],\"SchemaVersion\":1,\"Ui\":{\"TabColors\":{\"TabTasks\":\"#FF0000\"},\"WindowLeft\":900,\"GroupExpanded\":{\"Task|H\":true}},\"LastModified\":\"2026-09-27T12:00:00.0000000\"}",
+   "outSettings": "{\"DarkMode\":true,\"PasswordHash\":\"mine\",\"OnlyHere\":1,\"NewKey\":7}",
+   "hadSettings": true
+  },
+  "CS-13": {
+   "op": "snap-apply",
+   "payload": "{\"Tasks\":[],\"Ui\":{\"WindowTop\":1,\"TabOrder\":[\"A\"]}}",
+   "existing": "{\"Ui\":{\"WindowTop\":77}}",
+   "settings": "{\"DarkMode\":false}",
+   "outData": "{\"Tasks\":[],\"Ui\":{\"TabOrder\":[\"A\"],\"WindowTop\":77},\"LastModified\":\"2026-09-27T12:00:00.0000000\"}",
+   "outSettings": "{\"DarkMode\":false}",
+   "hadSettings": false
+  },
+  "CS-14": {
+   "op": "reorder",
+   "target": "[{\"Id\":\"a\",\"n\":1},{\"Name\":\"x\"},{\"Id\":\"b\"},{\"Id\":\"a\",\"n\":2},{\"Id\":\"c\"}]",
+   "order": [
+    "c",
+    "zz",
+    "a"
+   ],
+   "out": "[{\"Id\":\"c\"},{\"Id\":\"a\",\"n\":1},{\"Name\":\"x\"},{\"Id\":\"b\"}]"
+  },
+  "CS-15": {
+   "op": "apply",
+   "data": "{\"Crew\":{\"weird\":true}}",
+   "changeSet": "{\"Sets\":{\"Crew\":[{\"Id\":\"1\"}]},\"Deletes\":{\"Tasks\":[\"x\"]}}",
+   "settings": "{}",
+   "outData": "{\"Crew\":[{\"Id\":\"1\"}],\"LastModified\":\"2026-09-27T12:00:00.0000000\"}",
+   "outSettings": "{}"
+  }
+ }
+}
