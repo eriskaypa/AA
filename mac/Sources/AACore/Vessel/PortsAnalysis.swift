@@ -151,6 +151,29 @@ public enum PortColumn: String, Sendable, Hashable, CaseIterable {
         "⚓ \(port.display)   —   \(port.visits.count) visit(s)"
     }
 
+    /// One VESSEL-253 visits column: title, minimum and ideal width (pt) and whether its text wraps.
+    public struct VisitsColumn: Sendable, Equatable {
+        public let title: String
+        public let minWidth: Double
+        public let idealWidth: Double
+        public let wraps: Bool
+    }
+
+    /// VESSEL-253 columns: `Vessel` (Windows 220, wrapped `VesselName`), `Arrival` / `Departure` / `Imported` (Windows
+    /// 140 each). In the brand mono the four columns must fit the visits pane of the default 1280-pt window (about
+    /// 577 pt of table, with ~17 pt of cell padding per column), so the widths are narrower than the Windows px
+    /// (DEVIATIONS W-VESSEL, VESSEL-253): the date columns hug `yyyy-MM-dd HH:mm`, and the Vessel column wraps long
+    /// names onto a second line instead of truncating them (design rule 5).
+    public static let visitsColumns: [VisitsColumn] = [
+        VisitsColumn(title: "Vessel", minWidth: 100, idealWidth: 110, wraps: true),
+        VisitsColumn(title: "Arrival", minWidth: 130, idealWidth: 130, wraps: false),
+        VisitsColumn(title: "Departure", minWidth: 130, idealWidth: 130, wraps: false),
+        VisitsColumn(title: "Imported", minWidth: 126, idealWidth: 126, wraps: false),
+    ]
+
+    /// The width budget the four ideal widths must stay within so no column runs past the pane edge at 1280 pt.
+    public static let visitsColumnsBudget: Double = 577 - 4 * 17
+
     /// VESSEL-253 order: `ArrivalValue ?? MinValue` descending, then `ArrivalTime` descending.
     public static func orderedVisits(_ port: PortRecord) -> [PortVisit] {
         let keyed = port.visits.map { ($0, $0.arrivalValue?.ticks ?? 0) }

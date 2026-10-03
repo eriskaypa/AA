@@ -60,18 +60,18 @@ struct QuickCardsPanelContent: View {
                 .font(.aaMono(AAType.title, weight: .bold))
                 .foregroundStyle(AAColor.accent)
                 .fixedSize()
-            Text(QuickCardLayout.headerHint)
-                .font(.aaMono(AAType.caption))
-                .foregroundStyle(AAColor.muted)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Spacer(minLength: AASpacing.s)
+            // Required hint (design rule 11): wraps, never truncated; the tooltip is only a second copy.
+            AAHelpText(QuickCardLayout.headerHint)
+                .lineLimit(nil)
+                .help(QuickCardLayout.headerHint)
+                .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 Task { await VesselFlows.addQuickCard(vesselID: vessel.id, env: env, dialogs: dialogs) }
             } label: {
                 Label(QuickCardLayout.addButtonTitle.replacingOccurrences(of: "+ ", with: ""), systemImage: "plus")
             }
             .aaProminent()
+            .fixedSize()                                    // the add button never truncates
             .help("Add a shortcut to a file, folder, or web link.")
             .accessibilityLabel(QuickCardLayout.addButtonTitle)
         }
@@ -101,6 +101,9 @@ struct QuickCardsPanelContent: View {
                 .frame(width: w, height: h, alignment: .topLeading)
                 .coordinateSpace(.named(QuickCardTile.canvasSpace))
             }
+            // Design rule 17: no scrollers (even with "Show scroll bars: Always"), so no legacy corner square inside
+            // the rounded canvas; the trackpad / wheel still pans the canvas.
+            .scrollIndicators(QuickCardLayout.canvasShowsScrollers ? .automatic : .never)
         }
         .background(AAColor.bg)
         .overlay {

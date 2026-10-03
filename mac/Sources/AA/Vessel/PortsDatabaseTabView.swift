@@ -166,17 +166,23 @@ struct PortsDatabaseVisitsTable: View {
 
     var body: some View {
         let rows = visits.enumerated().map { Row(id: $0.offset, visit: $0.element) }
+        let c = PortsAnalysis.visitsColumns
         Table(rows) {
-            TableColumn("Vessel") { r in Text(r.visit.vesselName) }
-                .width(min: 100)
-            TableColumn("Arrival") { r in Text(r.visit.arrivalDisplay).monospacedDigit() }
-                .width(130)
-            TableColumn("Departure") { r in Text(r.visit.departureDisplay).monospacedDigit() }
-                .width(130)
-            TableColumn("Imported") { r in
+            TableColumn(c[0].title) { r in
+                Text(r.visit.vesselName)
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)          // wrapped VesselName (VESSEL-253)
+                    .help(r.visit.vesselName)
+            }
+            .width(min: c[0].minWidth, ideal: c[0].idealWidth)
+            TableColumn(c[1].title) { r in Text(r.visit.arrivalDisplay).monospacedDigit() }
+                .width(min: c[1].minWidth, ideal: c[1].idealWidth)
+            TableColumn(c[2].title) { r in Text(r.visit.departureDisplay).monospacedDigit() }
+                .width(min: c[2].minWidth, ideal: c[2].idealWidth)
+            TableColumn(c[3].title) { r in
                 Text(r.visit.importedAt).font(.aaMono(AAType.caption)).monospacedDigit().foregroundStyle(AAColor.muted)
             }
-                .width(126)
+                .width(min: c[3].minWidth, ideal: c[3].idealWidth)
         }
         .tableStyle(.inset)
         .alternatingRowBackgrounds(.disabled)
