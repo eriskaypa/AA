@@ -113,7 +113,7 @@ struct HierLinkList: View {
             }
         }
         .listStyle(.bordered)
-        .alternatingRowBackgrounds()
+        .alternatingRowBackgrounds(.disabled)
         .frame(minHeight: minHeight)
         .contextMenu(forSelectionType: UUID.self) { ids in
             if let id = ids.first {

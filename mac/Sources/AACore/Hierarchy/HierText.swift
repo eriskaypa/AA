@@ -54,6 +54,9 @@ public enum HierText {
     public static let renameGroupHelp = "Rename a sidebar group."
     public static let deleteGroupButton = "Delete group"
     public static let deleteGroupHelp = "Delete a sidebar group. Items inside it become ungrouped."
+    /// Mac: the icon bar's overflow menu that holds Assign group…, Rename group… and Delete group (design rule 4).
+    public static let groupCommandsMenu = "Group commands"
+    public static let groupCommandsHelp = "Assign group…, Rename group…, Delete group"
     public static let placeholderRow = "(empty — right-click an item to assign)"
 
     // MARK: Sidebar context menu (HIER-020)

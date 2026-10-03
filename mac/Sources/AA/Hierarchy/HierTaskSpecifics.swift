@@ -24,7 +24,7 @@ struct HierTaskSpecifics: View {
                     openBuilder()
                 } label: {
                     Label(HierText.subtaskBuilder, systemImage: "hammer")
-                        .font(.system(size: 14, weight: .bold))
+                        .fontWeight(.semibold)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 4)
                 }
@@ -136,27 +136,42 @@ struct HierTaskSpecifics: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
         } content: {
+            // HIER-085: Name wraps (no line cap) and takes the flexible width; When shares the rest; Status and the
+            // Done glyph (Q-28) are fixed and narrow, so every column fits without a horizontal scroll.
             Table(task.subtasks, selection: $selectedSubtasks) {
                 TableColumn(HierText.nameColumn) { (s: TaskItem) in
                     AAStrikeText(s.name, struck: s.isComplete)
-                        .lineLimit(2)
+                        .font(.aaMono(AAType.body))
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.vertical, 2)
                 }
-                .width(min: 140, ideal: 280)
+                .width(min: 120)
                 TableColumn(HierText.whenColumn) { (s: TaskItem) in
-                    Text(s.whenText).foregroundStyle(AAColor.muted).monospacedDigit()
+                    Text(s.whenText)
+                        .font(.aaMono(AAType.caption))
+                        .foregroundStyle(AAColor.muted)
+                        .monospacedDigit()
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .width(min: 90, ideal: 190)
+                .width(min: 90, ideal: 130)
                 TableColumn(HierText.statusColumn) { (s: TaskItem) in
                     Text(s.status.friendlyLabel)
+                        .font(.aaMono(AAType.caption))
+                        .lineLimit(1)
                 }
-                .width(min: 70, ideal: 110)
+                .width(96)
                 TableColumn(HierText.doneColumn) { (s: TaskItem) in
                     Image(systemName: s.isComplete ? "checkmark.circle.fill" : "circle")
+                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(s.isComplete ? AAColor.Status.ok : AAColor.muted)
+                        .frame(maxWidth: .infinity)
                         .accessibilityLabel(s.isComplete ? "Done" : "Not done")
                 }
-                .width(min: 40, ideal: 60, max: 70)
+                .width(44)
             }
+            .alternatingRowBackgrounds(.disabled)
             .contextMenu(forSelectionType: UUID.self) { ids in
                 BatchContextMenuItems(selection: { subtaskObjects(ids) }, refresh: {})
             } primaryAction: { ids in

@@ -1,4 +1,5 @@
-// Spec: 04 HIER-001…006 (title, + New / Delete, wrapping toolbar with tooltips, search box, empty hints), HIER-010…020
+// Spec: 04 HIER-001…006 (title, + New / Delete, the toolbar commands with tooltips — one Mac icon bar, V-DESIGN
+//       rule 4 —, search box, empty hints), HIER-010…020
 //       (grouped list, headers "name (N)", placeholders, A→Z, expand persistence, multi-selection, wrapped names,
 //       virtualised scale, context menu), HIER-M01 (drag to group), HIER-M02 (⌘⌫ / ⌫ delete), HIER-M03 (double-click
 //       opens a window), HIER-M05 (lock glyph), §6.2 (Mac sidebar), §8 Q-02, Q-29, Q-30; 03 §6.5.1.10 (list role
@@ -15,7 +16,7 @@ struct HierSidebarPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-            HierToolbarFlow(spacing: 6, lineSpacing: 6) { toolbarButtons }
+            HierSidebarIconBar(model: model)
                 .padding(.horizontal, AASpacing.m)
                 .padding(.bottom, AASpacing.s)
             AASearchField(text: $model.query, prompt: HierText.searchPrompt)
@@ -28,10 +29,11 @@ struct HierSidebarPane: View {
         .background(HierSidebarWatcher(model: model))
     }
 
+    /// Title + count on one compact row (design rule 4).
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
             Text(HierText.pageTitle(model.kind))
-                .font(.aaMono(15, weight: .bold))
+                .font(.aaMono(AAType.title, weight: .bold))
                 .foregroundStyle(AAColor.accent)
                 .lineLimit(1)
             Spacer(minLength: AASpacing.xs)
@@ -44,88 +46,84 @@ struct HierSidebarPane: View {
         .padding(.top, AASpacing.m)
         .padding(.bottom, AASpacing.s)
     }
-
-    @ViewBuilder private var toolbarButtons: some View {
-        Button {
-            model.newItem(dialogs: dialogs)
-        } label: {
-            Label(HierText.newButton, systemImage: "plus").labelStyle(.titleOnly)
-        }
-        .aaProminent()
-        .help(SectionID.section(for: model.kind).newItemTitle ?? HierText.newButton)
-        Button(role: .destructive) {
-            Task { await model.deleteSelection(dialogs: dialogs) }
-        } label: {
-            Label(HierText.deleteButton, systemImage: "trash")
-        }
-        .disabled(model.selection.isEmpty && model.primaryItem == nil)
-        .help(HierText.deleteSelectedHelp)
-        Toggle(isOn: Binding(get: { model.sortAZ }, set: { model.setSortAZ($0) })) {
-            Label(HierText.sortAZ, systemImage: "textformat.abc").labelStyle(.titleOnly)
-        }
-        .toggleStyle(.button)
-        .help(HierText.sortAZHelp)
-        Button {
-            Task { await model.newGroup(dialogs: dialogs) }
-        } label: { Label(HierText.newGroupButton, systemImage: "folder.badge.plus") }
-            .help(HierText.newGroupHelp)
-        Button {
-            Task { await model.assignGroup(model.selectedItems, dialogs: dialogs) }
-        } label: { Label(HierText.assignGroupButton, systemImage: "folder") }
-            .help(HierText.assignGroupHelp)
-        Button {
-            Task { await model.renameGroup(dialogs: dialogs) }
-        } label: { Label(HierText.renameGroupButton, systemImage: "pencil") }
-            .help(HierText.renameGroupHelp)
-        Button {
-            Task { await model.deleteGroup(dialogs: dialogs) }
-        } label: { Label(HierText.deleteGroupButton, systemImage: "folder.badge.minus") }
-            .help(HierText.deleteGroupHelp)
-    }
 }
 
-/// Small bordered buttons that wrap like the Windows WrapPanel.
-struct HierToolbarFlow<Content: View>: View {
-    var spacing: CGFloat
-    var lineSpacing: CGFloat
-    @ViewBuilder var content: () -> Content
+/// HIER-003/004 as one icon bar (design rule 4): `plus` (click = + New, arrow = + New / + Group), `trash` = Delete,
+/// the A→Z toggle, and a trailing overflow menu with Assign group…, Rename group…, Delete group. Every command keeps
+/// its spec name (accessibility label / menu title), tooltip and enablement; the row context menu and the menu bar
+/// are unchanged.
+struct HierSidebarIconBar: View {
+    @Bindable var model: HierPageModel
+    @Environment(\.dialogs) private var dialogs
+
+    private var newHelp: String { SectionID.section(for: model.kind).newItemTitle ?? HierText.newButton }
 
     var body: some View {
-        HierFlowLayout(spacing: spacing, lineSpacing: lineSpacing) { content() }
-            .labelStyle(.titleAndIcon)
-            .buttonStyle(.bordered)
-            .controlSize(.small)
-            .font(.system(size: AAType.caption))
-    }
-}
+        HStack(spacing: AASpacing.xs) {
+            Menu {
+                Button { model.newItem(dialogs: dialogs) } label: {
+                    Label(HierText.newButton, systemImage: "plus")
+                }
+                .help(newHelp)
+                Button { Task { await model.newGroup(dialogs: dialogs) } } label: {
+                    Label(HierText.newGroupButton, systemImage: "folder.badge.plus")
+                }
+                .help(HierText.newGroupHelp)
+            } label: {
+                Label(HierText.newButton, systemImage: "plus")
+            } primaryAction: {
+                model.newItem(dialogs: dialogs)
+            }
+            .menuIndicator(.visible)
+            .fixedSize()
+            .help(newHelp)
+            .accessibilityLabel(HierText.newButton)
 
-/// A left-aligned wrapping layout.
-struct HierFlowLayout: Layout {
-    var spacing: CGFloat
-    var lineSpacing: CGFloat
+            Button(role: .destructive) {
+                Task { await model.deleteSelection(dialogs: dialogs) }
+            } label: {
+                Label(HierText.deleteButton, systemImage: "trash")
+            }
+            .disabled(model.selection.isEmpty && model.primaryItem == nil)
+            .help(HierText.deleteSelectedHelp)
+            .accessibilityLabel(HierText.deleteButton)
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, line: CGFloat = 0, maxX: CGFloat = 0
-        for s in subviews {
-            let size = s.sizeThatFits(.unspecified)
-            if x > 0 && x + size.width > width { x = 0; y += line + lineSpacing; line = 0 }
-            x += size.width + spacing
-            maxX = max(maxX, x - spacing)
-            line = max(line, size.height)
+            Toggle(isOn: Binding(get: { model.sortAZ }, set: { model.setSortAZ($0) })) {
+                Label(HierText.sortAZ, systemImage: "arrow.up.arrow.down")
+            }
+            .toggleStyle(.button)
+            .help(HierText.sortAZHelp)
+            .accessibilityLabel(HierText.sortAZ)
+
+            Spacer(minLength: 0)
+
+            Menu {
+                Button {
+                    Task { await model.assignGroup(model.selectedItems, dialogs: dialogs) }
+                } label: { Label(HierText.assignGroupButton, systemImage: "folder") }
+                    .help(HierText.assignGroupHelp)
+                Button {
+                    Task { await model.renameGroup(dialogs: dialogs) }
+                } label: { Label(HierText.renameGroupButton, systemImage: "pencil") }
+                    .help(HierText.renameGroupHelp)
+                Button {
+                    Task { await model.deleteGroup(dialogs: dialogs) }
+                } label: { Label(HierText.deleteGroupButton, systemImage: "folder.badge.minus") }
+                    .help(HierText.deleteGroupHelp)
+            } label: {
+                Label(HierText.groupCommandsMenu, systemImage: "ellipsis.circle")
+            }
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help(HierText.groupCommandsHelp)
+            .accessibilityLabel(HierText.groupCommandsMenu)
         }
-        return CGSize(width: proposal.width ?? maxX, height: y + line)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, line: CGFloat = 0
-        for s in subviews {
-            let size = s.sizeThatFits(.unspecified)
-            if x > bounds.minX && x + size.width > bounds.maxX { x = bounds.minX; y += line + lineSpacing; line = 0 }
-            s.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            line = max(line, size.height)
-        }
+        .labelStyle(.iconOnly)
+        .symbolRenderingMode(.hierarchical)
+        .fontWeight(.regular)
+        .buttonStyle(.accessoryBar)
+        .menuStyle(.button)
+        .frame(height: 24)
     }
 }
 
@@ -155,6 +153,12 @@ struct HierSidebarList: View {
             List(selection: $model.selection) {
                 ForEach(model.sidebar.sections) { section in
                     Section {
+                        // The header is a non-selectable row, not a pinned List header: a pinned (floating) header
+                        // draws a full-width separator that does not line up with the row separators.
+                        HierSectionHeader(section: section, model: model)
+                            .selectionDisabled()
+                            .listRowSeparator(.hidden)
+                            .accessibilityAddTraits(.isHeader)
                         if model.isExpanded(section) {
                         ForEach(section.rows) { row in
                             if let id = row.itemID, let item = model.item(id) {
@@ -175,12 +179,12 @@ struct HierSidebarList: View {
                             }
                         }
                         }
-                    } header: {
-                        HierSectionHeader(section: section, model: model)
                     }
+                    .listSectionSeparator(.hidden)
                 }
             }
             .listStyle(.inset)
+            .alternatingRowBackgrounds(.disabled)
             .scrollContentBackground(.hidden)
             .contextMenu(forSelectionType: UUID.self) { ids in
                 menu(for: ids)
@@ -261,12 +265,13 @@ struct HierSectionHeader: View {
 
     var body: some View {
         let expanded = model.isExpanded(section)
-        HStack(spacing: 4) {
+        HStack(alignment: .firstTextBaseline, spacing: AASpacing.xs) {
             Button {
                 withAnimation(.snappy) { model.setExpanded(section, !expanded) }
             } label: {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.aaMono(AAType.caption, weight: .bold))
+                    .imageScale(.small)
                     .foregroundStyle(AAColor.muted)
                     .rotationEffect(.degrees(expanded ? 90 : 0))
                     .frame(width: 14, height: 14)
@@ -275,23 +280,20 @@ struct HierSectionHeader: View {
             .buttonStyle(.plain)
             .accessibilityLabel(expanded ? "Collapse \(section.title)" : "Expand \(section.title)")
             Image(systemName: section.groupID == nil ? "tray" : "folder")
+                .font(.aaMono(AAType.small))
                 .imageScale(.small)
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(AAColor.muted)
-            Text(section.title)
-                .font(.aaMono(AAType.small, weight: .bold))
-                .foregroundStyle(AAColor.accent)
-                .lineLimit(1)
-                .truncationMode(.tail)
-            Text("(\(section.count))")
-                .font(.aaMono(AAType.caption))
-                .foregroundStyle(AAColor.muted)
-                .monospacedDigit()
-            Spacer(minLength: 0)
+            // HIER-010: the full group name wraps (never truncated), with the muted "(N)" following it.
+            Text("\(Text(section.title).font(.aaMono(AAType.small, weight: .bold)).foregroundStyle(AAColor.accent)) \(Text("(\(section.count))").font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted).monospacedDigit())")
+                .lineLimit(nil)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.vertical, 2)
-        .padding(.horizontal, 4)
+        .padding(.vertical, 3)
+        .padding(.horizontal, 6)
         .background(RoundedRectangle(cornerRadius: AARadius.control, style: .continuous)
-            .fill(targeted ? AAColor.tint.opacity(0.18) : Color.clear))
+            .fill(targeted ? AAColor.tint.opacity(0.18) : AAColor.panelAlt))
         .overlay(RoundedRectangle(cornerRadius: AARadius.control, style: .continuous)
             .strokeBorder(targeted ? AAColor.tint : Color.clear, lineWidth: 1))
         .contentShape(Rectangle())
@@ -313,10 +315,12 @@ struct HierSidebarRowView: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
+            // The font sits on the Text itself: the List row host replaces an inherited row font (design rule 2).
             if item.name.isEmpty {
-                Text("(unnamed)").italic().foregroundStyle(AAColor.muted)
+                Text("(unnamed)").font(.aaMono(AAType.body)).italic().foregroundStyle(AAColor.muted)
             } else {
                 Text(item.name)
+                    .font(.aaMono(AAType.body))
                     .fixedSize(horizontal: false, vertical: true)
                     .lineLimit(nil)
             }
@@ -329,8 +333,7 @@ struct HierSidebarRowView: View {
                     .accessibilityLabel("Password-protected")
             }
         }
-        .font(.aaMono(AAType.body))
-        .padding(.vertical, 1)
+        .padding(.vertical, 2)
     }
 }
 
@@ -343,7 +346,7 @@ struct HierDragPreview: View {
             Image(systemName: count > 1 ? "square.stack" : "doc")
             Text(count > 1 ? "\(count) items" : name).lineLimit(1)
         }
-        .font(.system(size: AAType.small, weight: .medium))
+        .font(.aaMono(AAType.small, weight: .medium))
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
         .background(.regularMaterial, in: Capsule())

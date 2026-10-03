@@ -56,7 +56,10 @@ struct HierPageView: View {
             hierarchySelection: model.hierarchySelectionState,
             focusSearchField: { model.searchLocator.focus() },
             searchFieldIsFocused: model.searchLocator.isFocused)
-        if model.kind == .vessel, let v = model.primaryItem, !env.locks.isGated(v) {
+        // VESSEL-005 / DECISIONS 10 Q5: a detached vessel's panels are shown disabled in the main window, so its
+        // Tools ▸ Vessel commands are withheld too (the item window does not host the vessel panels).
+        if model.kind == .vessel, let v = model.primaryItem, !env.locks.isGated(v),
+           !env.store.detachedItemIDs.contains(v.id) {
             c.vessel = VesselActions.menuActions(vesselID: v.id, env: env, dialogs: dialogs) { tab in
                 switch tab {
                 case .quickCards: model.detailTab = .quickCards

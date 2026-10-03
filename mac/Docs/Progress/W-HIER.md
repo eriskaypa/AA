@@ -45,3 +45,20 @@ Container tab / item window / component editor with W-CONT's real editor; Relati
 `FileBacklinksSection`; procedure checklist (W-BUILD) and its export buttons (W-PDF); subtask builder and subtask
 editor sheets (W-BUILD); vessel tabs and Tools ▸ Vessel actions (W-VESSEL); Export PDF… flow (W-PDF); Lock Now flow
 (W-SHELL calls `ItemLockService.relockAll`, the pages and item windows re-gate by observation).
+
+## Fix round 1 (FIX-W-HIER, verification findings V-04 / V-05 / V-10 / V-DESIGN)
+- HIER-025: typing after Return no longer rebuilds/re-sorts the sidebar per keystroke (`commitRename(stillEditing:)`,
+  `HierRenameState`; `HierStructureSignature` moved to AACore so it is tested).
+- CONT-060…062 / D-4: the editor identity no longer flips on every password-session change; it re-loads on relock
+  (Lock Now) and on unlock only for a waiting legacy body (`HierEditorReload`, `HierEditorReloadCounter`) — a gate
+  prompt from inside the editor keeps caret, scroll and undo.
+- VESSEL-005 / DECISIONS 10 Q5: Tools ▸ Vessel commands withheld for a detached vessel.
+- HIER-085: subtasks table columns fit (Name/When flexible, Status 96, Done 44); names wrap without a 2-line cap.
+- HIER-010: group headers wrap (no truncation), PanelAlt band, aligned with the rows (non-pinned header rows).
+- V-DESIGN: sidebar header is one icon bar (plus-menu, trash, sort toggle, overflow) — `HierToolbarFlow` /
+  `HierFlowLayout` removed; rows aaMono 13 (font on the Text); page title aaMono 16 bold; item window uses
+  `AAKindBadge` and a footer bar; no zebra rows (relationships, components, subtasks); raw `.system(size:)` text
+  replaced with tokens (lock gate, lock sheet, component editor, drag preview, subtask builder button).
+- Tests: `Tests/AACoreTests/Hierarchy/HierPageStateTests.swift` (3 tests). Gate: 1,589 tests green.
+- Snapshots (light + dark): `scratchpad/snapshots/fix1-W-HIER/` — eq4 (sidebar), task-narrow (1100×760, subtasks),
+  itemwin (item window); before-* for comparison.
