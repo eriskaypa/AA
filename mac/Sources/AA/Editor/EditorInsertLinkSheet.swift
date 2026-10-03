@@ -40,13 +40,13 @@ struct EditorInsertLinkSheet: View {
             Group {
                 if let n = normalised {
                     Label {
-                        Text(n).font(.aaMono(AAType.caption)).lineLimit(1).truncationMode(.middle)
+                        Text(verbatim: n).font(.aaMono(AAType.caption)).lineLimit(1).truncationMode(.middle)
                     } icon: {
                         Image(systemName: "checkmark.circle.fill").foregroundStyle(AAColor.Status.ok)
                     }
                 } else {
                     Label {
-                        Text("Type a full address, e.g. https://www.example.com or mailto:name@example.com")
+                        Text(verbatim: "Type a full address, e.g. https://www.example.com or mailto:name@example.com")
                     } icon: {
                         Image(systemName: "questionmark.circle").foregroundStyle(AAColor.muted)
                     }

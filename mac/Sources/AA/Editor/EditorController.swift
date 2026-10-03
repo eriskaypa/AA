@@ -58,6 +58,8 @@ final class EditorController: NSObject {
 
     @ObservationIgnored private var _scrollView: EditorScrollView?
     @ObservationIgnored private var _textView: AARichTextView?
+    /// The text storage is the root of the TextKit 1 object graph; keep it alive explicitly.
+    @ObservationIgnored private var _textStorage: NSTextStorage?
 
     override init() { super.init() }
 
@@ -106,6 +108,8 @@ final class EditorController: NSObject {
         sv.hasHorizontalScroller = false
         sv.autohidesScrollers = true
         sv.borderType = .noBorder
+        sv.automaticallyAdjustsContentInsets = false      // never inset for a title bar / toolbar above the pane
+        sv.contentInsets = NSEdgeInsets(top: 0, left: 0, bottom: 0, right: 0)
         sv.drawsBackground = true
         sv.backgroundColor = Self.paperColor
         sv.allowsMagnification = true
@@ -118,6 +122,7 @@ final class EditorController: NSObject {
         sv.onMagnificationChanged = { [weak self] m in self?.magnificationChanged(m) }
         _scrollView = sv
         _textView = tv
+        _textStorage = textStorage
         observeUndo()
     }
 
@@ -184,23 +189,27 @@ final class EditorController: NSObject {
     func bind(container: Container, host: EditorHost, isEnabled: Bool, env: AppEnvironment, dialogs: DialogPresenter) {
         self.dialogs = dialogs
         hostEnabled = isEnabled
-        if self.env !== env {
+        if self.env !== env || dataReplacedSubscription == nil {
             self.env = env
             dataReplacedSubscription = env.store.dataReplaced.subscribe { [weak self] _ in self?.dataReplaced() }
         }
         self.host = host
         if self.container === container, hasContainer { applyEditability(); return }
-        if let old = self.container, old !== container { EditorBindingRegistry.release(self, container: old) }
+        if let old = self.container, old !== container {
+            session.flushPending()                              // the previous container keeps its edit
+            EditorBindingRegistry.release(self, container: old)
+        }
         self.container = container
         hasContainer = true
         orphaned = false
+        // Claim first: an older editor of the same container flushes before this one reads it (§6.12).
+        EditorBindingRegistry.claim(self, container: container)
         load()
         if let token = flushToken {
             env.flush.rebind(token, to: container)
         } else {
             flushToken = env.flush.register(container: container, host: hostDescription) { [weak self] in self?.flush() }
         }
-        EditorBindingRegistry.claim(self, container: container)
         observeContainerText()
     }
 
@@ -259,11 +268,26 @@ final class EditorController: NSObject {
         session.rebaseLoadedText(NSAttributedString(attributedString: storage))
         tv.typingAttributes = typingAttributesForEmptyOrStart()
         tv.setSelectedRange(NSRange(location: 0, length: 0))
-        tv.scrollRangeToVisible(NSRange(location: 0, length: 0))
+        scrollToTop()
         undoManager.removeAllActions()                         // D-2
         refreshUndoState()
         applyEditability()
         refreshSummary()
+    }
+
+    /// Caret to the start, view to the very top (inset included).
+    private func scrollToTop() {
+        func top() {
+            let clip = scrollView.contentView
+            clip.scroll(to: NSPoint(x: 0, y: 0))
+            scrollView.reflectScrolledClipView(clip)
+        }
+        top()
+        // Again after SwiftUI's first layout pass sized the scroll view (a fresh view starts at a placeholder size).
+        Task { @MainActor [weak self] in
+            guard let self, self.textView.selectedRange().location == 0 else { return }
+            top()
+        }
     }
 
     private func typingAttributesForEmptyOrStart() -> [NSAttributedString.Key: Any] {
@@ -338,6 +362,7 @@ final class EditorController: NSObject {
         self.withheld = withheld
         hasAnyLock = EditorLocking.hasAnyLock(text)
         textView.setSelectedRange(selection)
+        scrollToTop()
         self.notice = notice
         applyEditability()
         refreshSummary()

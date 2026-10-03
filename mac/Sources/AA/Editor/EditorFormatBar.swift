@@ -423,6 +423,7 @@ struct EditorZoomMenu: View {
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.visible)
+        .tint(AAColor.fg)
         .fixedSize()
         .frame(height: 22)
         .padding(.horizontal, 4)
@@ -452,9 +453,11 @@ struct EditorFontFamilyMenu: View, Equatable {
         } label: {
             Text(family ?? "—")
                 .font(.system(size: AAType.caption))
+                .foregroundStyle(AAColor.fg)
                 .lineLimit(1)
                 .truncationMode(.tail)
         }
+        .tint(AAColor.fg)
         .menuStyle(.borderlessButton)
         .menuIndicator(.visible)
         .frame(width: 128, height: 22, alignment: .leading)

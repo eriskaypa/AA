@@ -75,7 +75,7 @@ struct EditorPane: View {
             EditorFormatBar(controller: controller)
             banners
             EditorTextArea(controller: controller)
-                .overlay(alignment: .top) { noticeView }
+                .overlay(alignment: .bottom) { noticeView }
                 .accessibilityLabel(title.isEmpty ? "Notes" : "Notes — \(title)")
         }
         .background(AAColor.panel)
@@ -87,7 +87,7 @@ struct EditorPane: View {
     }
 
     @ViewBuilder private var banners: some View {
-        if controller.orphaned {
+        if controller.orphaned && controller.hostEnabled {      // a disabled host shows its own message
             AABanner(style: .danger, text: "This item is no longer in the loaded data — nothing typed here will be saved.")
                 .transition(.aaBanner)
         } else if controller.parkedByOtherEditor {
@@ -110,7 +110,8 @@ struct EditorPane: View {
                       : n.style == .warning ? "lock.fill" : "info.circle.fill")
                     .foregroundStyle(n.style == .success ? AAColor.Status.ok
                                      : n.style == .warning ? AAColor.Status.dueSoon : AAColor.tint)
-                Text(n.text)
+                // The lock hint's leading emoji is replaced by the symbol on the left.
+                Text(verbatim: n.text.hasPrefix("🔒 ") ? String(n.text.dropFirst(2)) : n.text)
                     .font(.system(size: AAType.small, weight: .medium))
                     .foregroundStyle(Color(nsColor: EditorFormatting.editorInk))
                     .fixedSize(horizontal: false, vertical: true)
@@ -125,10 +126,10 @@ struct EditorPane: View {
             .background(.white.opacity(0.96), in: Capsule())
             .overlay(Capsule().strokeBorder(Color.black.opacity(0.12), lineWidth: 1))
             .shadow(color: .black.opacity(0.12), radius: 6, y: 2)
-            .padding(.top, 8)
+            .padding(.bottom, 12)
             .padding(.horizontal, 16)
             .environment(\.colorScheme, .light)                 // floats on the light paper
-            .transition(.move(edge: .top).combined(with: .opacity))
+            .transition(.move(edge: .bottom).combined(with: .opacity))
             .id(n.id)
         }
     }

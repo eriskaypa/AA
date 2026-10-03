@@ -324,10 +324,15 @@ public struct EditorSelectionSummary: Equatable {
 
     // MARK: Summary (format bar state)
 
-    public static func summary(_ s: NSAttributedString, selection: NSRange,
+    /// The summary looks at most this many characters of a selection (display only; a select-all on a very
+    /// large note stays instant).
+    public static let summaryScanLimit = 100_000
+
+    public static func summary(_ s: NSAttributedString, selection fullSelection: NSRange,
                                typing: [NSAttributedString.Key: Any]) -> EditorSelectionSummary {
         var out = EditorSelectionSummary()
-        out.hasSelection = selection.length > 0
+        out.hasSelection = fullSelection.length > 0
+        let selection = NSRange(location: fullSelection.location, length: min(fullSelection.length, summaryScanLimit))
         let len = s.length
         let runs: [[NSAttributedString.Key: Any]]
         if selection.length > 0, NSMaxRange(selection) <= len {
