@@ -17,7 +17,7 @@ import Testing
         let saveAs = file.entries.first { $0.command == .saveCopyAs }!
         #expect(saveAs.title == "Save a Copy As JSON…")
         #expect(saveAs.mac == "⇧⌘S" && saveAs.chords == ["⇧⌘S"])
-        #expect(saveAs.windows == "Save _As...")
+        #expect(saveAs.windows == "Save As...")
         #expect(saveAs.menu == "File")
         let stop = file.entries.first { $0.command == .stopSharedSaveFile }!
         #expect(stop.menu == "File ▸ Shared Save")
@@ -141,5 +141,40 @@ private enum ShellXTestSettingsTab: String, Hashable, Codable { case general, se
         #expect(ShellXText.identityPrompt.hasPrefix("Name this installation (e.g. a vessel or operator)."))
         #expect(ShellXText.translocationTitle == "Move AA to Applications")
         #expect(ShellXText.reminderTitle == "AA — due soon")
+    }
+}
+
+@Suite struct ShellXShortcutWindowsTextTests {
+    @Test func specReferencesAndAccessKeysAreDropped() {
+        let t = ShellXShortcutCatalog.windowsText
+        #expect(t("top-level _About (SHELL-115)") == "top-level About")
+        #expect(t("— (Mac addition, §6.4)") == "—")
+        #expect(t("— (optional Mac addition, 11 §6.2)") == "—")
+        #expect(t("E_xit; ✕ or Alt+F4 on main (SHELL-056/082)") == "Exit; ✕ or Alt+F4 on main")
+        #expect(t("✕ / Alt+F4 (no Ctrl+W on Windows — W-12)") == "✕ / Alt+F4")
+        #expect(t("Ctrl+S, _Save, header Save (Ctrl+S)") == "Ctrl+S, Save, header Save (Ctrl+S)")
+        #expect(t("Ctrl+B, B Bold (Ctrl+B) (CONT-023)") == "Ctrl+B, B Bold (Ctrl+B)")
+        #expect(t("+ New buttons (HIER-021, VIEW-053, VIEW-147, 06 New List)") == "+ New buttons")
+        #expect(t("— (DECISIONS R-70, 01 DATA-181)") == "—")
+        #expect(t("Ctrl+R in the editor (X-16)") == "Ctrl+R in the editor")
+        #expect(t("Ctrl+Z (text undo; else main-window undo-delete)") == "Ctrl+Z (text undo; else main-window undo-delete)")
+        #expect(t("I_mport data folder (ZIP)...") == "Import data folder (ZIP)...")
+        #expect(t("Import COMPAS _crew (.xlsx)...") == "Import COMPAS crew (.xlsx)...")
+        #expect(t("Flash S_ync with iPhone (QR)...") == "Flash Sync with iPhone (QR)...")
+        #expect(t("Ctrl+N, Quick _work window (Ctrl+N)") == "Ctrl+N, Quick work window (Ctrl+N)")
+        #expect(t("") == "—")
+        // Every registry row stays readable: no spec IDs left in the column.
+        for row in ShortcutRegistry.rows {
+            let cell = t(row.windowsGesture)
+            #expect(!cell.contains("SHELL-") && !cell.contains("§") && !cell.contains("CONT-"), "\(row.id): \(cell)")
+        }
+    }
+}
+
+@Suite struct ShellXShortcutBareReferenceTests {
+    @Test func bareSpecIDsBecomeADash() {
+        #expect(ShellXShortcutCatalog.windowsText("CONT-063") == "—")
+        #expect(ShellXShortcutCatalog.windowsText("SHELL-056/082") == "—")
+        #expect(ShellXShortcutCatalog.windowsText("Ctrl+A") == "Ctrl+A")
     }
 }

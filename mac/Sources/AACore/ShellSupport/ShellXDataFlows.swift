@@ -41,13 +41,31 @@ public enum ShellXDataFlows {
     public static func foreignEncryptionPromptNeeded(_ dataStore: DataStore) -> Bool {
         let file = dataStore.currentDataFile
         guard dataStore.settings.values.encryptLocalData, dataStore.isUnderAppFolder(file) else { return false }
-        guard let handle = try? FileHandle(forReadingFrom: file) else { return false }
-        defer { try? handle.close() }
-        let head = (try? handle.read(upToCount: 16)) ?? Data()
-        guard !head.isEmpty else { return false }
+        guard let cls = fileClass(of: file) else { return false }
         let hasKey: Bool
         do { hasKey = try LocalEncryption.key(secrets: dataStore.secrets, create: false) != nil } catch { return false }
-        return needsForeignEncryptionPrompt(settingOn: true, fileClass: LocalEncryption.classify(head), hasLocalKey: hasKey)
+        return needsForeignEncryptionPrompt(settingOn: true, fileClass: cls, hasLocalKey: hasKey)
+    }
+
+    /// What the active data file looks like on disk (Settings ▸ Security): nil when it does not exist yet.
+    public nonisolated static func fileClass(of url: URL) -> LocalEncryption.FileClass? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let head = try? handle.read(upToCount: 16), !head.isEmpty else { return nil }
+        return LocalEncryption.classify(head)
+    }
+
+    /// Settings ▸ Security "On disk" line for the active data file.
+    public static func onDiskDescription(_ dataStore: DataStore) -> String {
+        let file = dataStore.currentDataFile
+        // DATA-071: files outside AppFolder are never encrypted.
+        guard dataStore.isUnderAppFolder(file) else { return "External file — never encrypted" }
+        switch fileClass(of: file) {
+        case .none: return "Not written yet"
+        case .some(.plain): return "Plaintext"
+        case .some(.mac): return "Encrypted with this Mac's Keychain key"
+        case .some(.windowsDPAPI): return "Encrypted on Windows (DPAPI) — unreadable on this Mac"
+        }
     }
 
     // MARK: App identity (SHELL-068 / DATA-048 / BUILD-145 B1, BUILD-A25, A27)
