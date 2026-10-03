@@ -12,7 +12,7 @@ Branch `wave/W-SIRE`. Scope: spec 12 (SIRE 2.0) incl. Addendum SIRE-049…051, 0
 | Placeholders (`check-placeholders.sh W-SIRE`) | 0 left | — | 0 |
 | `SireContractStatus` | `wSireImplemented = true` | | |
 
-## Tests (Tests/AACoreTests/Sire, 12 suites)
+## Tests (Tests/AACoreTests/Sire, 12 files)
 - Bank: TV-BANK-1…5 (SHA-256, 410 / 12 chapters / 72 sections, types, filter lists, 39 ROVIQ locations), metadata,
   lazy load + cached failure texts, tolerant decoding.
 - TaskIdentifier: TV-ID-1…4, TV-ID-BANK (332 questions, 6 106 tasks, per chapter, min 6 / max 39).
@@ -34,6 +34,29 @@ Tab with a selected question (1500 and 1300 pt), unreadable saved body banner, c
 - Fixed: the kind sheet's helper lines described single-question children for section / chapter adds too (now
   scope-aware: "Each question becomes a checklist step / subtask / component"); the truncated body hint strip now
   shows its full text as a tooltip.
+
+## FIX-W-SIRE (V-12 verification findings, 2026-10-03) — 3 / 3 fixed
+- **SIRE-036 / SIRE-001 (major)** — export sheet stuck on `Loading SIRE 2.0 question bank…` when opened during a
+  running load. `SireBank.load()` now runs the decode inside a MainActor task that publishes `contents` / `phase`
+  before it returns, so every waiter (first or joining) resumes after the state is final; `SireExportSheet` takes its
+  phase from the returned `Result` and also follows `SireBank.shared.phase`. Test
+  `SireBankLoaderTests.joiningCallerSeesPublishedState` (fails on the old code, passes now). Snapshot
+  `--snapshot TabSire --sheet w-sire.export` without pre-install now shows the live preview.
+- **SIRE-023 / SIRE-050 (minor)** — new tests `SireRichTextIntegrationTests.paneBodyStoredShape` /
+  `containerBodyStoredShape` pin the §4.4 stored shape after the W-RICH round trip (root Foreground pane `#FF000000` /
+  container `#FF334155`, Segoe UI 13, chip `#FFF8FAFC` + `10,8,10,8`, section label `#FFFEF3C7` + `8,4,8,4` + run
+  `#FF92400E`, Disc List → ListItem → nested Circle List, the LF-bearing full text kept in ONE Run, no U+2028 written).
+  `SireBankTests.tagAggregates` now asserts the TV-TAGX-FP "only inside a longer word" column (AIS 7, UPS 2, DOC 60,
+  rating 47, COW 1, SSO 54, NCR 5, COF 5, OWS 2, anchor 3, procedure 156).
+  - The new test exposed a real loss: text typed right after a list bullet inherited `.aaListMarker` from the
+    `\t•\t` marker and the XAML writer dropped it on save. `SireInsertionTextView` now cleans its typing attributes
+    (`EditorFormatting.cleanTypingAttributes`) before every insertion / plain paste.
+- **SIRE-038 (polish)** — Tools ▸ Set Gemini API Key… Keychain failure text uses the Security framework message
+  (`SecCopyErrorMessageString`) plus the OSStatus instead of the raw Swift error value.
+- Design rules (V-DESIGN) on the SIRE sheets / tab: candidate + kind prompts use the NSAlert title font, mono rows,
+  no zebra stripes, AAEmptyState for "No matches." and the load failure; export sheet uses `BuilderSheetHeader`,
+  mono mode rows and line count, 44-pt footer; status badge = `AAStatusCapsule`; no raw `.system(size:)` left in
+  `Sources/AA/Sire`. Snapshots light + dark: `scratchpad/snapshots/fix1-W-SIRE/`.
 
 ## Not done / open
 - None of the assigned IDs. Optional extras not shipped are listed in `Docs/Deviations/W-SIRE.md`.

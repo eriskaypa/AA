@@ -63,17 +63,13 @@ struct SireLoadingState: View {
     var body: some View {
         Group {
             if case .failed(let message) = phase {
-                ContentUnavailableView {
-                    Label("SIRE 2.0", systemImage: "exclamationmark.triangle")
-                } description: {
-                    Text(verbatim: "Could not load the SIRE question bank:\n\(message)")
-                        .font(.system(size: 15))
-                }
+                AAEmptyState(title: "SIRE 2.0", symbol: "exclamationmark.triangle",
+                             message: "Could not load the SIRE question bank:\n\(message)")
             } else {
                 VStack(spacing: AASpacing.m) {
                     ProgressView().controlSize(.large)
                     Text("Loading SIRE 2.0 question bank…")
-                        .font(.system(size: 15))
+                        .font(.aaMono(AAType.body))
                         .foregroundStyle(AAColor.muted)
                 }
             }
@@ -308,6 +304,7 @@ struct SireQuestionRow: View {
             Text(verbatim: n)
                 .font(.aaMono(AAType.small, weight: .bold))
                 .monospacedDigit()
+                .foregroundStyle(AAColor.accent)
                 .frame(width: 52, alignment: .leading)
             VStack(alignment: .leading, spacing: 3) {
                 if !question.shortQuestionText.isEmpty {
@@ -324,13 +321,14 @@ struct SireQuestionRow: View {
             HStack(spacing: 4) {
                 if exported {
                     Image(systemName: "tag.fill")
-                        .font(.system(size: 9))
+                        .font(.aaMono(AAType.caption))
+                        .imageScale(.small)
                         .foregroundStyle(.secondary)
                         .help("Tagged for export")
                 }
                 if bookmarked {
                     Image(systemName: "star.fill")
-                        .font(.system(size: 11))
+                        .font(.aaMono(AAType.caption))
                         .foregroundStyle(AAColor.Status.sireAmber)
                         .help("Bookmarked")
                 }
@@ -349,15 +347,8 @@ struct SireStatusBadge: View {
     let status: SireQuestionStatus
 
     var body: some View {
-        HStack(spacing: 3) {
-            Image(systemName: Self.symbol(status)).imageScale(.small)
-            Text(verbatim: SireExport.statusDisplay(status))
-        }
-        .font(.system(size: 10, weight: .medium))
-        .foregroundStyle(Self.color(status))
-        .padding(.horizontal, 6)
-        .padding(.vertical, 1.5)
-        .background(Self.color(status).opacity(0.13), in: Capsule())
+        AAStatusCapsule(text: SireExport.statusDisplay(status), symbol: Self.symbol(status), color: Self.color(status))
+            .fixedSize()
     }
 
     static func symbol(_ s: SireQuestionStatus) -> String {

@@ -107,6 +107,32 @@ enum SireTestBank {
         // TV-TAGX-FP: false-positive tags present (counts of questions carrying them).
         #expect(n("Equipment: AIS") == 10 && n("Equipment: UPS") == 2 && n("Procedure: COW") == 4)
         #expect(n("Procedure: NCR") == 5 && n("Document: COF") == 5 && n("Equipment: OWS") == 2 && n("Equipment: anchor") == 12)
+        // TV-TAGX-FP "only inside a longer word" column: no occurrence of the keyword in the question's search text is
+        // bounded by non-alphanumeric ASCII on both sides. This is the column a word-boundary implementation breaks.
+        func isWordChar(_ u: UInt16) -> Bool { (u >= 0x30 && u <= 0x39) || (u >= 0x41 && u <= 0x5A) || (u >= 0x61 && u <= 0x7A) }
+        func fold(_ u: UInt16) -> UInt16 { (u >= 0x61 && u <= 0x7A) ? u - 0x20 : u }
+        func onlyInsideLongerWord(_ tag: String) -> Int {
+            let keyword = String(tag.split(separator: ":", maxSplits: 1)[1].dropFirst())
+            let needle = keyword.utf16.map(fold)
+            return bank.questions.filter { q in
+                guard q.evidenceTags.contains(tag) else { return false }
+                let hay = SireTagExtractor.searchText(q).utf16.map(fold)
+                guard hay.count >= needle.count else { return false }
+                for i in 0...(hay.count - needle.count) where Array(hay[i..<(i + needle.count)]) == needle {
+                    let before = i == 0 || !isWordChar(hay[i - 1])
+                    let after = i + needle.count == hay.count || !isWordChar(hay[i + needle.count])
+                    if before && after { return false }                  // a bounded hit exists
+                }
+                return true
+            }.count
+        }
+        let insideOnly: [(String, Int)] = [
+            ("Equipment: AIS", 7), ("Equipment: UPS", 2), ("Document: DOC", 60), ("Personnel: rating", 47),
+            ("Procedure: COW", 1), ("Personnel: SSO", 54), ("Procedure: NCR", 5), ("Document: COF", 5),
+            ("Equipment: OWS", 2), ("Equipment: anchor", 3), ("Procedure: procedure", 156),
+        ]
+        for (tag, expected) in insideOnly { #expect(onlyInsideLongerWord(tag) == expected, "\(tag)") }
+        #expect(n("Personnel: rating") == 113 && n("Procedure: procedure") == 272)
         // 66 questions differ between culture and ordinal order (SIRE-051).
         let differing = bank.questions.filter {
             $0.evidenceTags != $0.evidenceTags.sorted { Ordinal.compare($0, $1) == .orderedAscending }
@@ -207,6 +233,28 @@ enum SireTestBank {
         #expect((try? ra.get().questions.count) == 410)
         #expect((try? rb.get().questions.count) == 410)
         #expect(bank.phase == .loaded && bank.isLoaded && bank.loadError == nil)
+    }
+
+    // §6.8 / Q-10 (V-12 finding): a second caller that joins a running load (the export sheet opened while the tab
+    // is loading) must see the published state the moment its await returns — whatever order the waiters resume in.
+    @Test func joiningCallerSeesPublishedState() async {
+        for _ in 0..<3 {
+            let bank = SireBank(source: { Thread.sleep(forTimeInterval: 0.005); return SireTestBank.data })
+            let first = Task { @MainActor in _ = await bank.load(); return bank.phase }
+            await Task.yield()
+            #expect(bank.phase == .loading)
+            let joined = await bank.load()
+            #expect((try? joined.get().questions.count) == 410)
+            #expect(bank.phase == .loaded, "the joining caller resumed before the state was published")
+            #expect(bank.contents?.questions.count == 410)
+            #expect(await first.value == .loaded)
+        }
+        let failing = SireBank(source: { Thread.sleep(forTimeInterval: 0.005); return nil })
+        let first = Task { @MainActor in _ = await failing.load() }
+        await Task.yield()
+        _ = await failing.load()
+        #expect(failing.loadError == "Embedded SIRE question bank not found.")
+        await first.value
     }
 
     // SIRE-002: the failure texts, cached until restart.

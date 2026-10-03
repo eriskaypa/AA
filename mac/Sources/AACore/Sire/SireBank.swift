@@ -39,13 +39,22 @@ public final class SireBank {
         if let inFlight { return await inFlight.value }
         phase = .loading
         let src = source
-        let task = Task.detached(priority: .userInitiated) { () -> Result<SireBankContents, SireBankError> in
-            guard let data = src() else { return .failure(.notFound) }
-            do throws(SireBankError) { return .success(try SireBankDecoder.load(data)) } catch { return .failure(error) }
+        // The in-flight task publishes `contents` / `phase` itself BEFORE it returns, so every waiter — the first
+        // caller and any concurrent one (the export sheet opened while the tab is loading, §6.8 / Q-10) — resumes
+        // only after the state is final, whatever order the runtime resumes them in.
+        let task = Task { @MainActor [weak self] () -> Result<SireBankContents, SireBankError> in
+            let result = await Task.detached(priority: .userInitiated) { () -> Result<SireBankContents, SireBankError> in
+                guard let data = src() else { return .failure(.notFound) }
+                do throws(SireBankError) { return .success(try SireBankDecoder.load(data)) } catch { return .failure(error) }
+            }.value
+            self?.publish(result)
+            return result
         }
         inFlight = task
-        let result = await task.value
-        inFlight = nil
+        return await task.value
+    }
+
+    private func publish(_ result: Result<SireBankContents, SireBankError>) {
         switch result {
         case .success(let c):
             contents = c
@@ -54,7 +63,7 @@ public final class SireBank {
             contents = SireBankContents()                     // _questions = new(), _identified = new()
             phase = .failed(e.localizedDescription)
         }
-        return result
+        inFlight = nil
     }
 
     /// Test / preview hook: installs already-built contents (no resource read).
