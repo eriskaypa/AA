@@ -154,8 +154,11 @@ struct CrewEditorSheet: View {
         Text(f.label)
             .font(.aaMono(AAType.small, weight: f.emphasised ? .bold : .regular))
             .foregroundStyle(f.emphasised ? AAColor.accent : AAColor.fg)
-            .frame(width: 170, alignment: .leading)
+            .frame(width: Self.labelWidth, alignment: .leading)
     }
+
+    /// The Windows 170-px label column, widened so the monospaced `Sign-off date  (contract)` label fits one line.
+    static let labelWidth: CGFloat = 200
 
     private func text(_ key: String) -> Binding<String> {
         Binding(get: { draft[key] ?? "" }, set: { draft[key] = $0 })
@@ -164,7 +167,8 @@ struct CrewEditorSheet: View {
     private func textRow(_ f: CrewEditorField) -> some View {
         HStack(spacing: AASpacing.s) {
             label(f)
-            TextField(f.label, text: text(f.key))
+            // Blank prompt: an empty value shows an empty box (as on Windows), never the label as a fake value.
+            TextField(f.label, text: text(f.key), prompt: Text(""))
                 .textFieldStyle(.roundedBorder)
                 .labelsHidden()
                 .onSubmit { Task { await save() } }
@@ -195,7 +199,7 @@ struct CrewEditorSheet: View {
                 Label(hint, systemImage: "exclamationmark.triangle.fill")
                     .font(.aaMono(AAType.caption))
                     .foregroundStyle(AAColor.Status.dueSoon)
-                    .padding(.leading, 178)
+                    .padding(.leading, Self.labelWidth + AASpacing.s)
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(.opacity)
             }

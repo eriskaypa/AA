@@ -60,16 +60,16 @@ struct CrewScheduleBuilderView: View {
                 crew.scheduleVesselId = v
                 CrewPersist.save(env)
             })
-        return CrewFlowLayout(spacing: 6, lineSpacing: 6) {
-            HStack(spacing: 6) {
-                Text(CrewScheduleText.linkedVessel).font(.aaMono(AAType.small))
-                Picker(CrewScheduleText.linkedVessel, selection: selection) {
-                    ForEach(choices, id: \.id) { c in Text(c.name).tag(c.id) }
-                }
-                .labelsHidden()
-                .frame(width: 180)
-                .help(CrewScheduleText.linkedVesselHelp)
+        let vessel = HStack(spacing: 6) {
+            Text(CrewScheduleText.linkedVessel).font(.aaMono(AAType.small))
+            Picker(CrewScheduleText.linkedVessel, selection: selection) {
+                ForEach(choices, id: \.id) { c in Text(c.name).tag(c.id) }
             }
+            .labelsHidden()
+            .frame(width: 180)
+            .help(CrewScheduleText.linkedVesselHelp)
+        }
+        let buttons = HStack(spacing: 6) {
             Button { Task { await saveAs(crew) } } label: {
                 Label(CrewScheduleText.saveAs, systemImage: "square.and.arrow.down")
             }
@@ -87,6 +87,11 @@ struct CrewScheduleBuilderView: View {
             }
             .help(CrewScheduleText.importHelp)
         }
+        // One row when it fits, else the vessel link above the four actions (never a lone wrapped button).
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: AASpacing.m) { vessel; Spacer(minLength: 0); buttons }
+            VStack(alignment: .leading, spacing: 6) { vessel; buttons }
+        }
         .controlSize(.small)
         .buttonStyle(.bordered)
         .labelStyle(.titleAndIcon)
@@ -99,29 +104,38 @@ struct CrewScheduleBuilderView: View {
     // MARK: BUILD-112…115 add row
 
     private func addRow(_ crew: CrewMember) -> some View {
-        CrewFlowLayout(spacing: 6, lineSpacing: 6) {
-            Text(CrewScheduleText.add).font(.aaMono(AAType.small, weight: .bold))
-            OptionalDatePicker(value: $addDate)
-            TextField(CrewScheduleText.timePlaceholder, text: $time)
-                .textFieldStyle(.roundedBorder)
-                .font(.aaMono(AAType.small))
-                .frame(width: 60)
-                .help(CrewScheduleText.timeHelp)
-            Picker("Kind", selection: Binding(get: { kindRaw }, set: { kindRaw = $0; pendingRef = nil })) {
-                ForEach(CrewScheduleText.kinds, id: \.rawValue) { k in Text(CrewScheduleText.kindName(k)).tag(k.rawValue) }
+        // Line 1: when and what kind; line 2: the title (fills) with Pick item… and + Add (the WPF WrapPanel, laid out
+        // deliberately instead of wrapping wherever the width runs out).
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text(CrewScheduleText.add).font(.aaMono(AAType.small, weight: .bold))
+                OptionalDatePicker(value: $addDate)
+                TextField(CrewScheduleText.timePlaceholder, text: $time)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.aaMono(AAType.small))
+                    .frame(width: 60)
+                    .help(CrewScheduleText.timeHelp)
+                Picker("Kind", selection: Binding(get: { kindRaw }, set: { kindRaw = $0; pendingRef = nil })) {
+                    ForEach(CrewScheduleText.kinds, id: \.rawValue) { k in
+                        Label(CrewScheduleText.kindName(k), systemImage: k == .note ? "note.text" : CrewScheduleRow.symbol(k)).tag(k.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 130)
+                Spacer(minLength: 0)
             }
-            .labelsHidden()
-            .frame(width: 110)
-            TextField(CrewScheduleText.titlePlaceholder, text: $title)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 240)
-                .onSubmit { Task { await add(crew) } }
-            Button(CrewScheduleText.pickItem) { Task { await pick() } }
-                .disabled(kind == .note)
-                .help(CrewScheduleText.pickItemHelp)
-            Button { Task { await add(crew) } } label: { Label("Add", systemImage: "plus") }
-                .aaProminent()
-                .help(CrewScheduleText.addButton)
+            HStack(spacing: 6) {
+                TextField(CrewScheduleText.titlePlaceholder, text: $title)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(minWidth: 200, maxWidth: .infinity)
+                    .onSubmit { Task { await add(crew) } }
+                Button(CrewScheduleText.pickItem) { Task { await pick() } }
+                    .disabled(kind == .note)
+                    .help(CrewScheduleText.pickItemHelp)
+                Button { Task { await add(crew) } } label: { Label("Add", systemImage: "plus") }
+                    .aaProminent()
+                    .help(CrewScheduleText.addButton)
+            }
         }
         .controlSize(.small)
     }
@@ -291,6 +305,24 @@ struct CrewScheduleRow: View {
     let delete: () -> Void
     @State private var hovering = false
 
+    /// The kind glyphs of BUILD-117 (Task ✓, Procedure 📋, Equipment ⚙, Note •) as SF Symbols.
+    static func symbol(_ k: ScheduleKind) -> String {
+        switch k {
+        case .task: return "checkmark.circle"
+        case .procedure: return "list.clipboard"
+        case .equipment: return "gearshape"
+        default: return "circle.fill"
+        }
+    }
+
+    /// Per-kind tints (DECISIONS 07 Q-10 kind colours; Note muted).
+    static func tint(_ k: ScheduleKind) -> Color {
+        switch k {
+        case .task, .procedure, .equipment: return AAColor.accent
+        default: return AAColor.muted
+        }
+    }
+
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
             Toggle("", isOn: Binding(get: { entry.done }, set: { _ in toggle() }))
@@ -300,8 +332,11 @@ struct CrewScheduleRow: View {
                 .font(.aaMono(AAType.small))
                 .foregroundStyle(AAColor.muted)
                 .frame(width: 46, alignment: .leading)
-            Text(entry.kindIcon)
+            Image(systemName: Self.symbol(entry.kind))
+                .font(.system(size: entry.kind == .note ? 6 : 11, weight: .semibold))
+                .foregroundStyle(Self.tint(entry.kind))
                 .frame(width: 20)
+                .help(CrewScheduleText.kindName(entry.kind))
                 .accessibilityLabel(CrewScheduleText.kindName(entry.kind))
             AAStrikeText(entry.title, struck: entry.done)
                 .font(.aaMono(AAType.small))

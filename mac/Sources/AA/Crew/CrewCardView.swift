@@ -71,28 +71,28 @@ struct CrewCardView: View {
         }
     }
 
-    // CREW-020
+    // CREW-020 — the name beside Edit…, the subtitle below across the full card width (no wrap under the button).
     private func header(_ m: CrewMember) -> some View {
-        HStack(alignment: .top, spacing: AASpacing.m) {
-            VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: AASpacing.m) {
                 Text(CrewRoster.displayName(m))
                     .font(.aaMono(22, weight: .bold))
                     .foregroundStyle(AAColor.fg)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
-                let sub = CrewRoster.subtitle(m)
-                if !sub.isEmpty {
-                    Text(sub)
-                        .font(.aaMono(AAType.body))
-                        .foregroundStyle(AAColor.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .textSelection(.enabled)
-                }
+                Spacer(minLength: AASpacing.s)
+                Button(action: edit) { Label("Edit…", systemImage: "pencil") }
+                    .controlSize(.regular)
+                    .help("Edit this crew member's details (including the sign-off / contract date).")
             }
-            Spacer(minLength: AASpacing.s)
-            Button(action: edit) { Label("Edit…", systemImage: "pencil") }
-                .controlSize(.regular)
-                .help("Edit this crew member's details (including the sign-off / contract date).")
+            let sub = CrewRoster.subtitle(m)
+            if !sub.isEmpty {
+                Text(sub)
+                    .font(.aaMono(AAType.body))
+                    .foregroundStyle(AAColor.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .textSelection(.enabled)
+            }
         }
     }
 

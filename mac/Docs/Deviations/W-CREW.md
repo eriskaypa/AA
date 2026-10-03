@@ -27,7 +27,13 @@
 | export | CREW-105, 09 §6.4 | `Export complete` offers `Open` / `Show in Finder` / `Done` (superset of Yes/No). |
 | table | CREW-100…104 | The table is the `crew-table` Window scene (non-modal) and reflects the live roster in the current sort order. The chooser also supports drag-to-reorder, Space toggles, ⌃⌘↑/↓, and a `Columns` menu bound to the same state; Contract Status / Days cells are tinted with the roster colours. Choices are written on every rebuild; the store is marked dirty only when a value actually changed. |
 | roster | CREW-010…017, 09 §6.4 | Row context menu (Edit…, Open Checklist…, Open Schedule…, Move to Trash…), double-click = Edit…, ⌘⌫ / ⌫ = Move to Trash (with the confirmation), ⌥⌘F focuses the search field (placeholder shown), an expiring-count capsule beside the title, empty states. Day counts refresh when the tab is selected and at `NSCalendarDayChanged` (09 §8 Q15). |
-| card | CREW-020…025 | Section glyphs are SF Symbols (`person.text.rectangle`, `ferry`, `book.closed`, `cross.case`, `ruler`, `person.2`); values are selectable; banner and checklist box carry symbols. |
-| editor | CREW-070…076 | Sheet with a segmented Details / Checklist / Schedule switch; Esc = Cancel (Windows had none); date rows use `OptionalDatePicker` + the 130-pt text box with the same one-way sync. |
-| schedule | BUILD-112, 06 §6.5 | Visible placeholders `HH:mm` and `What... (or pick an item)`; hover-revealed ✎/✕; context menu on entries. |
+| card | CREW-020…025 | The subtitle runs under the name across the full card width (not beside the Edit… button). Section glyphs are SF Symbols (`person.text.rectangle`, `ferry`, `book.closed`, `cross.case`, `ruler`, `person.2`); values are selectable; banner and checklist box carry symbols. |
+| editor | CREW-070…076 | Sheet with a segmented Details / Checklist / Schedule switch; Esc = Cancel (Windows had none); date rows use `OptionalDatePicker` + the 130-pt text box with the same one-way sync. The label column is 200 pt (170 px on Windows) so the monospaced `Sign-off date  (contract)` label stays on one line; empty text rows show an empty box (no placeholder). |
+| schedule | BUILD-111/112/117, 06 §6.5 | Visible placeholders `HH:mm` and `What... (or pick an item)`; hover-revealed ✎/✕; context menu on entries. The vessel bar is one row when it fits, else the vessel link above the four buttons; the add row is two deliberate lines (date · time · kind, then title · Pick item… · + Add). Kind glyphs ✓ / 📋 / ⚙ / • are SF Symbols (`checkmark.circle`, `list.clipboard`, `gearshape`, a small dot) with the kind name as tooltip and accessibility label. |
 | busy | CREW-030 | The workbook is parsed off the main actor behind `AAProgressOverlay`; Import is disabled while running. |
+
+## Audit fixes (independent audit, Stage W)
+
+| Item | Spec ref | Change |
+|---|---|---|
+| import save | CREW-036, CREW-040 | A failed `Save()` after the upsert is reported through the shell's save-error path (`env.reportError`) and the import continues (status line, dates log, expiry report); it no longer shows `Import failed` for an import whose members are already in the roster. |

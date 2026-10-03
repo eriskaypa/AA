@@ -60,12 +60,9 @@ import AACore
 
         session.convertAll()
         let result = CrewImport.apply(session, to: env.store)
-        do {
-            try env.store.save()
-        } catch {
-            await dialogs.error(CrewImport.failedTitle, CrewImport.failureMessage(error.localizedDescription))
-            return
-        }
+        // CREW-036 `Save()`: the roster is already updated, so a failed write is reported like every other save
+        // failure (the data stays dirty and is retried) instead of claiming the import itself failed.
+        CrewPersist.save(env)
         if let first = result.memberIDs.first, let m = env.store.crewMember(id: first),
            model.selectedID == nil || env.store.crewMember(id: model.selectedID!) == nil {
             model.select(memberID: m.id, key: m.key, clearFilters: false)
