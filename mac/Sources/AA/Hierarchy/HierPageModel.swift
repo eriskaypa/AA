@@ -3,6 +3,7 @@
 //       re-selects), HIER-030…034 (groups), HIER-040 (selection binds the details; flush first), HIER-110 (open in
 //       new window), HIER-120/121 (navigation and selection persistence), HIER-125 (live refresh), M01 (drag to group),
 //       M04 (focus the name after + New), §3.2 (selection helpers), §8 Q-01/Q-05/Q-06/Q-07/Q-08/Q-09/Q-29/Q-32;
+//       V2-COMPAT (items sharing an Id: rows, selection and the index use `HierRowKey` keys), V2-SCALE (reveal);
 //       ARCHITECTURE.md §2.4 (ids, never model references, across reloads), §9.7 (memoised build, O(1) lookups).
 import AppKit
 import SwiftUI
@@ -21,10 +22,13 @@ final class HierPageModel {
 
     /// The built sidebar (rebuilt on structural changes only, so typing a name never re-sorts under the cursor).
     private(set) var sidebar = HierSidebar.empty
-    /// id → item of this kind, rebuilt with the sidebar (O(1) row lookups, ARCH §9.7).
+    /// row key → item of this kind, rebuilt with the sidebar (O(1) row lookups, ARCH §9.7). The key is the item Id,
+    /// except for a later item sharing an Id (`HierRowKey`), so every row resolves to its own object.
     @ObservationIgnored private(set) var index: [UUID: HierarchyItem] = [:]
+    /// object → row key (the inverse of `index`), so an action on objects re-selects the very rows it touched.
+    @ObservationIgnored private var keyByObject: [ObjectIdentifier: UUID] = [:]
 
-    /// The List selection.
+    /// The List selection (row keys; the item Id except for a later item sharing an Id).
     var selection: Set<UUID> = [] { didSet { selectionDidChange(old: oldValue) } }
     /// Selection order (first-selected first, HIER-016).
     private(set) var selectionOrder: [UUID] = []
@@ -38,8 +42,15 @@ final class HierPageModel {
     /// Asks the header of this item to focus the Name box with all text selected (F2 / ↩ / + New); the header
     /// clears it once honoured (it may be created after the request, e.g. right after + New).
     var pendingNameFocusID: UUID?
-    /// Bumped to ask the sidebar to reveal a row.
+    /// Bumped to ask the sidebar to reveal a row. Set before the sidebar exists too (HIER-121 restore in `init`); the
+    /// sidebar honours the current request when it appears and every later one (`.task(id:)`).
     private(set) var revealRequest: (id: UUID, token: Int)?
+
+    /// The List identity to scroll to for the current reveal request (the row, or its collapsed section's header).
+    var revealRowID: String? {
+        guard let key = revealRequest?.id else { return nil }
+        return sidebar.revealRowID(for: key) { isExpanded($0) }
+    }
     /// A child (subtask / step / component) to reveal after a navigation (DECISIONS 02 Q-11).
     var pendingChildID: UUID?
     @ObservationIgnored let searchLocator = HierFieldLocator()
@@ -79,8 +90,15 @@ final class HierPageModel {
     func rebuild() {
         let items = store.items(of: kind)
         var idx: [UUID: HierarchyItem] = [:]
-        for i in items where idx[i.id] == nil { idx[i.id] = i }
+        var keys: [ObjectIdentifier: UUID] = [:]
+        idx.reserveCapacity(items.count)
+        keys.reserveCapacity(items.count)
+        for (key, i) in zip(HierRowKey.keys(for: items.map(\.id)), items) {
+            idx[key] = i
+            keys[ObjectIdentifier(i)] = key
+        }
         index = idx
+        keyByObject = keys
         sidebar = HierSidebarBuilder.build(store: store, kind: kind, query: query, sortAZ: sortAZ)
         // Q-01: keep the selection while the items are still shown; drop what disappeared or was filtered out.
         let visible = Set(sidebar.visibleItemIDs)
@@ -99,6 +117,9 @@ final class HierPageModel {
 
     /// The selected real items in selection order (§3.2 `SelectedHierarchyItems`).
     var selectedItems: [HierarchyItem] { selectionOrder.compactMap { item($0) } }
+
+    /// The row keys of these objects (their Ids for well-formed data).
+    func rowKeys(_ items: [HierarchyItem]) -> [UUID] { items.map { keyByObject[ObjectIdentifier($0)] ?? $0.id } }
 
     /// Items for an explicit id set (context menus act on the clicked set), in display order.
     func items(for ids: Set<UUID>) -> [HierarchyItem] {
@@ -123,7 +144,8 @@ final class HierPageModel {
         env.flushAllEditors()
         if editingNameID != nil { editingNameID = nil }
         primaryID = id
-        HierUiState.setSelectedID(store.data.ui, kind: kind, id)          // HIER-121 (per device, no dirty mark)
+        // HIER-121 (per device, no dirty mark): the item's real Id, never a derived row key.
+        HierUiState.setSelectedID(store.data.ui, kind: kind, id.map { item($0)?.id ?? $0 })
         if kind == .vessel, id != nil, !Self.snapshotTabPinned { detailTab = .quickCards }   // HIER-040 step 7 / HIER-100
     }
 
@@ -288,19 +310,17 @@ final class HierPageModel {
                                         rows: choices.map { ItemPickerRow(display: $0.display, tag: $0.tag) },
                                         preselected: common.map { [$0] } ?? [], mode: .single)
         guard let picked = await dialogs.pickItems(request), let tag = picked.first else { return }   // Q-08
-        let ids = items.map(\.id)
         HierPageOps.assign(store: store, items, to: HierGroupPicker.groupID(fromTag: tag))
         HierPersist.save(env, dialogs: dialogs)
         rebuild()
-        select(ids)
+        select(rowKeys(items))
     }
 
     func removeFromGroup(_ items: [HierarchyItem], dialogs: DialogPresenter) {
-        let ids = items.map(\.id)
         guard HierPageOps.removeFromGroup(store: store, items) > 0 else { return }
         HierPersist.save(env, dialogs: dialogs)
         rebuild()
-        select(ids)
+        select(rowKeys(items))
     }
 
     /// M01: rows dropped onto a section header (nil = Ungrouped).
@@ -310,7 +330,7 @@ final class HierPageModel {
         if HierPageOps.assign(store: store, items, to: groupID) > 0 {
             HierPersist.save(env, dialogs: dialogs)
             rebuild()
-            select(items.map(\.id))
+            select(rowKeys(items))
         }
         return true
     }

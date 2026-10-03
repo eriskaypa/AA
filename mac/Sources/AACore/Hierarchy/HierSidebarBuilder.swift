@@ -2,7 +2,8 @@
 //       (grouped list, section order, row order, A→Z, empty-group placeholder, expand keys), HIER-019 (scale),
 //       §3.1 (RefreshList algorithm and the Mac decisions: section by group Id, stable sort, first-wins duplicate
 //       group ids, creation-order tie-break), §7.7 (vectors), §8 Q-02 (empty group counts 0), Q-03 (no placeholders
-//       while searching), Q-11, Q-12, Q-30; DECISIONS 04 Q-E (`#tag` matching).
+//       while searching), Q-11, Q-12, Q-30; DECISIONS 04 Q-E (`#tag` matching); V2-COMPAT (items sharing an Id each
+//       keep their own row: `HierRowKey`).
 import Foundation
 
 /// One item as the sidebar sees it (a value snapshot, so the build is pure and testable).
@@ -11,8 +12,49 @@ public struct HierSidebarItem: Sendable, Hashable {
     public var name: String
     public var groupID: UUID?
     public var tags: [String]
+    /// The row key (`HierRowKey`); set by `build`.
+    var key: UUID?
     public init(id: UUID, name: String, groupID: UUID? = nil, tags: [String] = []) {
         self.id = id; self.name = name; self.groupID = groupID; self.tags = tags
+    }
+}
+
+/// Row keys. Malformed data can hold two items of one kind under the same Id (Windows lists rows by object, so both
+/// show with their own names). The sidebar rows, the List selection and the page's id → item index use these keys:
+/// the first item with an Id keeps the Id itself, and each later one gets a key derived from the Id and its
+/// occurrence. Every row then has its own identity and can be seen, selected and renamed. Data never stores a key;
+/// persisted selection, windows and navigation use the real Id (the first item wins, like `FindById`).
+public enum HierRowKey {
+    /// One key per id, in the same order (data order).
+    public static func keys(for ids: [UUID]) -> [UUID] {
+        var seen: [UUID: Int] = [:]
+        seen.reserveCapacity(ids.count)
+        return ids.map { id in
+            let n = seen[id, default: 0]
+            seen[id] = n + 1
+            return n == 0 ? id : derived(id, occurrence: n)
+        }
+    }
+
+    /// The key of the `occurrence`-th (1-based after the first) item sharing `id`: the Id's bytes XOR a splitmix64
+    /// stream of the occurrence (deterministic, so a rebuild keeps the selection).
+    public static func derived(_ id: UUID, occurrence: Int) -> UUID {
+        var state = UInt64(bitPattern: Int64(occurrence)) &+ 0x9E37_79B9_7F4A_7C15
+        func next() -> UInt64 {
+            state = state &+ 0x9E37_79B9_7F4A_7C15
+            var z = state
+            z = (z ^ (z >> 30)) &* 0xBF58_476D_1CE4_E5B9
+            z = (z ^ (z >> 27)) &* 0x94D0_49BB_1331_11EB
+            return z ^ (z >> 31)
+        }
+        let a = next(), b = next()
+        var bytes = withUnsafeBytes(of: id.uuid) { Array($0) }
+        for i in 0..<8 {
+            bytes[i] ^= UInt8(truncatingIfNeeded: a >> (8 * UInt64(i)))
+            bytes[i + 8] ^= UInt8(truncatingIfNeeded: b >> (8 * UInt64(i)))
+        }
+        return UUID(uuid: (bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                           bytes[8], bytes[9], bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]))
     }
 }
 
@@ -25,7 +67,9 @@ public struct HierSidebarGroup: Sendable, Hashable {
 
 /// A row: a real item, or the "(empty — right-click an item to assign)" placeholder of an empty group.
 public struct HierSidebarRow: Sendable, Hashable, Identifiable {
+    /// The row identity: the row key's `netString`, or `"placeholder:<group id>"`.
     public var id: String
+    /// The row key (`HierRowKey`: the item Id, or a derived key for a later item sharing that Id); nil = placeholder.
     public var itemID: UUID?
     public var isPlaceholder: Bool { itemID == nil }
     public init(id: String, itemID: UUID?) { self.id = id; self.itemID = itemID }
@@ -54,7 +98,8 @@ public struct HierSidebar: Sendable, Hashable {
     public var sections: [HierSidebarSection]
     /// HIER-006 hint (nil = hidden).
     public var emptyHint: String?
-    /// Every shown item id in display order (section order, then row order).
+    /// Every shown row key in display order (section order, then row order). A key is the item Id except for a
+    /// later item sharing an Id (`HierRowKey`).
     public var visibleItemIDs: [UUID]
     /// Items of the kind in total (regardless of the query).
     public var totalCount: Int
@@ -65,6 +110,16 @@ public struct HierSidebar: Sendable, Hashable {
     }
 
     public static let empty = HierSidebar()
+
+    /// The List identity of a section's header row.
+    public static func headerRowID(_ sectionID: String) -> String { "header:\(sectionID)" }
+
+    /// HIER-120/121 reveal target for a row key: the row itself when its section is expanded, else the section's
+    /// header (a collapsed group keeps its rows hidden, as on Windows); nil when the key is not shown.
+    public func revealRowID(for key: UUID, isExpanded: (HierSidebarSection) -> Bool) -> String? {
+        guard let s = sections.first(where: { $0.rows.contains { $0.itemID == key } }) else { return nil }
+        return isExpanded(s) ? key.netString : Self.headerRowID(s.id)
+    }
 }
 
 public enum HierSidebarBuilder {
@@ -90,7 +145,12 @@ public enum HierSidebarBuilder {
                              sortAZ: Bool) -> HierSidebar {
         let q = NetText.trim(query)
         let searching = !q.isEmpty
-        let shown = searching ? items.filter { matches($0, trimmedQuery: q) } : items
+        let keyed = zip(items, HierRowKey.keys(for: items.map(\.id))).map { item, key -> HierSidebarItem in
+            var i = item
+            i.key = key
+            return i
+        }
+        let shown = searching ? keyed.filter { matches($0, trimmedQuery: q) } : keyed
 
         // Duplicate group ids (malformed data): the first wins (§3.1 note).
         var uniqueGroups: [HierSidebarGroup] = []
@@ -103,6 +163,11 @@ public enum HierSidebarBuilder {
         var ungrouped: [HierSidebarItem] = []
         for item in shown {
             if let g = item.groupID, groupIDs.contains(g) { byGroup[g, default: []].append(item) } else { ungrouped.append(item) }
+        }
+
+        func row(_ item: HierSidebarItem) -> HierSidebarRow {
+            let key = item.key ?? item.id
+            return HierSidebarRow(id: key.netString, itemID: key)
         }
 
         func ordered(_ rows: [HierSidebarItem]) -> [HierSidebarItem] {
@@ -124,7 +189,7 @@ public enum HierSidebarBuilder {
         for g in sortedGroups {
             let rows = ordered(byGroup[g.id] ?? [])
             if rows.isEmpty && searching { continue }                                // Q-03
-            var sectionRows = rows.map { HierSidebarRow(id: $0.id.netString, itemID: $0.id) }
+            var sectionRows = rows.map(row)
             if rows.isEmpty { sectionRows.append(HierSidebarRow(id: "placeholder:\(g.id.netString)", itemID: nil)) }
             sections.append(HierSidebarSection(id: "group:\(g.id.netString)", groupID: g.id, title: g.name,
                                                count: rows.count, rows: sectionRows,
@@ -136,7 +201,7 @@ public enum HierSidebarBuilder {
         if !ungrouped.isEmpty || showEmptyUngrouped {
             let rows = ordered(ungrouped)
             sections.append(HierSidebarSection(id: "ungrouped", groupID: nil, title: ungroupedName, count: rows.count,
-                                               rows: rows.map { HierSidebarRow(id: $0.id.netString, itemID: $0.id) },
+                                               rows: rows.map(row),
                                                expandKey: expandKey(kind: kind, sectionName: ungroupedName)))
         }
 

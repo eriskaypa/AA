@@ -15,7 +15,7 @@ struct HierDetailPane: View {
         Group {
             if let item = model.primaryItem {
                 HierItemDetail(model: model, item: item)
-                    .id(item.id)
+                    .id(ObjectIdentifier(item))                 // V2-COMPAT: items sharing an Id get their own details
             } else {
                 AAEmptyState(title: HierText.noSelectionTitle, symbol: "sidebar.left", message: HierText.noSelectionMessage)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)

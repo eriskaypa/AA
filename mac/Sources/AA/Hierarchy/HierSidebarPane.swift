@@ -3,7 +3,9 @@
 //       (grouped list, headers "name (N)", placeholders, A→Z, expand persistence, multi-selection, wrapped names,
 //       virtualised scale, context menu), HIER-M01 (drag to group), HIER-M02 (⌘⌫ / ⌫ delete), HIER-M03 (double-click
 //       opens a window), HIER-M05 (lock glyph), §6.2 (Mac sidebar), §8 Q-02, Q-29, Q-30; 03 §6.5.1.10 (list role
-//       hierarchySidebar: ⌘⌫ "Move to Trash", ↩ = Rename, X-8: double-click = Open in New Window), T-KB-02/03/24/25.
+//       hierarchySidebar: ⌘⌫ "Move to Trash", ↩ = Rename, X-8: double-click = Open in New Window), T-KB-02/03/24/25;
+//       HIER-120/121 + §3.2 `SelectItemsByIds` (the selected row is revealed — at launch too; V2-SCALE), V2-COMPAT
+//       (rows keyed by `HierRowKey`, so items sharing an Id keep their own rows).
 import AppKit
 import SwiftUI
 import AACore
@@ -156,6 +158,7 @@ struct HierSidebarList: View {
                         // The header is a non-selectable row, not a pinned List header: a pinned (floating) header
                         // draws a full-width separator that does not line up with the row separators.
                         HierSectionHeader(section: section, model: model)
+                            .id(HierSidebar.headerRowID(section.id))
                             .selectionDisabled()
                             .listRowSeparator(.hidden)
                             .accessibilityAddTraits(.isHeader)
@@ -202,15 +205,31 @@ struct HierSidebarList: View {
                 delete: { Task { await model.deleteSelection(dialogs: dialogs) } },
                 primary: { model.beginRename() }))
             .overlay(alignment: model.sidebar.sections.isEmpty ? .center : .bottom) { hint }
-            .onChange(of: model.revealRequest?.token) { _, _ in
-                guard let id = model.revealRequest?.id else { return }
-                withAnimation(.snappy) { proxy.scrollTo(id.netString) }
+            // HIER-121 restores the selection before this view exists, so the current request is honoured on
+            // appear as well as on every new token (`.onChange` never sees the initial value).
+            .task(id: model.revealRequest?.token) {
+                guard model.revealRequest != nil else { return }
+                await reveal(with: proxy)
             }
         }
     }
 
+    /// Centres the requested row. The List measures its (wrapping, variable-height) rows lazily, so the first jump
+    /// lands on estimated offsets in a long list; the jump is repeated once the rows around the target have been
+    /// measured, which settles it on the row (V2-SCALE: 500 / 5 000-row sidebars).
+    private func reveal(with proxy: ScrollViewProxy) async {
+        for delay in HierSidebarList.revealPasses {
+            if delay > 0 { try? await Task.sleep(for: .milliseconds(delay)) }
+            guard !Task.isCancelled, let target = model.revealRowID else { return }
+            proxy.scrollTo(target, anchor: .center)
+        }
+    }
+
+    /// Delays (ms) before each scroll pass of a reveal.
+    static let revealPasses = [0, 16, 80, 200]
+
     private func dragIDs(for id: UUID) -> [UUID] {
-        model.selection.contains(id) ? model.selectedItems.map(\.id) : [id]
+        model.selection.contains(id) ? model.rowKeys(model.selectedItems) : [id]       // row keys (V2-COMPAT)
     }
 
     @ViewBuilder private var hint: some View {
