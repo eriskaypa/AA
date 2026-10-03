@@ -36,6 +36,27 @@ public struct ShellXShortcutGroup: Sendable, Hashable, Identifiable {
     }
 }
 
+/// One row of the Keyboard Shortcuts table: a menu's title row followed by its entries. The window shows the groups as
+/// rows of one flat table, not as `Section`s: a SwiftUI `Table` with sections is an outline view whose section
+/// expansion re-enters `NSTableView`'s row-height cache while the view is being made, which AppKit reports as
+/// "reentrant operation in its NSTableView delegate" (Stage V round 2, design rule 18).
+public enum ShellXShortcutTableRow: Sendable, Hashable, Identifiable {
+    case header(title: String, count: Int, isFirst: Bool)
+    case entry(ShellXShortcutEntry)
+
+    public var id: String {
+        switch self {
+        case .header(let title, _, _): return "group:" + title
+        case .entry(let e): return "entry:" + e.id
+        }
+    }
+
+    public var entry: ShellXShortcutEntry? {
+        if case .entry(let e) = self { return e }
+        return nil
+    }
+}
+
 public enum ShellXShortcutCatalog {
     /// The group of rows that are not menu items (§6.5.1.4).
     public static let inWindowGroupTitle = "In-Window Keys"
@@ -114,6 +135,16 @@ public enum ShellXShortcutCatalog {
     static func matches(_ e: ShellXShortcutEntry, _ q: String) -> Bool {
         NetText.containsIgnoreCase(e.title, q) || NetText.containsIgnoreCase(e.mac, q)
             || NetText.containsIgnoreCase(e.windows, q) || NetText.containsIgnoreCase(e.menu, q)
+    }
+
+    /// The groups flattened into table rows: each group's header row, then its entries, in group order.
+    public static func tableRows(_ groups: [ShellXShortcutGroup]) -> [ShellXShortcutTableRow] {
+        var rows: [ShellXShortcutTableRow] = []
+        for (i, g) in groups.enumerated() {
+            rows.append(.header(title: g.title, count: g.entries.count, isFirst: i == 0))
+            rows.append(contentsOf: g.entries.map { .entry($0) })
+        }
+        return rows
     }
 
     /// Number of entries across groups.
