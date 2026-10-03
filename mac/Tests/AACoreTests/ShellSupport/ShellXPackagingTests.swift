@@ -103,7 +103,15 @@ import Testing
         #expect(text.hasPrefix("#!/bin/bash"))
         #expect(text.contains("set -euo pipefail"))
         #expect(text.contains("--options runtime"))
-        #expect(text.contains("ditto -c -k --keepParent"))
+        // SHELL-191: ditto (not zip -r) without AppleDouble "._*" entries, checked after packing; the seal survives a
+        // plain unzip (V-PACKAGE).
+        #expect(text.contains("ditto -c -k --norsrc --noextattr --noqtn --keepParent"))
+        #expect(text.contains("AppleDouble ._ entries") && text.contains("signature invalid after a plain unzip"))
+        // BD.3.11 "-dirty" covers only mac/ (pathspec "."), never files outside mac/ or Finder metadata.
+        #expect(text.contains("status --porcelain -- ."))
+        // SHELL-184: Icon Composer asset → Assets.car only (the round AppIcon.icns stays) + CFBundleIconName.
+        #expect(text.contains("cp \"$T/actool/Assets.car\" \"$RES/Assets.car\""))
+        #expect(text.contains("plutil -replace CFBundleIconName -string AppIcon"))
         let launcher = Self.file("Packaging/AA (portable).command")
         #expect(fm.isExecutableFile(atPath: launcher.path))
         let lines = try String(contentsOf: launcher, encoding: .utf8)
@@ -133,5 +141,21 @@ import Testing
         // IHDR width/height = 1024 × 1024.
         let w = png[16..<20].reduce(0) { $0 << 8 | Int($1) }, h = png[20..<24].reduce(0) { $0 << 8 | Int($1) }
         #expect(w == 1024 && h == 1024)
+        // SHELL-184: the Icon Composer layered icon (macOS 26), layers from Packaging/make-app-icon.swift --layers.
+        let iconJSON = try Data(contentsOf: Self.file("Resources/AppIcon.icon/icon.json"))
+        let doc = try #require(try JSONSerialization.jsonObject(with: iconJSON) as? [String: Any])
+        let fill = try #require(doc["fill"] as? [String: Any])
+        #expect(fill["solid"] as? String == "extended-srgb:0.10588,0.10588,0.10588,1.00000")   // #1B1B1B outer ring
+        let groups = try #require(doc["groups"] as? [[String: Any]])
+        let names = groups.flatMap { ($0["layers"] as? [[String: Any]] ?? []).compactMap { $0["image-name"] as? String } }
+        #expect(names == ["letter.png", "dial.png"])                                            // letter above dial
+        for name in names {
+            let layer = try Data(contentsOf: Self.file("Resources/AppIcon.icon/Assets/\(name)"))
+            #expect(layer.prefix(8) == Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]))
+            let lw = layer[16..<20].reduce(0) { $0 << 8 | Int($1) }, lh = layer[20..<24].reduce(0) { $0 << 8 | Int($1) }
+            #expect(lw == 1024 && lh == 1024)
+        }
+        let platforms = try #require(doc["supported-platforms"] as? [String: Any])
+        #expect(platforms["squares"] as? [String] == ["macOS"])
     }
 }

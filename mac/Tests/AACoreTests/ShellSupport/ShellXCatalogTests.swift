@@ -139,7 +139,9 @@ private enum ShellXTestSettingsTab: String, Hashable, Codable { case general, se
         #expect(d29.hasPrefix("This copy of AA now saves to and syncs from:\n\n/Volumes/S/aa-shared.zip\n\n"))
         #expect(d29.contains("autosaves there every minute") && !d29.contains("10 minutes"))   // DECISIONS 03 Q-7
         #expect(ShellXText.stopSharedMessage.contains("on this Mac only") && !ShellXText.stopSharedMessage.contains("PC"))
-        #expect(ShellXText.encryptConfirmMessage.hasPrefix("Encrypt this Mac's data file at rest with the macOS Keychain"))
+        // 01 §6.5 Mac wording, verbatim (DATA-202 A14: 01 owns the DATA-070 strings).
+        #expect(ShellXText.encryptConfirmMessage
+                == "Encrypt this Mac's data file at rest with a key stored in your macOS Keychain (tied to your user account on this Mac)?\n\n• Only THIS Mac's local file is encrypted.\n• Shared-save bundles, ZIP exports and Google Drive backups stay portable plaintext, so syncing between computers still works.\n• It can only be read back under your user account on this Mac.")
         #expect(!ShellXText.encryptConfirmMessage.contains("DPAPI") && !ShellXText.encryptConfirmMessage.contains("Windows"))
         #expect(ShellXText.identityPrompt.hasPrefix("Name this installation (e.g. a vessel or operator)."))
         #expect(ShellXText.translocationTitle == "Move AA to Applications")

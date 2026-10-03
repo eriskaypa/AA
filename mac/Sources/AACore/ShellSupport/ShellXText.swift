@@ -97,7 +97,8 @@ public enum ShellXText {
     public static let safeModeTitle = "Safe mode"                                             // D32
     public static let encryptInSafeMode = "Can't change encryption in read-only safe mode."
     public static let encryptTitle = "Encrypt local data file"                               // D33
-    public static let encryptConfirmMessage = "Encrypt this Mac's data file at rest with the macOS Keychain (tied to your user account on this Mac)?\n\n• Only THIS machine's local file is encrypted.\n• Shared-save bundles, ZIP exports and Google Drive backups stay portable plaintext, so syncing between computers still works.\n• It can only be read back under your user account on this Mac."
+    /// 01 §6.5 Mac wording (owner of the DATA-070 strings per DATA-202 A14), verbatim.
+    public static let encryptConfirmMessage = "Encrypt this Mac's data file at rest with a key stored in your macOS Keychain (tied to your user account on this Mac)?\n\n• Only THIS Mac's local file is encrypted.\n• Shared-save bundles, ZIP exports and Google Drive backups stay portable plaintext, so syncing between computers still works.\n• It can only be read back under your user account on this Mac."
     public static let encryptButton = "Encrypt"
     public static let encryptFailedTitle = "Encrypt local data file failed"                   // D34
 
