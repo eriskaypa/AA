@@ -10,16 +10,16 @@
 | Algorithm ids (BUILD-A17, A21, C1, C2, C3) | 5 / 5 done |
 | Placeholders left (`Scripts/check-placeholders.sh W-PDF`) | 0 |
 | `ContractStatus.wPdfImplemented` | true |
-| Tests (Swift Testing, `Tests/AACoreTests/Export/`) | 64 test functions (+22 extra parameterised link-scanner cases); 3 gated on `.wRich`, 1 dump suite gated on `AA_PDF_DUMP_DIR` |
+| Tests (Swift Testing, `Tests/AACoreTests/Export/`) | 67 test functions (+22 extra parameterised link-scanner cases); 3 gated on `.wRich`, 1 dump suite gated on `AA_PDF_DUMP_DIR` |
 
 ## Where each feature lives
 
 | IDs | Implementation |
 |---|---|
-| PDF-001 | `PdfExport.exportButtonTitle/Help`, `PdfExportItemButton` (AA/Export/PdfExportButtons.swift), `PdfExportFlows.exportItem`; the header button's placement is W-HIER's call site, ⌥⌘E / ⌘P rows are F3's router (already wired to `exportItem` / `printItem`). |
+| PDF-001 | `PdfExport.exportButtonTitle/Help`, `PdfExportCommand.item` (caption, tooltip, §6.2 symbol), `PdfExportFlows.exportItem`; the header button's placement is W-HIER's call site, ⌥⌘E / ⌘P rows are F3's router (already wired to `exportItem` / `printItem`). |
 | PDF-002…007 | `PdfExportFlows.exportItem` / `prepareItemExport` / `flushIfDirty` / `runBusy` (lock refusal, flush all editors, save panel with Windows-set file names, off-main render, "Export error" alert, auto-open). |
-| PDF-010…012, HIER-092, BUILD-039/040 (callers) | `PdfChecklistExportButtons`, `PdfExportFlows.exportChecklistPDF/XLSX`. |
-| PDF-020…027, BUILD-091…096, CONT-049 | `PdfExport.savedListsSelection`, `PdfExportFlows.exportSavedLists`, `PdfListStyleSheet`, `PdfSavedListsExportButtons`, `PdfSavedListContextMenuItem`, `PdfSavedListsBuilder` (BUILD-A17 / C3). |
+| PDF-010…012, HIER-092, BUILD-039/040 (callers) | `PdfExportCommand.checklistPDF/.checklistXLSX`, `PdfExportFlows.exportChecklistPDF/XLSX`; the buttons are W-BUILD's `ProcedureChecklistSection`. |
+| PDF-020…027, BUILD-091…096, CONT-049 | `PdfExport.savedListsSelection` (+ `ungroupedEntries` / `allEntriesResolved`, 06 §8 D1), `PdfExportFlows.exportSavedLists`, `PdfListStyleSheet`, `PdfExportCommand.savedList/.savedListMenu/.savedGroup/.savedAll`, `PdfSavedListsBuilder` (BUILD-A17 / C3); the buttons and context-menu item are W-BUILD's `SavedListsTabView`. |
 | PDF-030…045 | `PdfItemBuilder` (+ `PdfScaffold` header/footer, `PdfStyleSheet.pdfExporter`, `PdfPageSetup.pdfExporter`). |
 | PDF-050…055 | `PdfSavedListsBuilder`. |
 | PDF-060…077 | `PdfRichText` (fallback `stripXamlTags`, DOM path over W-RICH's `XamlDOM` + `XamlStyleResolver(.pdf)`, lists, tables, links, highlight, strike), `PdfLinkScanner`, `PdfFontResolver`. |
@@ -64,4 +64,15 @@ Snapshots re-rendered in both appearances (`--snapshot TabLists --sheet w-pdf.<i
 
 * None of the assigned IDs is open. Post-merge (Stage V): the `.wRich`-gated rich-text vectors; cross-agent UI checks
   of the export buttons inside W-HIER's header and W-BUILD's Specifics / Saved Lists views (they call
-  `PdfExportFlows` per ARCH §7.7; ready-made button views are available in `AA/Export/PdfExportButtons.swift`).
+  `PdfExportFlows` per ARCH §7.7 and read captions / tooltips / symbols from `PdfExportCommand` once the FIX-W-PDF
+  cross-owner requests are applied).
+
+## Fix round 1 (FIX-W-PDF, 2026-10-03)
+
+| Finding | Result |
+|---|---|
+| V-06 (BUILD-092/093/072): a list whose group was deleted was missing from "Export group (PDF)…" and printed first, unheaded, in "Export ALL (PDF)…" | Fixed. 06 §8 D1 is accepted (DECISIONS 06), so `PdfExport.savedListsSelection` treats a dangling `GroupId` as ungrouped in both scopes: group → "Ungrouped lists" = null + dangling lists, arranged order; ALL → F2's `allEntries` for resolved groups, then every ungrouped list under the trailing "Ungrouped" heading. F2's `SavedListOrder` untouched. Deviation row "D1 exports" in `Deviations/W-PDF.md`. Tests: `danglingGroupIsUngroupedInExports`, updated `savedListsSelectionEdges`. |
+| V-11 (PDF-001/010/020…022): unused ready-made export views; hosts hard-code captions and use non-§6.2 symbols; DEV-10 named an unused view | W-PDF side fixed: the four unused views (`AA/Export/PdfExportButtons.swift`) are deleted; the new `PdfExportCommand` (AACore) is the single source of every export caption, tooltip, accessibility label and §6.2 SF Symbol (tested in `exportCommandDescriptors`). DEV-10 now names the shipped `SavedListsTabView` buttons. Host edits (W-HIER `HierDetailPane`, W-BUILD `ProcedureChecklistSection` / `SavedListsTabView`) and the lead's `DEVIATIONS.md` row are cross-owner requests. |
+| V-11 (PDF-104, §7.16 #9): dark appearance only covered by a build-twice check | Fixed. `PdfAppearanceTests.darkAppearanceExportsMatchLight` builds every product (all showcase items, checklist-only PDFs, saved lists ALL / list / group bulleted + numbered, the engine demo) inside aqua and darkAqua (current drawing appearance, and `NSApp.appearance` when an app exists): DOMs equal, PDF bytes equal after removing `/CreationDate`, `/ModDate` and the random trailer `/ID`, page rasters pixel-identical, and the engine demo verified to draw real colour on white paper. |
+
+No view of W-PDF's changed appearance (only unused views were removed), so no snapshot re-render was needed.

@@ -1,6 +1,7 @@
 // Spec: 11 PDF-001…007, PDF-010…012, PDF-020…027 (UI flows: exact strings, default file names with the Windows
 //       invalid-character set, prompts, messages), §6.2 (render off-main), §7.15; 06 BUILD-039/040, 091…096;
-//       04 HIER-092, §3.8 (safe names), §7.9; 05 CONT-049. The AA target's `PdfExportFlows` presents panels and
+//       04 HIER-092, §3.8 (safe names), §7.9; 05 CONT-049; 06 §8 D1 (dangling GroupId = ungrouped in both group
+//       exports, DECISIONS 06 D1–D7 accepted). The AA target's `PdfExportFlows` presents panels and
 //       alerts and calls these helpers; everything testable lives here.
 import Foundation
 
@@ -110,12 +111,36 @@ public enum PdfExport {
                 let entries = SavedListOrder.groupEntries(data, groupID: gid) ?? []
                 return .entries(title: grp.name, PdfSnapshotBuilder.savedLists(entries))
             }
-            let entries = SavedListOrder.groupEntries(data, groupID: nil) ?? []
-            return .entries(title: ungroupedListsTitle, PdfSnapshotBuilder.savedLists(entries))
+            // 06 §8 D1 (accepted, DECISIONS 06): a dangling GroupId is ungrouped everywhere, so "Ungrouped lists"
+            // holds the null-group lists AND the dangling ones (incl. the selected list), in arranged order.
+            return .entries(title: ungroupedListsTitle, PdfSnapshotBuilder.savedLists(ungroupedEntries(data)))
         case .all:
             if data.checklistTemplates.isEmpty { return .noSavedLists }
-            return .entries(title: allSavedListsTitle, PdfSnapshotBuilder.savedLists(SavedListOrder.allEntries(data)))
+            return .entries(title: allSavedListsTitle, PdfSnapshotBuilder.savedLists(allEntriesResolved(data)))
         }
+    }
+
+    /// Whether a list counts as ungrouped for export: `GroupId` null or pointing at a deleted group (06 §8 D1).
+    @MainActor
+    static func isUngrouped(_ t: ChecklistTemplate, data: AppData) -> Bool {
+        guard let gid = t.groupId else { return true }
+        return !data.listGroups.contains { $0.id == gid }
+    }
+
+    /// Every ungrouped list (null or dangling `GroupId`) in collection order, untagged (06 §8 D1).
+    @MainActor
+    static func ungroupedEntries(_ data: AppData) -> [(template: ChecklistTemplate, group: String?)] {
+        data.checklistTemplates.filter { isUngrouped($0, data: data) }.map { (template: $0, group: nil) }
+    }
+
+    /// Export ALL order (PDF-027) with 06 §8 D1 applied: F2's `SavedListOrder.allEntries` for the lists whose group
+    /// exists (culture order of the lower-cased name, stable), then every ungrouped list — null OR dangling
+    /// `GroupId` — last, in collection order, untagged, so they print under the trailing "Ungrouped" heading as
+    /// the Saved Lists tab shows them (Windows keys a dangling id `""`, printing it first with no heading).
+    @MainActor
+    static func allEntriesResolved(_ data: AppData) -> [(template: ChecklistTemplate, group: String?)] {
+        let grouped = SavedListOrder.allEntries(data).filter { !isUngrouped($0.template, data: data) }
+        return grouped + ungroupedEntries(data)
     }
 
     // MARK: Rendering (off the main actor)

@@ -77,15 +77,75 @@ struct PdfBuilderTests {
         #expect(PdfExport.savedListsSelection(.list(nil), data: data) == .needSelection)
         #expect(PdfExport.savedListsSelection(.group(ofList: UUID()), data: data) == .needSelection)
         #expect(PdfExport.savedListsSelection(.all, data: AppData()) == .noSavedLists)
-        // A list whose GroupId dangles: "Ungrouped lists", and the list itself is not included.
+        // A list whose GroupId dangles (06 §8 D1, accepted): "Ungrouped lists", and the list itself IS included.
         let dangling = ChecklistTemplate(name: "Lost", groupId: UUID())
         let d = AppData(); d.checklistTemplates = [dangling]
-        #expect(PdfExport.savedListsSelection(.group(ofList: dangling.id), data: d) == .entries(title: "Ungrouped lists", []))
+        #expect(PdfExport.savedListsSelection(.group(ofList: dangling.id), data: d)
+                == .entries(title: "Ungrouped lists", [PdfSavedListEntry(group: nil, name: "Lost", items: [])]))
         // Empty name → "Saved list".
         let unnamed = ChecklistTemplate(name: "")
         let u = AppData(); u.checklistTemplates = [unnamed]
         if case .entries(let title, _) = PdfExport.savedListsSelection(.list(unnamed.id), data: u) { #expect(title == "Saved list") }
         else { Issue.record("expected entries") }
+    }
+
+    // TV: 06 §8 D1 (DECISIONS 06: D1–D7 accepted) — a dangling GroupId is ungrouped in BOTH group exports, in the
+    //     arranged order, exactly where the Saved Lists tab shows it ("Ungrouped", last).
+    @Test func danglingGroupIsUngroupedInExports() throws {
+        let deck = ListGroup(id: G(301), name: "Deck")
+        let d = AppData()
+        d.listGroups = [deck]
+        let lost = ChecklistTemplate(name: "Old list from a deleted group", groupId: G(399))
+        let plain = ChecklistTemplate(name: "Plain")
+        let anchoring = ChecklistTemplate(name: "Anchoring", groupId: deck.id)
+        let late = ChecklistTemplate(name: "Late plain")
+        d.checklistTemplates = [lost, plain, anchoring, late]
+        let names = { (sel: PdfExport.SavedListsSelection) -> [String] in
+            guard case .entries(_, let e) = sel else { return [] }
+            return e.map { "\($0.group ?? "nil"):\($0.name)" }
+        }
+        // Export group of the dangling list → "Ungrouped lists" with the null AND dangling lists, arranged order.
+        let group = PdfExport.savedListsSelection(.group(ofList: lost.id), data: d)
+        guard case .entries(let title, _) = group else { Issue.record("entries"); return }
+        #expect(title == "Ungrouped lists")
+        #expect(names(group) == ["nil:Old list from a deleted group", "nil:Plain", "nil:Late plain"])
+        // Same set from a genuinely ungrouped list.
+        #expect(names(PdfExport.savedListsSelection(.group(ofList: plain.id), data: d)) == names(group))
+        // Export ALL: named groups first, then every ungrouped list (null or dangling) under "Ungrouped".
+        let all = PdfExport.savedListsSelection(.all, data: d)
+        #expect(names(all) == ["Deck:Anchoring", "nil:Old list from a deleted group", "nil:Plain", "nil:Late plain"])
+        guard case .entries(let allTitle, let entries) = all else { return }
+        let doc = PdfSavedListsBuilder.build(title: allTitle, entries: entries, numbered: false, stamp: stamp)
+        #expect(styled(doc).dropFirst(2).map { "\($0.0.rawValue):\($0.1)" } == [
+            "H1:Deck", "H2:Anchoring   (0 items)", "H1:Ungrouped", "H2:Old list from a deleted group   (0 items)",
+            "H2:Plain   (0 items)", "H2:Late plain   (0 items)"])
+        // Matches the tab's sections (W-BUILD, D1): the dangling list sits under "Ungrouped", last.
+        #expect(BuilderSavedLists.resolvedGroup(lost, groups: d.listGroups) == nil)
+        // An empty-named existing group keeps the PDF-052 rule (no heading, sorts first) — unchanged.
+        let blank = ListGroup(id: G(302), name: "")
+        d.listGroups.append(blank)
+        let quiet = ChecklistTemplate(name: "Quiet", groupId: blank.id)
+        d.checklistTemplates.append(quiet)
+        #expect(names(PdfExport.savedListsSelection(.all, data: d)).first == ":Quiet")
+    }
+
+    // TV: 11 §6.2 SF Symbols, PDF-001/010/020…022 captions + tooltips (single source for the hosting views)
+    @Test func exportCommandDescriptors() {
+        typealias C = PdfExportCommand
+        #expect(C.item.title == "Export PDF\u{2026}" && C.item.symbol == "arrow.up.doc")
+        #expect(C.item.help == "Export this item, its hierarchy and relationships to an A4 PDF.")
+        #expect(C.checklistPDF.title == "Export checklist (PDF)" && C.checklistPDF.symbol == "list.bullet.rectangle.portrait")
+        #expect(C.checklistPDF.help == "Export ONLY the checklist (no notes, no relationships) as a printable A4 PDF.")
+        #expect(C.checklistXLSX.title == "Export checklist (Excel)" && C.checklistXLSX.symbol == "tablecells")
+        #expect(C.checklistXLSX.help == "Export ONLY the checklist as an Excel workbook (.xlsx).")
+        #expect(C.savedList.title == "Export this list (PDF)\u{2026}" && C.savedListMenu.title == C.savedList.title)
+        #expect(C.savedGroup.title == "Export group (PDF)\u{2026}" && C.savedAll.title == "Export ALL (PDF)\u{2026}")
+        for c in [C.savedList, .savedListMenu, .savedGroup, .savedAll] {
+            #expect(c.symbol == "doc.on.doc" && c.help == nil)
+        }
+        for c in C.allCases {
+            #expect(c.accessibilityLabel == c.title && !c.title.unicodeScalars.contains { $0.properties.isEmojiPresentation })
+        }
     }
 
     // TV: PDF-052 contiguity rules — empty group name = no group; adjacent same names merge; first null → no heading
