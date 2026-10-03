@@ -25,8 +25,15 @@ Branch `wave/W-SIRE`. Scope: spec 12 (SIRE 2.0) incl. Addendum SIRE-049…051, 0
 - Post-merge (gated on `.wRich`): body persistence round trip; quick-add bodies load in the container editor/viewer.
 
 ## Snapshots (both appearances, `scratchpad/snapshots/W-SIRE/`)
-Tab with a selected question (1500 and 1300 pt), unreadable saved body banner, candidate picker, kind picker,
-export sheet, Gemini prompt, Settings ▸ AI section.
+Tab with a selected question (1500 and 1300 pt), unreadable saved body banner, candidate picker, kind picker
+(question and section/chapter scope), export sheet, Gemini prompt, Settings ▸ AI section.
+
+## Independent audit (2026-10-02)
+- Clean rebuild + gate re-run; all 53 IDs and the 6 caller/algorithm rows re-checked against spec 12 and the C#
+  (every C# string literal of TaskIdentifierService, GeminiService and SireExport found verbatim in the Swift).
+- Fixed: the kind sheet's helper lines described single-question children for section / chapter adds too (now
+  scope-aware: "Each question becomes a checklist step / subtask / component"); the truncated body hint strip now
+  shows its full text as a tooltip.
 
 ## Not done / open
 - None of the assigned IDs. Optional extras not shipped are listed in `Docs/Deviations/W-SIRE.md`.

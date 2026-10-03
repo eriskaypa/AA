@@ -23,6 +23,7 @@ extension SnapshotRegistry {
                              "Check the calibration records of the fixed gas detection system"]) { _ in })
         }
         register("w-sire.kind") { _ in AnyView(SireKindPickerSheet(defaultKind: .procedure) { _ in }) }
+        register("w-sire.kind-group") { _ in AnyView(SireKindPickerSheet(defaultKind: .equipment, scope: .group) { _ in }) }
         register("w-sire.export") { env in
             SireViewModel.shared.attach(env)
             return AnyView(SireExportSheet { _ in })

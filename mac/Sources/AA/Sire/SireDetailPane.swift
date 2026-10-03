@@ -329,6 +329,7 @@ struct SireBodyCard: View {
                     .foregroundStyle(AAColor.muted)
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .help("Editable — type to add line breaks / notes (Enter = new line). Your edits are saved.")
                 Spacer(minLength: 4)
                 Button { controller.reset() } label: { Label("Reset", systemImage: "arrow.counterclockwise") }
                     .controlSize(.small)

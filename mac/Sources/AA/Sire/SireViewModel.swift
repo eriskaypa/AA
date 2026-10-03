@@ -350,11 +350,11 @@ final class SireViewModel {
 
     // MARK: Quick-add to AA (SIRE-031…035)
 
-    private func pickKind(for q: SireQuestion, dialogs: DialogPresenter) async -> SireAddKind? {
+    private func pickKind(for q: SireQuestion, scope: SireAddScope = .question, dialogs: DialogPresenter) async -> SireAddKind? {
         let def = SireAddKind.fromDominantCategory(SireTagExtractor.dominantCategory(q))
         var kind: SireAddKind?
         await dialogs.presentSheet(.decision) { dismiss in
-            SireKindPickerSheet(defaultKind: def) { k in kind = k; dismiss() }
+            SireKindPickerSheet(defaultKind: def, scope: scope) { k in kind = k; dismiss() }
         }
         return kind
     }
@@ -374,7 +374,7 @@ final class SireViewModel {
             message: "Add all \(count) question(s) in section \(q.section) to AA under one item (plus their identified tasks as top-level Tasks)?",
             style: .informational,
             buttons: [AlertButton(title: "Continue", role: .default), AlertButton(title: "Cancel", role: .cancel)])) == 0
-        guard ok, let kind = await pickKind(for: q, dialogs: dialogs) else { return }
+        guard ok, let kind = await pickKind(for: q, scope: .group, dialogs: dialogs) else { return }
         await finishAdd(SireToAa.addSection(q.section, kind: kind, bank: contents, store: env.store), dialogs: dialogs)
     }
 
@@ -386,7 +386,7 @@ final class SireViewModel {
             message: "Add all \(count) question(s) in chapter \(q.chapter) to AA under one item (plus their identified tasks as top-level Tasks)?\n\nThis can create many items and tasks.",
             style: .warning,
             buttons: [AlertButton(title: "Continue", role: .default), AlertButton(title: "Cancel", role: .cancel)])) == 0
-        guard ok, let kind = await pickKind(for: q, dialogs: dialogs) else { return }
+        guard ok, let kind = await pickKind(for: q, scope: .group, dialogs: dialogs) else { return }
         await finishAdd(SireToAa.addChapter(q.chapter, kind: kind, bank: contents, store: env.store), dialogs: dialogs)
     }
 

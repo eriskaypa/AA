@@ -88,12 +88,18 @@ struct SireCandidatePickerSheet: View {
 
 // MARK: Kind picker (SIRE-034)
 
+/// What a quick-add creates children from: one question (its identified tasks) or a section / chapter (its
+/// questions) — §3.7 `AttachChildTasks` vs `AddQuestionChild`.
+enum SireAddScope { case question, group }
+
 struct SireKindPickerSheet: View {
+    let scope: SireAddScope
     let finish: (SireAddKind?) -> Void
     @State private var kind: SireAddKind
     @State private var done = false
 
-    init(defaultKind: SireAddKind, finish: @escaping (SireAddKind?) -> Void) {
+    init(defaultKind: SireAddKind, scope: SireAddScope = .question, finish: @escaping (SireAddKind?) -> Void) {
+        self.scope = scope
         self.finish = finish
         _kind = State(initialValue: defaultKind)
     }
@@ -106,11 +112,15 @@ struct SireKindPickerSheet: View {
         }
     }
 
-    static func detail(_ k: SireAddKind) -> String {
-        switch k {
-        case .procedure: return "Identified tasks become checklist steps."
-        case .task: return "Identified tasks become subtasks."
-        case .equipment: return "Identified tasks become components."
+    /// One muted helper line per kind (D-SIRE-09), describing what §3.7 actually creates for this scope.
+    static func detail(_ k: SireAddKind, scope: SireAddScope = .question) -> String {
+        switch (scope, k) {
+        case (.question, .procedure): return "Identified tasks become checklist steps."
+        case (.question, .task): return "Identified tasks become subtasks."
+        case (.question, .equipment): return "Identified tasks become components."
+        case (.group, .procedure): return "Each question becomes a checklist step."
+        case (.group, .task): return "Each question becomes a subtask."
+        case (.group, .equipment): return "Each question becomes a component."
         }
     }
 
@@ -129,7 +139,7 @@ struct SireKindPickerSheet: View {
                         Image(systemName: Self.symbol(k)).foregroundStyle(AAColor.kindGlyph(Self.itemKind(k)))
                         VStack(alignment: .leading, spacing: 1) {
                             Text(verbatim: k.pickerLabel)
-                            Text(verbatim: Self.detail(k)).font(.caption).foregroundStyle(.secondary)
+                            Text(verbatim: Self.detail(k, scope: scope)).font(.caption).foregroundStyle(.secondary)
                         }
                     }
                     .tag(k)
