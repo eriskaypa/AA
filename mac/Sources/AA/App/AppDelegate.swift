@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // DECISIONS: a second launch activates the running instance (documents forwarded) and quits.
             _ = InstanceGuard.forwardToRunningInstance(pid: pid, documents: coordinator.takePendingDocuments())
             exit(0)
-        case .otherUser, .remote:
+        case .otherUser, .remote, .sameUserNoApp:
             coordinator.setBlocked()
             switch InstanceAlerts.presentBlocked(result, appFolder: folder) {
             case .quit, .switchToRunning:

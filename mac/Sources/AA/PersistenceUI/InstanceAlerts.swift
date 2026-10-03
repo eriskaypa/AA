@@ -76,6 +76,7 @@ enum InstanceAlertChoice { case switchToRunning, openReadOnly, quit, takeOver }
         let holder: PersistHolder
         switch r {
         case .otherUser(let u) where !u.isEmpty: holder = .otherUser(u)
+        case .sameUserNoApp(let pid): holder = .sameUserNoApp(pid: pid, started: nil)
         case let .remote(host, lastSeen, stale):
             holder = stale ? .otherHostStale(host: host, heartbeat: lastSeen) : .otherHostFresh(host: host, heartbeat: lastSeen)
         default: holder = .unknown

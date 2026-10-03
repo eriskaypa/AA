@@ -126,7 +126,7 @@ public enum ShellXDataFlows {
     public nonisolated static func externalLockRefuses(_ result: InstanceGuardResult) -> Bool {
         switch result {
         case .editor, .unguarded: return false
-        case .runningHere, .otherUser, .remote: return true
+        case .runningHere, .otherUser, .remote, .sameUserNoApp: return true
         }
     }
 

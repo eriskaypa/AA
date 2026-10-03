@@ -205,6 +205,7 @@ import Testing
         #expect(!ShellXDataFlows.externalLockRefuses(.unguarded("SMB volume")))
         #expect(ShellXDataFlows.externalLockRefuses(.runningHere(pid: 42)))
         #expect(ShellXDataFlows.externalLockRefuses(.otherUser("eriskay")))
+        #expect(ShellXDataFlows.externalLockRefuses(.sameUserNoApp(pid: 42)))
         #expect(ShellXDataFlows.externalLockRefuses(.remote(host: "BRIDGE-PC", lastSeen: Date(), stale: false)))
         #expect(ShellXText.externalFileInUse == "That file is already open in another copy of AA.")
     }

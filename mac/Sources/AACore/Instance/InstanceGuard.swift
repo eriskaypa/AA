@@ -8,6 +8,10 @@ import os
 public enum InstanceGuardResult: Sendable, Equatable {
     case editor, unguarded(String), runningHere(pid: Int32), otherUser(String),
          remote(host: String, lastSeen: Date, stale: Bool)
+    /// 01 §MP.3.3: the same user holds the folder from a process without an app bundle (`swift run`, an Xcode
+    /// build) — no `NSRunningApplication` to forward to, so the launch shows the blocked alert without
+    /// "Switch to Running AA" (DECISIONS "Contract amendments (post-wave)", REQ-W-PERSIST-03).
+    case sameUserNoApp(pid: Int32)
 }
 
 /// Why this process could not edit: the full detail behind an `InstanceGuardResult` (alert wording, buttons).
@@ -92,7 +96,7 @@ public struct PersistBlockedInfo: Sendable, Equatable {
     static func result(for holder: PersistHolder, record: PersistLockRecord?) -> InstanceGuardResult {
         switch holder {
         case .sameUser(let pid, _): return .runningHere(pid: pid)
-        case .sameUserNoApp: return .otherUser(record?.user ?? NSUserName())
+        case .sameUserNoApp(let pid, _): return .sameUserNoApp(pid: pid)
         case .otherUser(let u): return .otherUser(u)
         case let .otherHostFresh(host, hb): return .remote(host: host, lastSeen: hb, stale: false)
         case let .otherHostStale(host, hb): return .remote(host: host, lastSeen: hb, stale: true)

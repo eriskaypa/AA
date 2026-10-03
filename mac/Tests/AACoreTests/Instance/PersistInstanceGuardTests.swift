@@ -487,7 +487,7 @@ struct PersistInstanceGuardTests {
                 == .remote(host: "M", lastSeen: d, stale: false))
         #expect(InstanceGuard.result(for: .otherHostStale(host: "M", heartbeat: d), record: nil)
                 == .remote(host: "M", lastSeen: d, stale: true))
-        #expect(InstanceGuard.result(for: .sameUserNoApp(pid: 9, started: nil), record: PersistLockRecord(user: "me")) == .otherUser("me"))
+        #expect(InstanceGuard.result(for: .sameUserNoApp(pid: 9, started: nil), record: PersistLockRecord(user: "me")) == .sameUserNoApp(pid: 9))
     }
 
     @Test("MP.7.8 temp-file cleanup at the top level only, older than 10 minutes")
