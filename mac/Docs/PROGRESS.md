@@ -152,3 +152,4 @@ Other:
 - MetricKit next-launch crash dialog and signal-marker path tested only at string/format level; no real crash exercised.
 - Snapshots render Liquid Glass/materials as flat fills and prominent buttons grey (window not key) — rendering limits of the hook.
 - Every section page and wave scene is a placeholder view until its wave owner lands (364 markers above).
+- 2026-10-03 — release build 1.0.0 (268) from 0f4374d: `mac/dist/AA.app` (39.4 MB, universal, ad-hoc signed), smoke test green; Stage V rounds 1–2 merged (194 findings, all 7 blockers fixed), 1,795 tests passing.
