@@ -151,3 +151,12 @@ authority for keys and menu placement.
   flow: W-PERSIST; F3 wires the row like every other File item.
 - Worktrees for F2/F3 and the wave live outside the repo, under the session scratchpad
   (`…/scratchpad/wt/<agent-id>`), on branches `stage/F2`, `stage/F3`, `wave/<agent-id>`; the lead merges them.
+
+### Foundation requests (lead rulings, before Stage W)
+- REQ-F1-01: `Docs/PROGRESS.md` is owned by the **lead/integrator**. Wave agents never edit it; each writes
+  `Docs/Progress/<agent-id>.md` (own file: counts of feature IDs done / remaining, not-done list) and the
+  integrator folds them into `Docs/PROGRESS.md` after merging. (`check-ownership.sh` may keep treating it as shared.)
+- REQ-F2-01: keep the published signature (the function never returns nil); callers use `?? []`.
+- REQ-F2-02: accepted — `QuickSwitcherScoring.rows(store:isGated:)` is contract; W-QUICK passes `env.locks.isGated`.
+- REQ-F3-01…04: accepted as written; W-SHELL and W-QUICK implement them, every wave owner follows REQ-F3-04.
+- Stage W builds share one machine (15 cores / 24 GB): always pass `-j 3` to `swift build` / `swift test`.
