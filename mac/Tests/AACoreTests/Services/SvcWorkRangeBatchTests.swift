@@ -130,6 +130,22 @@ import Testing
         #expect(!BatchDone.setDone(nil, done: true) && !BatchDone.setDone(Vessel(name: "v"), done: true))
     }
 
+    @Test func statusLoadRule() throws {
+        // TV: 02 T-DONE-10…13 (the order-independent load rule of REPO-040, asserted with the batch-done vectors)
+        func load(_ json: String) throws -> TaskItem {
+            guard case .object(let o) = try JSONParser.parse(json) else { throw JSONModelError.notAnObject(path: "") }
+            return try TaskItem(json: o, context: .standard)
+        }
+        let a = try load(#"{"IsComplete":true}"#)
+        #expect(a.status == .done && a.isComplete)
+        let b = try load(#"{"IsComplete":true,"Status":1}"#)
+        #expect(b.status == .inProgress && !b.isComplete)
+        let c = try load(#"{"Status":3,"IsComplete":false}"#)
+        #expect(c.status == .done && c.isComplete)
+        let d = try load(#"{"Status":0}"#)
+        #expect(d.status == .todo && !d.isComplete)
+    }
+
     @Test func rowWrappersAreUnwrapped() {
         // REPO-074 / 02 §5.3 (row wrappers expose the model)
         final class Row: SvcModelRow { let model: TaskItem; init(_ m: TaskItem) { model = m }

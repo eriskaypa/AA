@@ -199,7 +199,7 @@ import Testing
         let elapsed = Date().timeIntervalSince(start)
         #expect(n == 2524 * 16)
         // The 200 ms budget is for the optimised (shipping) build — `swift test -c release -Xswiftc -enable-testing`
-        // runs this in ~40 ms on Apple silicon. An unoptimised debug build is ~10× slower, so it gets a looser
+        // runs this in < 50 ms on Apple silicon. An unoptimised debug build is ~10× slower, so it gets a looser
         // bound that still catches an algorithmic regression.
         #if DEBUG
         let budget = 1.5

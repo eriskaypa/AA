@@ -86,6 +86,22 @@ import Testing
         #expect(cancelled.isEmpty)
     }
 
+    @Test func vesselRecordsAreNotSearchedOrDiffed() {
+        // 10 VESSEL-283: quick cards, work orders, port calls and the ports DB are neither searched nor diffed
+        let made = StoreFactory.make(); let store = made.store
+        let v = Vessel(name: "Aurora")
+        let card = QuickCard(); card.title = "Bilge manual"; v.quickCards = [card]
+        let job = ShipJob(jobNo: "J-1"); job.title = "Bilge pump overhaul"; v.jobs = [job]
+        let call = PortCall(portName: "Bilgeport"); v.portCalls = [call]
+        store.data.vessels = [v]
+        store.data.ports = [PortRecord(name: "Bilge harbour")]
+        #expect(search(store, "bilge").isEmpty)
+        let before = AppData(); let after = AppData()
+        let v0 = Vessel(id: v.id, name: "Aurora")
+        before.vessels = [v0]; after.vessels = [v]
+        #expect(!DataDiff.compare(current: before, incoming: after).hasChanges)
+    }
+
     @Test func snippetVectors() {
         // TV: 02 §7.7 snippet table; 08 T-SR-1…4
         func snip(_ text: String, _ q: String) -> (String, Int) {
