@@ -74,21 +74,21 @@ enum SvcCellKey {
 
     /// `"B12"` → (12, 2); nil when malformed (letters A–Z / a–z, then a positive row number).
     static func parse(_ ref: String) -> (row: Int, column: Int)? {
-        var col = 0, row = 0, sawDigit = false, k = 0
-        let u = Array(ref.utf8)
-        while k < u.count, let v = letter(u[k]) {
-            col = col * 26 + v
-            guard col <= 16_384 else { return nil }
-            k += 1
+        var col = 0, row = 0, inDigits = false
+        for c in ref.utf8 {
+            if !inDigits, let v = letter(c) {
+                col = col * 26 + v
+                guard col <= 16_384 else { return nil }
+            } else if c >= 0x30 && c <= 0x39 {
+                guard col > 0 else { return nil }
+                inDigits = true
+                row = row * 10 + Int(c - 0x30)
+                guard row <= 1_048_576 else { return nil }
+            } else {
+                return nil
+            }
         }
-        guard col > 0 else { return nil }
-        while k < u.count, u[k] >= 0x30, u[k] <= 0x39 {
-            row = row * 10 + Int(u[k] - 0x30)
-            guard row <= 1_048_576 else { return nil }
-            sawDigit = true
-            k += 1
-        }
-        guard sawDigit, k == u.count, row > 0 else { return nil }
+        guard inDigits, row > 0 else { return nil }
         return (row, col)
     }
 

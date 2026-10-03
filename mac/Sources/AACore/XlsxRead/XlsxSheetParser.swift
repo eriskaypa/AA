@@ -12,7 +12,7 @@ enum SvcXlsxSheet {
     /// Parses one worksheet part into its cell map.
     static func parse(_ data: Data, sharedStrings: [String], styles: SvcXlsxStyleTable,
                       use1904: Bool) throws(XlsxReadError) -> Loaded {
-        var scanner = try SvcXmlScanner(data)
+        let scanner = try SvcXmlScanner(data)
         var cells: [Int64: XlsxCell] = [:]
         var uncached = Set<Int64>()
         var path: [String] = []
@@ -39,7 +39,7 @@ enum SvcXlsxSheet {
             switch ev {
             case .start(let name, let attrs):
                 func attr(_ n: String) -> String? {
-                    for a in attrs where a.name == n || SvcXmlScanner.local(a.name) == n { return a.value }
+                    for a in attrs where a.local == n { return a.value }
                     return nil
                 }
                 switch name {
@@ -173,6 +173,7 @@ enum SvcXlsxSheet {
     /// optional sign, digits with an optional `.` fraction, optional exponent. `Infinity` / `NaN` (and overflow to ∞)
     /// parse but fail the import (ClosedXML rejects non-finite values). Anything else → nil (the cell stays blank).
     static func parseNumber(_ raw: String) throws(XlsxReadError) -> Double? {
+        if let fast = fastNumber(raw) { return fast }
         let s = raw.trimmingCharacters(in: CharacterSet(charactersIn: " \t\n\r\u{0B}\u{0C}"))
         let lower = s.lowercased()
         if ["infinity", "+infinity", "-infinity", "nan", "+nan", "-nan", "\u{221E}", "-\u{221E}", "+\u{221E}"].contains(lower) {
@@ -181,6 +182,18 @@ enum SvcXlsxSheet {
         guard let canonical = canonicalNumber(s), let d = Double(canonical) else { return nil }
         guard d.isFinite else { throw .corrupt(detail: "A cell holds a number that is too large (\(s)).") }
         return d
+    }
+
+    /// The common case — plain ASCII `[-]digits[.digits]` with no white space — without any allocation.
+    static func fastNumber(_ s: String) -> Double? {
+        var digits = 0, dots = 0, first = true
+        for c in s.utf8 {
+            if c >= 0x30 && c <= 0x39 { digits += 1 } else if c == 0x2E { dots += 1 } else if c == 0x2D && first {
+            } else { return nil }
+            first = false
+        }
+        guard digits > 0, dots <= 1, digits <= 15 else { return nil }
+        return Double(s)
     }
 
     /// `[sign] digits [. digits] [e [sign] digits]` (ASCII digits; at least one digit in the mantissa) → a string
@@ -213,6 +226,7 @@ enum SvcXlsxSheet {
     /// `Int32.TryParse` with the same styles: an integral value (a decimal point followed by zeros, an exponent)
     /// within Int32; negative → nil (no shared string).
     static func parseIndex(_ s: String) -> Int? {
+        if !s.isEmpty, s.utf8.count <= 9, s.utf8.allSatisfy({ $0 >= 0x30 && $0 <= 0x39 }) { return Int(s) }
         guard let canonical = canonicalNumber(s.trimmingCharacters(in: CharacterSet(charactersIn: " \t\n\r\u{0B}\u{0C}"))),
               let d = Double(canonical), d.isFinite, d == d.rounded(.towardZero),
               d >= 0, d <= Double(Int32.max) else { return nil }
@@ -242,10 +256,10 @@ enum SvcXlsxSheet {
 
     /// VESSEL-323: every `comment@ref` of the sheet's legacy comments part marks that cell.
     static func applyComments(_ data: Data, to cells: inout [Int64: XlsxCell]) throws(XlsxReadError) {
-        var scanner = try SvcXmlScanner(data)
+        let scanner = try SvcXmlScanner(data)
         while let ev = try scanner.next() {
             guard case .start(let name, let attrs) = ev, name == "comment",
-                  let ref = attrs.first(where: { SvcXmlScanner.local($0.name) == "ref" })?.value else { continue }
+                  let ref = attrs.first(where: { $0.local == "ref" })?.value else { continue }
             let first = ref.split(separator: ":").first.map(String.init) ?? ref
             guard let rc = SvcCellKey.parse(first) else { continue }
             let key = SvcCellKey.make(rc.row, rc.column)
@@ -258,11 +272,11 @@ enum SvcXlsxSheet {
     /// VESSEL-324: a one-row table inserts one row below it within its column span; every empty-by-contents cell of
     /// the table's first row gets `Column{n}`, unique only against the header texts to its left.
     static func applyTable(_ data: Data, to cells: inout [Int64: XlsxCell]) throws(XlsxReadError) {
-        var scanner = try SvcXmlScanner(data)
+        let scanner = try SvcXmlScanner(data)
         var ref: String?
         while let ev = try scanner.next() {
             if case .start(let name, let attrs) = ev, name == "table" {
-                ref = attrs.first(where: { SvcXmlScanner.local($0.name) == "ref" })?.value
+                ref = attrs.first(where: { $0.local == "ref" })?.value
                 break
             }
         }

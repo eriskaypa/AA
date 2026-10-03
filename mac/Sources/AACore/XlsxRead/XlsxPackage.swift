@@ -77,7 +77,7 @@ struct SvcXlsxPackage: Sendable {
             base = dir
         }
         guard let data = try part(relsPath) else { return [] }
-        var scanner = try SvcXmlScanner(data)
+        let scanner = try SvcXmlScanner(data)
         var out: [Relationship] = []
         while let ev = try scanner.next() {
             guard case .start(let name, let attrs) = ev, name == "Relationship" else { continue }

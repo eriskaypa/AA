@@ -5,7 +5,7 @@ import Foundation
 enum SvcXlsxText {
     /// The shared-string table, in `<si>` order.
     static func sharedStrings(_ data: Data) throws(XlsxReadError) -> [String] {
-        var scanner = try SvcXmlScanner(data)
+        let scanner = try SvcXmlScanner(data)
         var out: [String] = []
         var path: [String] = []
         var plain: String?

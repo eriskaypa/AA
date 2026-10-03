@@ -65,14 +65,14 @@ struct SvcXlsxStyleTable: Sendable {
     init(kinds: [NumberKind]? = nil) { self.kinds = kinds }
 
     init(data: Data) throws(XlsxReadError) {
-        var scanner = try SvcXmlScanner(data)
+        let scanner = try SvcXmlScanner(data)
         var numFmts: [Int: String] = [:]
         var xfIDs: [Int]?
         var path: [String] = []
         while let ev = try scanner.next() {
             switch ev {
             case .start(let name, let attrs):
-                func attr(_ n: String) -> String? { attrs.first { SvcXmlScanner.local($0.name) == n }?.value }
+                func attr(_ n: String) -> String? { attrs.first { $0.local == n }?.value }
                 if name == "numFmt", path.last == "numFmts", let id = attr("numFmtId").flatMap({ Int($0) }),
                    numFmts[id] == nil {
                     numFmts[id] = attr("formatCode") ?? ""

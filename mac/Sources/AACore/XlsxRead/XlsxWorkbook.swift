@@ -60,18 +60,18 @@ public struct XlsxWorkbook: Sendable {
 
         var use1904 = false
         var refs: [XlsxWorksheetRef] = []
-        var scanner = try SvcXmlScanner(workbookXML)
+        let scanner = try SvcXmlScanner(workbookXML)
         var path: [String] = []
         while let ev = try scanner.next() {
             switch ev {
             case .start(let name, let attrs):
-                if name == "workbookPr", let v = attrs.first(where: { SvcXmlScanner.local($0.name) == "date1904" })?.value {
+                if name == "workbookPr", let v = attrs.first(where: { $0.local == "date1904" })?.value {
                     use1904 = v == "1" || v.lowercased() == "true"
                 }
                 if name == "sheet", path.last == "sheets" {
                     let sheetName = attrs.first(where: { $0.name == "name" })?.value ?? ""
                     let state = attrs.first(where: { $0.name == "state" })?.value ?? "visible"
-                    let rid = attrs.first(where: { $0.name.contains(":") && SvcXmlScanner.local($0.name) == "id" })?.value ?? ""
+                    let rid = attrs.first(where: { $0.name != $0.local && $0.local == "id" })?.value ?? ""
                     let hidden = state != "visible"
                     if rid.isEmpty {
                         refs.append(XlsxWorksheetRef(name: sheetName, partPath: "", isHidden: hidden))

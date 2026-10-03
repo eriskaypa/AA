@@ -6,20 +6,23 @@
 // entities) and never expands a DTD.
 import Foundation
 
-struct SvcXmlScanner {
+final class SvcXmlScanner {
     enum Event {
-        /// Local name (prefix stripped) and the attributes as (qualified name, value) pairs.
-        case start(name: String, attributes: [(name: String, value: String)])
+        /// Local name (prefix stripped) and the attributes (qualified name, local name, value).
+        case start(name: String, attributes: [(name: String, local: String, value: String)])
         case end(name: String)
         /// Character data (entities decoded, line ends normalised); CDATA sections arrive as text too.
         case text(String)
     }
 
-    private let b: [UInt8]
+    /// The document bytes (owned; freed in deinit). A raw pointer keeps the byte loop fast even in debug builds.
+    private let b: UnsafeMutablePointer<UInt8>
+    private let n: Int
     private var p = 0
     private var stack: [String] = []
     private var rootSeen = false
     private var pendingEnd: String?
+    private var pendingEndLocal: String?
 
     init(_ data: Data) throws(XlsxReadError) {
         var bytes = [UInt8](data)
@@ -37,7 +40,17 @@ struct SvcXmlScanner {
         } else if bytes.count >= 3, bytes[0] == 0xEF, bytes[1] == 0xBB, bytes[2] == 0xBF {
             bytes.removeFirst(3)
         }
-        b = bytes
+        n = bytes.count
+        b = UnsafeMutablePointer<UInt8>.allocate(capacity: max(n, 1))
+        bytes.withUnsafeBufferPointer { src in
+            if let base = src.baseAddress, n > 0 { b.initialize(from: base, count: n) }
+        }
+    }
+
+    deinit { b.deallocate() }
+
+    private func string(_ start: Int, _ end: Int) -> String {
+        String(decoding: UnsafeBufferPointer(start: b + start, count: end - start), as: UTF8.self)
     }
 
     /// The local part of a qualified name (`x:c` → `c`).
@@ -48,21 +61,21 @@ struct SvcXmlScanner {
 
     private func fail(_ what: String) -> XlsxReadError { .corrupt(detail: "Malformed XML (\(what) at byte \(p)).") }
 
-    mutating func next() throws(XlsxReadError) -> Event? {
+    func next() throws(XlsxReadError) -> Event? {
         if let e = pendingEnd {
             pendingEnd = nil
             stack.removeLast()
-            return .end(name: Self.local(e))
+            return .end(name: pendingEndLocal ?? Self.local(e))
         }
         while true {
-            guard p < b.count else {
+            guard p < n else {
                 if !stack.isEmpty { throw fail("unclosed element <\(stack.last ?? "")>") }
                 if !rootSeen { throw fail("no root element") }
                 return nil
             }
             if b[p] != 0x3C {                                                   // character data
                 let start = p
-                while p < b.count && b[p] != 0x3C { p += 1 }
+                while p < n && b[p] != 0x3C { p += 1 }
                 if stack.isEmpty {
                     for k in start..<p where !Self.isSpace(b[k]) { throw fail("text outside the root element") }
                     continue
@@ -76,57 +89,57 @@ struct SvcXmlScanner {
                 let start = p + 9
                 guard let end = find("]]>", from: start) else { throw fail("unterminated CDATA") }
                 p = end + 3
-                return .text(Self.normaliseEOL(String(decoding: b[start..<end], as: UTF8.self)))
+                return .text(Self.normaliseEOL(string(start, end)))
             }
             if has("<!") { try skipDoctype(); continue }
             if has("</") {
                 p += 2
-                let name = readName()
+                let (name, local) = readName()
                 skipSpaces()
-                guard p < b.count, b[p] == 0x3E else { throw fail("bad end tag") }
+                guard p < n, b[p] == 0x3E else { throw fail("bad end tag") }
                 p += 1
                 guard let open = stack.last, open == name else { throw fail("mismatched end tag </\(name)>") }
                 stack.removeLast()
-                return .end(name: Self.local(name))
+                return .end(name: local)
             }
             p += 1                                                              // start tag
-            let name = readName()
+            let (name, localName) = readName()
             guard !name.isEmpty else { throw fail("empty element name") }
-            var attributes: [(name: String, value: String)] = []
+            var attributes: [(name: String, local: String, value: String)] = []
             var selfClosing = false
             while true {
                 skipSpaces()
-                guard p < b.count else { throw fail("unterminated start tag") }
+                guard p < n else { throw fail("unterminated start tag") }
                 if b[p] == 0x3E { p += 1; break }
                 if b[p] == 0x2F {
-                    guard p + 1 < b.count, b[p + 1] == 0x3E else { throw fail("bad empty-element tag") }
+                    guard p + 1 < n, b[p + 1] == 0x3E else { throw fail("bad empty-element tag") }
                     p += 2
                     selfClosing = true
                     break
                 }
-                let attr = readName()
+                let (attr, attrLocal) = readName()
                 guard !attr.isEmpty else { throw fail("bad attribute") }
                 skipSpaces()
-                guard p < b.count, b[p] == 0x3D else { throw fail("attribute without value") }
+                guard p < n, b[p] == 0x3D else { throw fail("attribute without value") }
                 p += 1
                 skipSpaces()
-                guard p < b.count, b[p] == 0x22 || b[p] == 0x27 else { throw fail("unquoted attribute") }
+                guard p < n, b[p] == 0x22 || b[p] == 0x27 else { throw fail("unquoted attribute") }
                 let quote = b[p]
                 p += 1
                 let start = p
-                while p < b.count && b[p] != quote { p += 1 }
-                guard p < b.count else { throw fail("unterminated attribute") }
+                while p < n && b[p] != quote { p += 1 }
+                guard p < n else { throw fail("unterminated attribute") }
                 let value = try decodeText(start, p, attribute: true)
                 p += 1
-                attributes.append((attr, value))
+                attributes.append((attr, attrLocal, value))
             }
             if stack.isEmpty {
                 if rootSeen { throw fail("a second root element") }
                 rootSeen = true
             }
             stack.append(name)
-            if selfClosing { pendingEnd = name }
-            return .start(name: Self.local(name), attributes: attributes)
+            if selfClosing { pendingEnd = name; pendingEndLocal = localName }
+            return .start(name: localName, attributes: attributes)
         }
     }
 
@@ -134,35 +147,39 @@ struct SvcXmlScanner {
 
     private static func isSpace(_ c: UInt8) -> Bool { c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D }
 
-    private mutating func skipSpaces() { while p < b.count && Self.isSpace(b[p]) { p += 1 } }
+    private func skipSpaces() { while p < n && Self.isSpace(b[p]) { p += 1 } }
 
-    private mutating func readName() -> String {
+    /// The qualified name at the cursor and its local part (the same string when unprefixed).
+    private func readName() -> (String, String) {
         let start = p
-        while p < b.count {
+        var colon = -1
+        while p < n {
             let c = b[p]
             if Self.isSpace(c) || c == 0x3E || c == 0x2F || c == 0x3D { break }
+            if c == 0x3A { colon = p }
             p += 1
         }
-        return String(decoding: b[start..<p], as: UTF8.self)
+        let q = string(start, p)
+        return colon < 0 ? (q, q) : (q, string(colon + 1, p))
     }
 
     private func has(_ s: StaticString) -> Bool {
-        let n = s.utf8CodeUnitCount
-        guard p + n <= b.count else { return false }
+        let m = s.utf8CodeUnitCount
+        guard p + m <= n else { return false }
         return s.withUTF8Buffer { buf in
-            for k in 0..<n where b[p + k] != buf[k] { return false }
+            for k in 0..<m where b[p + k] != buf[k] { return false }
             return true
         }
     }
 
     private func find(_ s: StaticString, from: Int) -> Int? {
-        let n = s.utf8CodeUnitCount
+        let m = s.utf8CodeUnitCount
         return s.withUTF8Buffer { buf -> Int? in
             var k = from
-            while k + n <= b.count {
+            while k + m <= n {
                 if b[k] == buf[0] {
                     var ok = true
-                    for j in 1..<n where b[k + j] != buf[j] { ok = false; break }
+                    for j in 1..<m where b[k + j] != buf[j] { ok = false; break }
                     if ok { return k }
                 }
                 k += 1
@@ -171,15 +188,15 @@ struct SvcXmlScanner {
         }
     }
 
-    private mutating func skip(past s: StaticString) throws(XlsxReadError) {
+    private func skip(past s: StaticString) throws(XlsxReadError) {
         guard let k = find(s, from: p + 1) else { throw fail("unterminated markup") }
         p = k + s.utf8CodeUnitCount
     }
 
     /// `<!DOCTYPE …>` including an internal subset; never expanded.
-    private mutating func skipDoctype() throws(XlsxReadError) {
+    private func skipDoctype() throws(XlsxReadError) {
         var depth = 0
-        while p < b.count {
+        while p < n {
             let c = b[p]
             p += 1
             if c == 0x5B { depth += 1 } else if c == 0x5D { depth -= 1 } else if c == 0x3E && depth <= 0 { return }
@@ -195,15 +212,17 @@ struct SvcXmlScanner {
             simple = false
             break
         }
-        if simple { return String(decoding: b[start..<end], as: UTF8.self) }
+        if simple { return string(start, end) }
         var out: [UInt8] = []
         out.reserveCapacity(end - start)
         var k = start
         while k < end {
             let c = b[k]
             if c == 0x26 {
-                guard let semi = b[k..<end].firstIndex(of: 0x3B) else { throw fail("unterminated entity") }
-                let name = String(decoding: b[(k + 1)..<semi], as: UTF8.self)
+                var semi = k
+                while semi < end && b[semi] != 0x3B { semi += 1 }
+                guard semi < end else { throw fail("unterminated entity") }
+                let name = string(k + 1, semi)
                 switch name {
                 case "lt": out.append(0x3C)
                 case "gt": out.append(0x3E)
