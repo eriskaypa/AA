@@ -73,6 +73,10 @@ public enum FlashSyncTexts {
     public static let fullScreenHelp = "Show the code on its own, filling a display — drag this window to the brightest screen first."
     public static let exitFullScreen = "Click or press Esc to return"
 
+    /// The Send ▸ More menu's own help tag (each item carries its own: fullScreenHelp, resetPairingHelp).
+    public static let more = "More"
+    public static let moreHelp = "More Flash Sync options"
+
     // MARK: Receive (FLASH-030…048)
     public static let camera = "Camera"
     public static let startCamera = "Start camera"
@@ -100,6 +104,8 @@ public enum FlashSyncTexts {
     public static let unreadable = "That transfer was not readable as Flash Sync data. Nothing was changed."
     public static let applyTitle = "Apply the received changes?"
     public static let applyButton = "Apply"
+    /// Help tag on the snapshot Apply button (Mac addition, DEV-FLASH-29).
+    public static let applySnapshotHelp = "Replaces your current database with the iPhone's copy."
     public static let dontApplyButton = "Don't Apply"
     public static let snapshotWarning = "\n\nThis REPLACES your current database with the iPhone's copy. Anything on this Mac that is not on the phone will be lost."
     /// FLASH-132 (protocol §10: say so when settings are absent).

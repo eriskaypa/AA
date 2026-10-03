@@ -45,6 +45,8 @@ final class FlashSyncModel {
     @ObservationIgnored private let sender = FlashFrameSender()
     @ObservationIgnored private var pending: FlashOutgoing?
     @ObservationIgnored private var prepareToken = 0
+    /// The sources the current payload was built from (§6.6 point 3: an idle refresh with nothing changed is skipped).
+    @ObservationIgnored private var preparedFrom: FlashSourceFingerprint?
 
     // Receive
     private(set) var receive = FlashReceiveFlow()
@@ -114,9 +116,18 @@ final class FlashSyncModel {
         started = false
     }
 
-    /// §6.6 point 3: when the window becomes key and is idle, refresh the summary.
+    /// §6.6 point 3: when the window becomes key and is idle, refresh the summary — unless nothing changed since the
+    /// last prepare (no unsaved edits once the editors are flushed, and the data file, settings.json and the baseline
+    /// carry the same stamps), so returning from an alert or the main window does not rebuild the whole payload.
+    /// The camera permission is re-read too (DEV-FLASH-26: the user may have just allowed it in System Settings).
     func windowBecameKey() {
-        guard started, send.canRePrepare, !preparing, review == nil, !receive.isApplying else { return }
+        guard started else { return }
+        if refreshCameraAccess() { listCameras() }
+        guard send.canRePrepare, !preparing, review == nil, !receive.isApplying, let env, let store else { return }
+        if let preparedFrom, !env.isSafeMode {
+            env.flushAllEditors()
+            if !env.store.isDirty && store.sourceFingerprint() == preparedFrom { return }
+        }
         prepareSend()
     }
 
@@ -134,6 +145,7 @@ final class FlashSyncModel {
         }
         env.flushAllEditors()                                              // FLASH-002 / §6.6 point 1
         if env.store.isDirty { try? env.saveQuietly() }
+        let fingerprint = store.sourceFingerprint()
         let inputs: FlashSendInputs
         do { inputs = try store.captureSendInputs() } catch {
             dropStream()
@@ -156,11 +168,12 @@ final class FlashSyncModel {
             } catch {
                 result = .failure(error)
             }
-            await MainActor.run { [weak self] in self?.prepared(result, token: token) }
+            await MainActor.run { [weak self] in self?.prepared(result, token: token, from: fingerprint) }
         }
     }
 
-    private func prepared(_ result: Result<(FlashOutgoing, FlashEncoder)?, Error>, token: Int) {
+    private func prepared(_ result: Result<(FlashOutgoing, FlashEncoder)?, Error>, token: Int,
+                          from fingerprint: FlashSourceFingerprint) {
         guard token == prepareToken else { return }
         preparing = false
         guard send.canRePrepare else { return }
@@ -168,21 +181,28 @@ final class FlashSyncModel {
         case .success(nil):
             dropStream()                                                   // Q-4
             send.didFindNothingToSend()
+            preparedFrom = fingerprint
         case .success(let (out, enc)?):
             pending = out
             frame = nil
+            fullScreen?.show(nil)                                          // never a code of the replaced session
             sender.setEncoder(enc)
             send.didPrepare(kind: out.kind, label: out.label, chunks: enc.chunkCount)
+            preparedFrom = fingerprint
         case .failure(let e):
             dropStream()
             send.didFail(e.localizedDescription)
         }
     }
 
+    /// Drops the encoder and the pending baseline (Q-4, a confirm, or an apply that replaces a flashing stream —
+    /// DEV-FLASH-04). A full-screen code of the dropped session can no longer be confirmed, so it closes too.
     private func dropStream() {
         sender.setEncoder(nil)
         pending = nil
         frame = nil
+        preparedFrom = nil
+        exitFullScreen()
     }
 
     /// FLASH-013.
@@ -301,9 +321,31 @@ final class FlashSyncModel {
         }
     }
 
-    /// FLASH-030/032 — real device names; preselect the system default camera.
+    /// DEV-FLASH-26: re-reads the camera permission (Rescan, the window becoming key), so a camera the user has just
+    /// allowed in System Settings can be started without reopening the window — and a revoked one shows the text.
+    /// Returns true when it changed.
+    @discardableResult
+    private func refreshCameraAccess() -> Bool {
+        guard receiver != nil, receive.access != .unbundled, !receive.isCapturing, !receive.isApplying else { return false }
+        let now: FlashReceiveFlow.CameraAccess
+        switch FlashCameraReceiver.authorization {
+        case .authorized: now = .granted
+        case .denied, .restricted: now = .denied
+        default: now = .unknown
+        }
+        guard now != receive.access else { return false }
+        receive.setAccess(now)
+        return true
+    }
+
+    /// FLASH-030/032 — real device names; preselect the system default camera. Re-reads the permission first.
     func rescan() {
         guard receive.access != .unbundled else { return }
+        refreshCameraAccess()
+        listCameras()
+    }
+
+    private func listCameras() {
         let (devices, preferred) = FlashCameraReceiver.discover()
         let previous = receive.selectedCamera.flatMap { $0 < cameras.count ? cameras[$0].id : nil }
         cameras = devices

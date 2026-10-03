@@ -125,6 +125,45 @@ import Testing
         #expect(!d.startEnabled)
     }
 
+    // TV: DEV-FLASH-26 / FLASH-030/033 — camera allowed in System Settings after a denial: the denied text clears and
+    //     Start camera enables again (the window re-reads the authorization on Rescan / becoming key)
+    @Test func cameraAccessGrantedAfterDenial() {
+        var r = FlashReceiveFlow()
+        r.setAccess(.denied)
+        r.camerasListed(["FaceTime HD Camera"])
+        #expect(!r.startEnabled && r.statusIsProblem)
+        r.setAccess(.granted)
+        r.camerasListed(["FaceTime HD Camera"])
+        #expect(r.startEnabled)
+        #expect(r.statusText == "" && !r.statusIsProblem)
+        // Another status survives a re-grant (only the denied text is cleared).
+        var n = FlashReceiveFlow()
+        n.setAccess(.granted)
+        n.camerasListed([])
+        n.setAccess(.granted)
+        #expect(n.statusText == FlashSyncTexts.noCamera)
+    }
+
+    // TV: 13 §6.5 / DEV-FLASH-27 — the encoder is replaced while a render is in flight (confirm, or an apply that
+    //     drops the flashing stream): the new stream renders at once and the stale completion is ignored
+    @Test func renderGateSurvivesAReplacedEncoder() {
+        var g = FlashRenderGate()
+        let old = g.begin()
+        let second = g.begin()
+        #expect(old != nil && second == nil)                 // one render at a time
+        g.reset()                                            // setEncoder(nil)
+        g.reset()                                            // setEncoder(new)
+        let fresh = g.begin()
+        #expect(fresh != nil && fresh != old)                // not blocked by the abandoned render
+        let staleUsed = g.complete(old ?? -1)                // the stale completion arrives late: ignored…
+        #expect(!staleUsed)
+        #expect(g.rendering)                                 // …and does not free the new stream's slot
+        let freshUsed = g.complete(fresh ?? -1)
+        #expect(freshUsed && !g.rendering)
+        let next = g.begin()
+        #expect(next != nil)                                 // and the stream keeps going
+    }
+
     // TV: FLASH-044 / FLASH-132 review text
     @Test func reviewText() {
         let cs = FlashIncomingChange(payload: JSONObject(), isSnapshot: false, summary: "2 Tasks, layout", carriesSettings: true)

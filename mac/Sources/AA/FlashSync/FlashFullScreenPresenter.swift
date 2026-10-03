@@ -33,7 +33,7 @@ final class FlashFullScreenPresenter {
 
         let hint = NSTextField(labelWithString: FlashSyncTexts.exitFullScreen)
         hint.textColor = NSColor(white: 0.45, alpha: 1)
-        hint.font = .systemFont(ofSize: 12, weight: .medium)
+        hint.font = .systemFont(ofSize: AAType.small, weight: .medium)
         hint.sizeToFit()
         hint.frame.origin = NSPoint(x: (container.bounds.width - hint.frame.width) / 2, y: 16)
         hint.autoresizingMask = [.minXMargin, .maxXMargin, .maxYMargin]
@@ -46,7 +46,8 @@ final class FlashFullScreenPresenter {
         NSCursor.setHiddenUntilMouseMoves(true)
     }
 
-    func show(_ frame: FlashRenderedFrame) {
+    /// nil blanks the plate (a new session was prepared while the full-screen window was up and not flashing).
+    func show(_ frame: FlashRenderedFrame?) {
         plate.frameImage = frame
     }
 
