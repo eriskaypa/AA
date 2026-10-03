@@ -274,9 +274,9 @@ import CryptoKit
         #expect(AAResources.url(name: "does-not-exist", ext: "json") == nil)
     }
 
-    @Test func macPreferences() {
-        let temp = TempDefaults()
-        let p = temp.preferences
+    // DECISIONS "Stage V rulings": tests use an in-memory MacPreferences store (nothing in ~/Library/Preferences)
+    @Test func macPreferencesInMemory() {
+        let p = MacPreferences.inMemory()
         let k = MacPreferences.Key("aa.tests.flag")
         #expect(p.bool(k, default: true))
         p.set(false, k)
@@ -284,23 +284,49 @@ import CryptoKit
         let s = MacPreferences.Key("aa.tests.text")
         p.set("x", s); #expect(p.string(s) == "x")
         p.set(nil as String?, s); #expect(p.string(s) == nil)
+        let d = MacPreferences.Key("aa.tests.data")
+        p.set(Data([1, 2]), d); #expect(p.data(d) == Data([1, 2]))
+        p.set(nil as Data?, d); #expect(p.data(d) == nil)
         struct M: Codable, Equatable { var a: Int }
         let c = MacPreferences.Key("aa.tests.codable")
         p.setCodable(M(a: 3), c)
         #expect(p.codable(c, as: M.self) == M(a: 3))
-        temp.remove()                                       // nothing left in ~/Library/Preferences
-        #expect(!FileManager.default.fileExists(atPath: temp.plistURL.path))
+        p.setCodable(nil as M?, c)
+        #expect(p.codable(c, as: M.self) == nil)
+        #expect(MacPreferences.inMemory().string(s) == nil && MacPreferences.inMemory().bool(k, default: true))   // isolated
+        // UserDefaults-style conversions of the in-memory backend
+        let b = InMemoryPreferences()
+        b.set(NSNumber(value: 1), forKey: "n"); #expect(b.bool(forKey: "n") && b.string(forKey: "n") == "1")
+        b.set("YES", forKey: "y"); #expect(b.bool(forKey: "y"))
+        #expect(!b.bool(forKey: "missing") && b.string(forKey: "missing") == nil && b.data(forKey: "missing") == nil)
     }
 
-    // V-E2E: TempDefaults removes the domain and the plist cfprefsd keeps after removePersistentDomain
-    @Test func tempDefaultsLeavesNoPlist() {
+    // The transitional TempDefaults shim is in memory: its UserDefaults and MacPreferences share one store
+    @Test func tempDefaultsShimIsInMemory() {
         let temp = TempDefaults("aa-tests")
+        #expect(temp.defaults is InMemoryUserDefaults)
         temp.defaults.set(true, forKey: "aa.tests.flag")
-        CFPreferencesAppSynchronize(temp.suite as CFString)
-        #expect(FileManager.default.fileExists(atPath: temp.plistURL.path))
+        #expect(temp.preferences.bool(MacPreferences.Key("aa.tests.flag"), default: false))
+        temp.preferences.set("v", MacPreferences.Key("aa.tests.text"))
+        #expect(temp.defaults.string(forKey: "aa.tests.text") == "v")
+        temp.defaults.removeObject(forKey: "aa.tests.text")
+        #expect(temp.preferences.string(MacPreferences.Key("aa.tests.text")) == nil)
+        #expect(TempDefaults("aa-tests").defaults.object(forKey: "aa.tests.flag") == nil)   // isolated
         temp.remove()
-        temp.remove()                                       // idempotent
-        #expect(!FileManager.default.fileExists(atPath: temp.plistURL.path))
-        #expect(UserDefaults(suiteName: temp.suite)?.object(forKey: "aa.tests.flag") == nil)
+    }
+
+    // Guard: no test source creates an on-disk UserDefaults suite or uses the standard domain (the in-memory
+    // shim in Support/TestSupport.swift is the only UserDefaults subclass, and it never reads or writes the system).
+    @Test func noTestTouchesUserPreferences() throws {
+        let tests = Self.macRoot.appending(path: "Tests/AACoreTests", directoryHint: .isDirectory)
+        let fm = FileManager.default
+        let banned = ["UserDefaults(suiteName", "UserDefaults.standard", "removePersistentDomain", "CFPreferencesSet"]
+        var offenders: [String] = []
+        for case let u as URL in fm.enumerator(at: tests, includingPropertiesForKeys: nil)! where u.pathExtension == "swift" {
+            if u.lastPathComponent == "FoundationHelpersTests.swift" { continue }       // this list
+            let text = try String(contentsOf: u, encoding: .utf8)
+            for b in banned where text.contains(b) { offenders.append("\(u.lastPathComponent): \(b)") }
+        }
+        #expect(offenders.isEmpty, "\(offenders)")
     }
 }

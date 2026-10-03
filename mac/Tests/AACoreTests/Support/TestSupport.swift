@@ -1,5 +1,6 @@
 // Shared test helpers (ARCHITECTURE.md §10.1): TempFolder, Fixtures, StoreFactory, JSONAssert, withTimeZone.
-// Tests never touch the login Keychain, ~/Library/Application Support/AA, the network or notifications.
+// Tests never touch the login Keychain, ~/Library/Application Support/AA, ~/Library/Preferences (no UserDefaults
+// suite on disk: MacPreferences.inMemory(), DECISIONS "Stage V rulings"), the network or notifications.
 import Foundation
 import Testing
 @testable import AACore
@@ -34,39 +35,50 @@ final class TempFolder: @unchecked Sendable {
     func exists(_ name: String) -> Bool { FileManager.default.fileExists(atPath: file(name).path) }
 }
 
-/// A uniquely named UserDefaults suite that leaves nothing behind. `removePersistentDomain(forName:)` alone empties
-/// the domain but cfprefsd keeps an empty `~/Library/Preferences/<suite>.plist`, so `remove()` also synchronises and
-/// deletes that file (only this suite's own, UUID-named file). Use `let t = TempDefaults(); defer { t.remove() }`
-/// (or keep it as a stored property): `remove()` is idempotent and also runs from `deinit`.
+/// Transitional shim, entirely in memory (DECISIONS "Stage V rulings": no test creates a UserDefaults suite on
+/// disk). New tests use `MacPreferences.inMemory()`; this type only keeps the older call sites compiling until their
+/// owners convert them, then it is deleted. `defaults` is a `UserDefaults` whose every read and write goes to the
+/// same in-memory store as `preferences`, so nothing reaches cfprefsd or `~/Library/Preferences`.
 final class TempDefaults: @unchecked Sendable {
-    let suite: String
     let defaults: UserDefaults
-    private let lock = NSLock()
-    private var removed = false
+    let preferences: MacPreferences
 
     init(_ label: String = "aa-tests") {
-        suite = "\(label)-\(UUID().uuidString)"
-        defaults = UserDefaults(suiteName: suite)!
+        let d = InMemoryUserDefaults()
+        defaults = d
+        preferences = MacPreferences(backend: d.store)
     }
 
-    /// `MacPreferences` over this suite.
-    var preferences: MacPreferences { MacPreferences(defaults: defaults) }
+    /// Nothing to remove (kept for the existing `defer { temp.remove() }` call sites).
+    func remove() {}
+}
 
-    /// `~/Library/Preferences/<suite>.plist`.
-    var plistURL: URL {
-        FileManager.default.homeDirectoryForCurrentUser.appending(path: "Library/Preferences/\(suite).plist")
-    }
+/// A `UserDefaults` that never touches the preferences system: every accessor the tests use is overridden to read
+/// and write an `InMemoryPreferences` store (the superclass instance is never read or written).
+final class InMemoryUserDefaults: UserDefaults, @unchecked Sendable {
+    let store = InMemoryPreferences()
 
-    func remove() {
-        lock.lock(); defer { lock.unlock() }
-        guard !removed else { return }
-        removed = true
-        defaults.removePersistentDomain(forName: suite)
-        CFPreferencesAppSynchronize(suite as CFString)
-        try? FileManager.default.removeItem(at: plistURL)
-    }
+    init() { super.init(suiteName: nil)! }
 
-    deinit { remove() }
+    override func object(forKey defaultName: String) -> Any? { store.object(forKey: defaultName) }
+    override func set(_ value: Any?, forKey defaultName: String) { store.set(value, forKey: defaultName) }
+    override func set(_ value: Bool, forKey defaultName: String) { store.set(value, forKey: defaultName) }
+    override func set(_ value: Int, forKey defaultName: String) { store.set(value, forKey: defaultName) }
+    override func set(_ value: Double, forKey defaultName: String) { store.set(value, forKey: defaultName) }
+    override func set(_ value: Float, forKey defaultName: String) { store.set(value, forKey: defaultName) }
+    override func set(_ url: URL?, forKey defaultName: String) { store.set(url, forKey: defaultName) }
+    override func removeObject(forKey defaultName: String) { store.removeObject(forKey: defaultName) }
+    override func bool(forKey defaultName: String) -> Bool { store.bool(forKey: defaultName) }
+    override func string(forKey defaultName: String) -> String? { store.string(forKey: defaultName) }
+    override func data(forKey defaultName: String) -> Data? { store.data(forKey: defaultName) }
+    override func integer(forKey defaultName: String) -> Int { (store.object(forKey: defaultName) as? NSNumber)?.intValue ?? 0 }
+    override func double(forKey defaultName: String) -> Double { (store.object(forKey: defaultName) as? NSNumber)?.doubleValue ?? 0 }
+    override func float(forKey defaultName: String) -> Float { (store.object(forKey: defaultName) as? NSNumber)?.floatValue ?? 0 }
+    override func url(forKey defaultName: String) -> URL? { store.object(forKey: defaultName) as? URL }
+    override func array(forKey defaultName: String) -> [Any]? { store.object(forKey: defaultName) as? [Any] }
+    override func dictionary(forKey defaultName: String) -> [String: Any]? { store.object(forKey: defaultName) as? [String: Any] }
+    override func stringArray(forKey defaultName: String) -> [String]? { store.object(forKey: defaultName) as? [String] }
+    override func synchronize() -> Bool { true }
 }
 
 /// Test fixtures under `Tests/AACoreTests/Fixtures/` (copied whole into the test bundle).

@@ -35,7 +35,11 @@ public enum RawDeflate {
     public static func inflate(_ bytes: [UInt8], expectedLength: Int?) throws -> [UInt8] {
         let codec = try RawDeflateCodec(encode: false)
         var out: [UInt8] = []
-        if let n = expectedLength { out.reserveCapacity(n) }
+        // Deflate expands at most 1032:1, so a larger claimed length cannot be met: never reserve more than that.
+        if let n = expectedLength {
+            let (cap, overflow) = bytes.count.multipliedReportingOverflow(by: 1032)
+            out.reserveCapacity(max(0, min(n, overflow ? n : cap + 64)))
+        }
         var ended = false
         try bytes.withUnsafeBytes { raw in
             ended = try codec.process(raw, finalize: true) { chunk in
