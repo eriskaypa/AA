@@ -100,7 +100,7 @@ struct SireStatusCard: View {
                         .truncationMode(.tail)
                     Spacer(minLength: 0)
                     Text(verbatim: question.chapterDisplay)
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.aaMono(AAType.caption))
                         .foregroundStyle(AAColor.muted)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -155,7 +155,7 @@ struct SireChipButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
         return configuration.label
-            .font(.system(size: 12, weight: active ? .semibold : .regular))
+            .font(.system(.body, weight: active ? .semibold : .regular))
             .foregroundStyle(active ? tint : AAColor.fg)
             .padding(.horizontal, 10)
             .padding(.vertical, 4)

@@ -4,6 +4,7 @@
 //       AI section with Save / Clear), 06 BUILD-143/145 B2, BUILD-A26/A27, BUILD-148 (B2 helper line), 03 SHELL-099/100
 //       (SHELL-655/656 rows); ARCHITECTURE.md §7.7 (`SireActions`, `GeminiKeySettingsSection()`).
 import AppKit
+import Security
 import SwiftUI
 import AACore
 
@@ -38,8 +39,19 @@ import AACore
             try store.setKey(value)
             env.status.post(NetText.isBlank(value) ? keyCleared : keySaved)
         } catch {
-            await dialogs.error(geminiPromptTitle, "The key could not be stored in this Mac's Keychain (\(error)).")
+            await dialogs.error(geminiPromptTitle, "The key could not be stored in this Mac's Keychain (\(keychainMessage(error))).")
         }
+    }
+
+    /// A readable reason for a Keychain failure: the Security framework's own text for the OSStatus (e.g. "User
+    /// interaction is not allowed."), never the raw Swift error value.
+    static func keychainMessage(_ error: Error) -> String {
+        if case SecretStoreError.keychain(let status) = error {
+            let text = (SecCopyErrorMessageString(status, nil) as String?).map { NetText.trim($0) } ?? ""
+            let reason = text.isEmpty ? "Keychain error" : text.hasSuffix(".") ? String(text.dropLast()) : text
+            return "\(reason), OSStatus \(status)"
+        }
+        return error.localizedDescription
     }
 }
 

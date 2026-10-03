@@ -43,9 +43,9 @@ struct SireCandidatePickerSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: AASpacing.m) {
             Text(verbatim: prompt)
-                .font(.system(size: 14, weight: .bold))
+                .font(.headline)
                 .fixedSize(horizontal: false, vertical: true)
             AASearchField(text: $query, prompt: "Filter tasks")
             List {
@@ -53,21 +53,29 @@ struct SireCandidatePickerSheet: View {
                     Toggle(isOn: Binding(get: { ticked.contains(i) },
                                          set: { on in if on { ticked.insert(i) } else { ticked.remove(i) } })) {
                         Text(verbatim: candidates[i])
+                            .font(.aaMono(AAType.body))
+                            .foregroundStyle(AAColor.fg)
                             .fixedSize(horizontal: false, vertical: true)
-                            .padding(.vertical, 2)
+                            .padding(.vertical, AASpacing.xs)
                     }
                     .toggleStyle(.checkbox)
                 }
             }
             .listStyle(.bordered)
-            .alternatingRowBackgrounds(.enabled)
+            .alternatingRowBackgrounds(.disabled)
             .overlay {
-                if visible.isEmpty { Text("No matches.").foregroundStyle(AAColor.muted) }
+                if visible.isEmpty {
+                    AAEmptyState(title: "No matches.", symbol: "magnifyingglass",
+                                 message: "Clear or change the filter to see the other tasks.")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(AAColor.panel)
+                }
             }
-            HStack(spacing: 8) {
+            HStack(spacing: AASpacing.s) {
                 Text(verbatim: "\(ticked.count) of \(candidates.count) selected")
-                    .font(.system(size: AAType.caption))
-                    .foregroundStyle(.secondary)
+                    .font(.aaMono(AAType.caption))
+                    .monospacedDigit()
+                    .foregroundStyle(AAColor.muted)
                     .contentTransition(.numericText())
                 Button("Select All") { withAnimation(.snappy) { ticked.formUnion(visible) } }
                 Button("Select None") { withAnimation(.snappy) { ticked.subtract(visible) } }
@@ -79,7 +87,7 @@ struct SireCandidatePickerSheet: View {
             }
             .controlSize(.regular)
         }
-        .padding(16)
+        .padding(AASpacing.l)
         .frame(minWidth: 520, idealWidth: 600, minHeight: 420, idealHeight: 540)
         .onDisappear { complete(nil) }
         .aaSheet(.decision)
@@ -131,12 +139,14 @@ struct SireKindPickerSheet: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Add to AA as which kind?").font(.system(size: 14, weight: .bold))
+        VStack(alignment: .leading, spacing: AASpacing.m) {
+            Text("Add to AA as which kind?").font(.headline)
             Picker(selection: $kind) {
                 ForEach(SireAddKind.allCases, id: \.self) { k in
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Image(systemName: Self.symbol(k)).foregroundStyle(AAColor.kindGlyph(Self.itemKind(k)))
+                    HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
+                        Image(systemName: Self.symbol(k))
+                            .symbolRenderingMode(.hierarchical)
+                            .foregroundStyle(AAColor.kindGlyph(Self.itemKind(k)))
                         VStack(alignment: .leading, spacing: 1) {
                             Text(verbatim: k.pickerLabel)
                             Text(verbatim: Self.detail(k, scope: scope)).font(.caption).foregroundStyle(.secondary)
@@ -148,8 +158,8 @@ struct SireKindPickerSheet: View {
             .pickerStyle(.radioGroup)
             .labelsHidden()
             Text("Each identified task is also added as its own Task, linked to the new item.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(.aaMono(AAType.caption))
+                .foregroundStyle(AAColor.muted)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
@@ -157,7 +167,7 @@ struct SireKindPickerSheet: View {
                 Button("Add") { complete(kind) }.keyboardShortcut(.defaultAction).aaProminent()
             }
         }
-        .padding(16)
+        .padding(AASpacing.l)
         .frame(width: 420)
         .fixedSize(horizontal: false, vertical: true)
         .onDisappear { complete(nil) }
@@ -228,43 +238,48 @@ struct SireExportSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("SIRE 2.0 Export").font(.system(size: 15, weight: .bold))
-                    Text("Choose a SIRE export:").font(.callout).foregroundStyle(.secondary)
-                }
-                Spacer()
+            HStack(alignment: .top, spacing: AASpacing.m) {
+                BuilderSheetHeader(title: "SIRE 2.0 Export", subtitle: "Choose a SIRE export:",
+                                   symbol: "square.and.arrow.up.on.square")
                 if phase == .loaded {
                     Text(verbatim: lineCount == 1 ? "1 line" : "\(lineCount) lines")
-                        .font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                        .font(.aaMono(AAType.caption)).monospacedDigit()
+                        .foregroundStyle(AAColor.muted)
+                        .contentTransition(.numericText())
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, AASpacing.l)
+            .padding(.vertical, AASpacing.m)
             Divider()
             HStack(spacing: 0) {
                 List(selection: Binding(get: { Optional(mode) }, set: { if let m = $0 { mode = m } })) {
                     ForEach(SireExport.modes, id: \.self) { m in
-                        Label(m, systemImage: Self.symbol(m)).tag(Optional(m))
+                        Label {
+                            Text(verbatim: m).font(.aaMono(AAType.body))
+                        } icon: {
+                            Image(systemName: Self.symbol(m)).symbolRenderingMode(.hierarchical)
+                        }
+                        .padding(.vertical, AASpacing.xs / 2)
+                        .tag(Optional(m))
                     }
                 }
                 .listStyle(.inset)
-                .frame(width: 240)
+                .alternatingRowBackgrounds(.disabled)
+                .frame(width: 250)
                 Divider()
                 Group {
                     switch phase {
                     case .loaded:
                         SireTextPreview(text: text)
                     case .failed(let message):
-                        ContentUnavailableView {
-                            Label("SIRE export", systemImage: "exclamationmark.triangle")
-                        } description: {
-                            Text(verbatim: "Could not load the SIRE question bank:\n\(message)")
-                        }
+                        AAEmptyState(title: "SIRE export", symbol: "exclamationmark.triangle",
+                                     message: "Could not load the SIRE question bank:\n\(message)")
                     default:
-                        VStack(spacing: 10) {
+                        VStack(spacing: AASpacing.m) {
                             ProgressView()
-                            Text("Loading SIRE 2.0 question bank…").foregroundStyle(.secondary)
+                            Text("Loading SIRE 2.0 question bank…")
+                                .font(.aaMono(AAType.body))
+                                .foregroundStyle(AAColor.muted)
                         }
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
@@ -272,7 +287,7 @@ struct SireExportSheet: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             Divider()
-            HStack(spacing: 8) {
+            HStack(spacing: AASpacing.s) {
                 ShareLink(item: text, preview: SharePreview("SIRE export “\(mode)”")) {
                     Label("Share…", systemImage: "square.and.arrow.up")
                 }
@@ -289,14 +304,23 @@ struct SireExportSheet: View {
                     .aaProminent()
                     .disabled(phase != .loaded)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, AASpacing.l)
+            .frame(minHeight: 44)
         }
         .frame(minWidth: 860, idealWidth: 940, minHeight: 560, idealHeight: 640)
         .task {
-            _ = await SireBank.shared.load()
-            phase = SireBank.shared.phase
+            // §6.8 / Q-10: the phase comes from the Result this call returns (never a snapshot of the shared phase,
+            // which a concurrent first loader may not have published yet when this waiter resumes).
+            switch await SireBank.shared.load() {
+            case .success: phase = .loaded
+            case .failure(let e): phase = .failed(SireBank.shared.loadError ?? e.localizedDescription)
+            }
             rebuild()
+        }
+        .onChange(of: SireBank.shared.phase) { _, now in
+            // Belt and braces: a load published by another caller while this sheet is open also releases it.
+            if phase != .loaded, now == .loaded { phase = .loaded; rebuild() }
+            if case .failed(let m) = now, phase == .loading { phase = .failed(m) }
         }
         .onChange(of: mode) { _, _ in rebuild() }
         .onDisappear { complete(.cancelled) }

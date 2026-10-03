@@ -1,4 +1,5 @@
-// Spec: 12 SIRE-022 (insertion-only editing), SIRE-025 (context menu: Copy / Paste (insert) / Select All), §6.3,
+// Spec: 12 SIRE-022 (insertion-only editing; typed text never inherits list-marker / in-run-newline / preserved
+//       attributes — 05 §6.4, XD.2.8 —, so an insertion right after a bullet survives the save), SIRE-025 (context menu: Copy / Paste (insert) / Select All), §6.3,
 //       §6.4 rules 1–8 (the single gate `shouldChangeText`, collapse-before-insert, blocked delete/transpose/case
 //       commands, no drag and drop, nothing that rewrites existing text — autocorrect, substitutions, Writing Tools,
 //       find-and-replace —, sanitised paste without attachments, light paper), 03 SHELL-688 (SIRE body keys).
@@ -91,11 +92,22 @@ open class SireInsertionTextView: NSTextView {
 
     // MARK: Rule 2 — collapse the selection to its start before inserting
 
-    /// Collapses a non-empty selection to its start (never while composing marked text).
+    /// Collapses a non-empty selection to its start (never while composing marked text), then cleans the typing
+    /// attributes for the insertion.
     public func sireCollapseSelection() {
         guard !hasMarkedText() else { return }
         let sel = selectedRange()
         if sel.length > 0 { setSelectedRange(NSRange(location: sel.location, length: 0)) }
+        sireCleanTypingAttributes()
+    }
+
+    /// Typed / plain-pasted text never inherits a list marker, an in-run newline sequence, a preserved fragment or
+    /// an attachment from the character before the caret (05 §6.4, XD.2.8). Text typed right after a list item's
+    /// `\t•\t` marker would otherwise carry `.aaListMarker` and the XAML writer drops marker text — the user's
+    /// insertion would vanish from the stored `QuestionBodies` entry (§4.4).
+    public func sireCleanTypingAttributes() {
+        guard let s = textStorage, EditorFormatting.needsCleaning(typingAttributes) else { return }
+        typingAttributes = EditorFormatting.cleanTypingAttributes(typingAttributes, in: s, caret: selectedRange().location)
     }
 
     open override func insertText(_ string: Any, replacementRange: NSRange) {
