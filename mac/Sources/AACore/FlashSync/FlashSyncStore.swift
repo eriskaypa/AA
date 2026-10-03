@@ -170,16 +170,23 @@ public final class FlashSyncStore {
     /// The decrypted baseline bytes, or nil when missing or unreadable (never an error, FLASH-102).
     public func readBaselineJSON() -> Data? {
         guard let raw = try? Data(contentsOf: baselineURL) else { return nil }
+        return FlashSyncStore.decodeBaseline(raw, key: LocalEncryption.classify(raw) == .mac ? baselineKey() : nil)
+    }
+
+    /// The key that opens a Mac-encrypted baseline: the local-data key when encryption is on, else whatever key the
+    /// Keychain holds (the setting may have been switched off since the baseline was written). Never created here
+    /// unless encryption is on.
+    private func baselineKey() -> SymmetricKey? {
+        dataStore.localEncryptionKeyIfEnabled(for: baselineURL)
+            ?? ((try? LocalEncryption.key(secrets: dataStore.secrets, create: false)) ?? nil)
+    }
+
+    /// Baseline file bytes → plaintext JSON bytes; nil for a Windows DPAPI blob or a Mac blob without its key.
+    nonisolated static func decodeBaseline(_ raw: Data, key: SymmetricKey?) -> Data? {
         switch LocalEncryption.classify(raw) {
-        case .windowsDPAPI:
-            return nil
-        case .mac:
-            let key = dataStore.localEncryptionKeyIfEnabled(for: baselineURL)
-                ?? ((try? LocalEncryption.key(secrets: dataStore.secrets, create: false)) ?? nil)
-            guard let key else { return nil }
-            return try? LocalEncryption.decrypt(raw, key: key)
-        case .plain:
-            return raw
+        case .windowsDPAPI: return nil
+        case .mac: return key.flatMap { try? LocalEncryption.decrypt(raw, key: $0) }
+        case .plain: return raw
         }
     }
 
@@ -238,9 +245,110 @@ public final class FlashSyncStore {
 
     // MARK: Building what to send
 
-    /// Captures the inputs on the main actor (reads the database from disk — the caller flushed and saved first).
+    /// Captures the inputs synchronously on the main actor (reads the database from disk — the caller flushed and saved
+    /// first). Tests and CLI-style callers; the Flash Sync window uses `captureSendInputs(live:)`.
     public func captureSendInputs() throws -> FlashSendInputs {
         FlashSendInputs(dataJSON: try readDataJSON(), settings: try readSettingsTree(), baselineJSON: readBaselineJSON())
+    }
+
+    /// How `captureSendInputs(live:)` obtained the database bytes.
+    public enum CaptureRoute: Sendable, Equatable {
+        /// The file on disk is byte-identical to the live model's save encoding, so it is already what
+        /// `readDataJSON()` would produce: no load or re-serialisation on the main actor.
+        case liveModelMatch
+        /// Anything else (no live model, a missing / unreadable / encrypted-without-key file, or bytes another writer
+        /// produced): the exact `readDataJSON()` load-and-serialise on the main actor.
+        case reloaded
+    }
+
+    /// Same result as `captureSendInputs()`, with the heavy work off the main actor (V2-SCALE: 1.24 s on main for a
+    /// 70 MB database). `readDataJSON()` = load (read, decrypt, parse, build the model, migrate, normalise paths) +
+    /// `serializeForSave`. When the data file is byte-identical to the live model's save encoding, that round trip
+    /// returns the file's own bytes (decode∘encode is the identity on our own output — the persistence round-trip
+    /// guarantee — and normalisation / the SchemaVersion stamp were already applied to the live model), so the only
+    /// main-actor work is encoding the live model to a tree; the JSON write, the file read, decryption, comparison
+    /// and the baseline read all run detached. Any difference falls back to the exact `readDataJSON()`.
+    /// Errors: the same as `captureSendInputs()`, in the same order (database first, then settings.json).
+    public func captureSendInputs(live: AppData?) async throws -> FlashSendInputs {
+        try await captureSendInputsRouted(live: live).inputs
+    }
+
+    func captureSendInputsRouted(live: AppData?) async throws -> (inputs: FlashSendInputs, route: CaptureRoute) {
+        let settingsRead = Result { try readSettingsTree() }
+        let dataURL = dataStore.currentDataFile
+        let baselineURL = self.baselineURL
+        // Keys are looked up here (the DataStore is main-actor bound; both lookups are cached / one Keychain read and
+        // happen only for Mac-encrypted files, exactly when the synchronous path would look them up).
+        let baselineHead = FlashSyncStore.header(baselineURL)
+        let baselineKey = baselineHead.map(LocalEncryption.classify) == .mac ? self.baselineKey() : nil
+        var dataKey: SymmetricKey?
+        var candidate: JSONValue?
+        if let live, let head = FlashSyncStore.header(dataURL), LocalEncryption.classify(head) != .windowsDPAPI {
+            dataKey = try? dataStore.keyForReading(head)
+            candidate = saveEncodingTree(live)
+        }
+        let read = await Task.detached(priority: .userInitiated) {
+            FlashSyncStore.readOffMain(dataURL: dataURL, dataKey: dataKey, candidate: candidate,
+                                       baselineURL: baselineURL, baselineKey: baselineKey)
+        }.value
+        let dataJSON: Data
+        let route: CaptureRoute
+        if let matched = read.matchedData {
+            dataJSON = matched
+            route = .liveModelMatch
+        } else {
+            dataJSON = try readDataJSON()
+            route = .reloaded
+        }
+        let settings = try settingsRead.get()
+        // A baseline that turned Mac-encrypted after its header was read (or one that needs a key) is re-read here.
+        let baseline = read.baselineNeedsMainActor ? readBaselineJSON() : read.baseline
+        return (FlashSendInputs(dataJSON: dataJSON, settings: settings, baselineJSON: baseline), route)
+    }
+
+    /// The live model encoded exactly as `DataStore.serializeForSave` encodes it — attachment paths normalised,
+    /// `SchemaVersion = max(v, 1)` (both applied to the live model, as every save does), out-of-range values refused —
+    /// minus the final JSON write, which runs off-main. nil when a value is out of range (the save would fail too).
+    func saveEncodingTree(_ data: AppData) -> JSONValue? {
+        dataStore.normalizeFilePaths(data)
+        if data.schemaVersion < DataStore.currentSchemaVersion { data.schemaVersion = DataStore.currentSchemaVersion }
+        let issues = JSONEncodeIssueLog()
+        let tree = ModelCodec.encodeAppData(data, options: JSONEncodeOptions(zone: dataStore.clock.timeZone, issueLog: issues))
+        return issues.issues.isEmpty ? tree : nil
+    }
+
+    struct OffMainRead: Sendable {
+        /// The data file's plaintext when it equals the candidate's JSON (nil → the main actor reloads).
+        var matchedData: Data?
+        var baseline: Data?
+        var baselineNeedsMainActor = false
+    }
+
+    /// The detached half of `captureSendInputs(live:)`: write the candidate, read + decrypt the data file and compare;
+    /// read + decrypt the baseline.
+    nonisolated static func readOffMain(dataURL: URL, dataKey: SymmetricKey?, candidate: JSONValue?,
+                                        baselineURL: URL, baselineKey: SymmetricKey?) -> OffMainRead {
+        var out = OffMainRead()
+        if let candidate, let written = try? JSONWriter.data(candidate),
+           let raw = try? DataStore.readRaw(dataURL), let plain = try? DataStore.decodeFileBytes(raw, key: dataKey),
+           plain == written {
+            out.matchedData = written
+        }
+        if let raw = try? Data(contentsOf: baselineURL) {
+            if LocalEncryption.classify(raw) == .mac && baselineKey == nil {
+                out.baselineNeedsMainActor = true
+            } else {
+                out.baseline = decodeBaseline(raw, key: baselineKey)
+            }
+        }
+        return out
+    }
+
+    /// The first 8 bytes of a file (enough for `LocalEncryption.classify`); nil when it cannot be opened.
+    nonisolated static func header(_ url: URL) -> Data? {
+        guard let h = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? h.close() }
+        return (try? h.read(upToCount: 8)) ?? Data()
     }
 
     /// Baseline → change set (nil when unchanged); no baseline → snapshot labelled `full database` (FLASH-103).
