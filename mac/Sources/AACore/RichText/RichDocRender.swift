@@ -138,6 +138,10 @@ final class RichRenderer {
 
     private static func applyEdges(_ b: NSTextBlock, border: XamlThickness?, borderBrush: XamlBrush?,
                                    padding: XamlThickness?, background: XamlBrush?) {
+        if !(b is NSTextTableBlock) {
+            // TextKit 1 shrink-wraps a block without a width; a WPF block box spans its container.
+            b.setValue(100, type: .percentageValueType, for: .width)
+        }
         if let t = border {
             for (edge, v) in [(NSRectEdge.minX, t.left), (.minY, t.top), (.maxX, t.right), (.maxY, t.bottom)] {
                 b.setWidth(fin(v), type: .absoluteValueType, for: .border, edge: edge)

@@ -48,6 +48,26 @@ public enum XamlReadOutcome {
         return b.run()
     }
 
+    /// XD.2.8 "Typing attributes": the projection of the document's root context (an empty or cleared body keeps
+    /// typing in it — a cleared SIRE body is still Segoe UI 13 `#334155`). New documents use `metadata.context`.
+    public static func typingAttributes(for metadata: RichTextMetadata) -> [NSAttributedString.Key: Any] {
+        var root = "<Section"
+        let attrs = metadata.rootRole == nil ? XamlWriter.s1RootAttributes(metadata.context) : metadata.rootAttributes
+        var hasNS = false
+        for a in attrs {
+            if a.qualifiedName == "xmlns" { hasNS = true }
+            root += " " + a.qualifiedName + "=\"" + XamlWriterEmitter.escapeAttribute(a.value) + "\""
+        }
+        if !hasNS { root += " xmlns=\"" + XamlXMLNamespaces.presentation + "\"" }
+        let xaml = root + "><Paragraph /></Section>"
+        guard case .document(let s, _) = read(xaml, context: metadata.context), s.length > 0 else {
+            return RichEditTree.defaultCharacterAttributes
+        }
+        var a = s.attributes(at: 0, effectiveRange: nil)
+        for k in RichParagraphKeys.all where k != .paragraphStyle { a[k] = nil }
+        return a
+    }
+
     private static func injectNamespace(_ xaml: String) -> String? {
         guard let lt = xaml.firstIndex(of: "<") else { return nil }
         var i = xaml.index(after: lt)

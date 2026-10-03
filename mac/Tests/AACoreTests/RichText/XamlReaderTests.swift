@@ -334,4 +334,14 @@ import Testing
         let c = XamlReader.destinationContext(in: s, at: 1, base: .containerEditor)
         #expect(c.fontSize == 20 && c.foreground == 0xFF00_FF00 && c.textAlignment == .right && c.fontFamily == "Consolas")
     }
+
+    @Test func typingAttributesFollowTheRootContext() throws {
+        let (_, m) = RichTest.read(try RichTest.sample("S-08-sire-body.xaml"), .sirePane)
+        let a = XamlReader.typingAttributes(for: m)
+        #expect(a[.aaFontFamilyName] as? String == "Segoe UI" && (a[.font] as! NSFont).pointSize == 13)
+        #expect(RichTest.argb(a[.foregroundColor]) == 0xFF33_4155 && a[.paragraphStyle] != nil)
+        let fresh = XamlReader.typingAttributes(for: RichTextMetadata(context: .containerEditor))
+        #expect(fresh[.aaFontFamilyName] as? String == "Consolas" && RichTest.argb(fresh[.foregroundColor]) == 0xFF1A_1A1A)
+        #expect(fresh[.aaXmlLang] as? String == "en-us")
+    }
 }
