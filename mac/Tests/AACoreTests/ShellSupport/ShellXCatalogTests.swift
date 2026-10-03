@@ -107,9 +107,12 @@ private enum ShellXTestSettingsTab: String, Hashable, Codable { case general, se
 }
 
 @Suite struct ShellXTextTests {
-    @Test func panelDefaults() {
+    @Test @MainActor func panelDefaults() {
         let t = NetDateTime(year: 2026, month: 9, day: 30, hour: 14, minute: 3, second: 12, kind: .local)
         #expect(ShellXText.exportDefaultName(t, zone: TZ.athens) == "aa-data-20260930-1403.zip")
+        // REQ-W-SHELL-04: the File-menu panel and W-PERSIST's BundleService name the export the same way.
+        let bundleName = BundleService.exportDefaultName(t)
+        #expect(ShellXText.exportDefaultName(t) == bundleName)
         #expect(ShellXText.saveCopyDefaultName == "aa-data.json")
         #expect(ShellXText.sharedDefaultName == "aa-shared.zip")
         #expect(ShellXText.sharedPanelMessage == "Choose the single shared save file (put it on a network drive or synced folder). It bundles your data AND attachments.")
