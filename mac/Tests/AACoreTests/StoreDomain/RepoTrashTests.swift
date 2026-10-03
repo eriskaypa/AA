@@ -227,6 +227,62 @@ import Testing
         #expect(store.data.crew.map(\.id) == members.map(\.id))
     }
 
+    @Test func batchUndoKeepsDataOrderWithRealClock() throws {
+        // Stage V2 V2-J1 journey (REPO-072/075/077, HIER-024/135): select T1, T2, T3 → Delete selected… → ⌘Z.
+        // SystemClock, like the app: the batch shares ONE DeletedUtc, so the undo re-appends T1, T2, T3 in order.
+        let made = StoreFactory.make(); let store = made.store
+        let t1 = store.createItem(kind: .task, name: "T1")
+        let t2 = store.createItem(kind: .task, name: "T2")
+        let t3 = store.createItem(kind: .task, name: "T3")
+        _ = store.createItem(kind: .task, name: "Keep")
+        #expect(BatchDelete.trashAll([t1, t2, t3], store: store, isGated: { _ in false }) == 3)
+        #expect(Set(store.data.trash.map(\.deletedUtc.ticks)).count == 1)
+        _ = store.undoLastDelete()
+        #expect(store.data.tasks.map(\.name) == ["Keep", "T1", "T2", "T3"])
+    }
+
+    @Test func trashBatchSharesOneStampAndHandlesSubtasks() throws {
+        // V2-J1: `trashBatch` (the sidebar/Board batch path) — one BatchId, one DeletedUtc even with a moving clock,
+        // nested subtasks through `trashSubtask`; ⌘Z restores in selection order (top-level items to the end of the
+        // collection, the subtask to the end of its parent).
+        let clock = RepoTickingClock()
+        let store = StoreFactory.make(clock: clock).store
+        let a = TaskItem(name: "A"), b = TaskItem(name: "B"), keep = TaskItem(name: "Keep")
+        let parent = TaskItem(name: "P"), s1 = TaskItem(name: "S1"), s2 = TaskItem(name: "S2")
+        parent.subtasks = [s1, s2]
+        let e = Equipment(name: "E")
+        store.data.tasks = [a, b, keep, parent]; store.data.equipment = [e]
+        let readsBefore = clock.reads
+        let trashed = store.trashBatch([a, s1, e, b])
+        #expect(trashed.map(\.name) == ["A", "S1", "E", "B"])
+        #expect(clock.reads > readsBefore)
+        #expect(Set(store.data.trash.map(\.batchId)).count == 1 && store.data.trash.count == 4)
+        #expect(Set(store.data.trash.map(\.deletedUtc.ticks)).count == 1)
+        #expect(store.data.tasks.map(\.name) == ["Keep", "P"] && parent.subtasks.map(\.name) == ["S2"])
+        #expect(store.pendingUndoCount() == 4)
+        #expect(store.undoLastDelete() == [.task, .equipment])
+        #expect(store.data.tasks.map(\.name) == ["Keep", "P", "A", "B"])
+        #expect(parent.subtasks.map(\.name) == ["S2", "S1"] && store.data.equipment.map(\.name) == ["E"])
+        // Without subtasks (REPO-072 `trashItems`): a nested subtask is skipped, the rest share one stamp. Restored
+        // items are new objects (REPO-076), so take the live ones.
+        let live = { (n: String) -> TaskItem in store.data.tasks.first { $0.name == n }! }
+        let liveS1 = try #require(parent.subtasks.first { $0.name == "S1" })
+        let n = store.trashItems([liveS1, live("A"), live("B")])
+        #expect(n == 2 && parent.subtasks.map(\.name) == ["S2", "S1"])
+        _ = store.undoLastDelete()
+        #expect(store.data.tasks.map(\.name) == ["Keep", "P", "A", "B"])
+    }
+
+    @Test func singleTrashHonoursAnExplicitStamp() throws {
+        // V2-J1: the `deletedUtc` parameter wins over the clock; omitted → one clock read (Windows default).
+        let made = make(); let store = made.store
+        let t = TaskItem(name: "T"), u = TaskItem(name: "U")
+        store.data.tasks = [t, u]
+        let stamp = utc(daysAgo: 3, store: store)
+        #expect(try #require(store.trash(t, deletedUtc: stamp)).deletedUtc == stamp)
+        #expect(try #require(store.trash(u)).deletedUtc == store.clock.utcNow())
+    }
+
     @Test func purgeAndEmptyScrubTheSubtree() throws {
         // TV: 02 T-TR-16; 08 T-TR-5; DECISIONS 07 Q-02
         let made = make(); let store = made.store

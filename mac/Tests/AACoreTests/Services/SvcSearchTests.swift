@@ -86,6 +86,58 @@ import Testing
         #expect(cancelled.isEmpty)
     }
 
+    @Test func snapshotDefersXamlConversionOffMain() async throws {
+        // Stage V2 V2-SCALE: the main-actor snapshot copies raw XAML (no parsing); `documents(from:)` converts it on
+        // any thread and yields exactly the documents `makeDocuments` builds; a gated item's notes never enter it.
+        let made = specStore(); let store = made.store
+        let e = store.data.equipment[0]
+        e.container.richTextXaml = "<Section \(Self.ns)><Paragraph><Run>Lube oil</Run></Paragraph></Section>"
+        let blank = TaskItem(name: "Blank notes")
+        blank.container.richTextXaml = "<Section \(Self.ns)></Section>"
+        store.data.tasks.append(blank)
+        let snap = SearchService.snapshot(store: store, isGated: { _ in false })
+        let notes = try #require(snap.documents[0].fields.first { $0.whereLabel == "Notes" })
+        #expect(notes.isXaml && notes.raw == e.container.richTextXaml)
+        let cache = SearchTextCache()
+        let off = await Task.detached { SearchService.documents(from: snap, cache: cache) }.value
+        let on = SearchService.makeDocuments(store: store, isGated: { _ in false })
+        func flat(_ d: [SearchDocument]) -> [String] {
+            d.flatMap { doc in doc.fields.map { "\(doc.ownerHeader)|\($0.kind)|\($0.whereLabel)|\($0.text)|\(String(describing: $0.childID))" } }
+        }
+        #expect(flat(off) == flat(on))
+        #expect(flat(off).contains { $0.contains("|Notes|") && $0.contains("Lube oil") })
+        // A notes field whose plain text is empty is dropped after conversion (it can never match).
+        #expect(!(off.first { $0.ownerID == blank.id }?.fields.contains { $0.whereLabel == "Notes" } ?? true))
+        #expect(SearchService.search(off, query: "lube").map(\.whereLabel) == ["Notes"])
+        // OC-11: a gated item's XAML is not even copied.
+        let gated = SearchService.snapshot(store: store, isGated: { $0.id == e.id })
+        #expect(!gated.documents[0].fields.contains { $0.isXaml })
+    }
+
+    @Test func searchTextCacheParsesEachXamlOncePerContent() {
+        // V2-SCALE: a repeat query over an unchanged database parses nothing; an edit parses only that note; the
+        // cache holds only the current database's XAML.
+        let made = specStore(); let store = made.store
+        let x1 = "<Section \(Self.ns)><Paragraph><Run>alpha</Run></Paragraph></Section>"
+        let x2 = "<Section \(Self.ns)><Paragraph><Run>beta</Run></Paragraph></Section>"
+        store.data.equipment[0].container.richTextXaml = x1
+        store.data.procedures[0].steps[0].container.richTextXaml = x1     // same XAML twice → one parse
+        store.data.vessels[0].container.richTextXaml = x2
+        let cache = SearchTextCache()
+        func run() -> [SearchDocument] {
+            SearchService.documents(from: SearchService.snapshot(store: store, isGated: { _ in false }), cache: cache)
+        }
+        _ = run()
+        let first = cache.conversions                                     // x1, x2 and the subtask's XAML
+        #expect(first == 3 && cache.count == 3)
+        _ = run()
+        #expect(cache.conversions == first)
+        store.data.vessels[0].container.richTextXaml = "<Section \(Self.ns)><Paragraph><Run>gamma</Run></Paragraph></Section>"
+        let docs = run()
+        #expect(cache.conversions == first + 1 && cache.count == 3)
+        #expect(SearchService.search(docs, query: "gamma").count == 1 && SearchService.search(docs, query: "beta").isEmpty)
+    }
+
     @Test func vesselRecordsAreNotSearchedOrDiffed() {
         // 10 VESSEL-283: quick cards, work orders, port calls and the ports DB are neither searched nor diffed
         let made = StoreFactory.make(); let store = made.store

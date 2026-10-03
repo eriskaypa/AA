@@ -193,4 +193,54 @@ import Testing
         // The Windows-scope diff never shows any of it (DATA-103).
         #expect(!DataDiff.compare(current: cur, incoming: inc).hasChanges)
     }
+
+    @Test func otherDataCrewChecklistNotesFilesAndLinks() {
+        // V2-J4 / DECISIONS 01 Q-3: a crew checklist item compares notes, the count-aware file bank and its links,
+        // like a hierarchy step, so a dropped passport scan is a change, not "no change".
+        let cur = AppData(), inc = AppData()
+        let task = TaskItem(name: "Medical check"), eq = Equipment(name: "Hospital")
+        cur.tasks = [task]; inc.tasks = [task]; cur.equipment = [eq]; inc.equipment = [eq]
+        let m = CrewMember(); m.lastName = "Smith"
+        let mb = CrewMember(id: m.id); mb.lastName = "Smith"
+        let s = ChecklistStep(title: "Sign on"), sb = ChecklistStep(id: s.id, title: "Sign on")
+        s.container.files = [FileItem(name: "passport.pdf", path: "files/z_passport.pdf"),
+                             FileItem(name: "cert.pdf", path: "files/z_cert.pdf")]
+        sb.container.files = [FileItem(name: "cert.pdf", path: "files/z_cert.pdf"),
+                              FileItem(name: "visa.pdf", path: "files/z_visa.pdf")]
+        s.container.richTextXaml = "<Paragraph><Run>Old</Run></Paragraph>"
+        sb.container.richTextXaml = "<Paragraph><Run>New</Run></Paragraph>"
+        s.taskIds = [task.id]; sb.equipmentIds = [eq.id]
+        m.checklist = [s]; mb.checklist = [sb]
+        cur.crew = [m]; inc.crew = [mb]
+        let lines = render(DataDiff.compareOtherData(current: cur, incoming: inc).roots)
+        #expect(lines == [
+            "~ [Crew member] Smith",
+            "  ~ checklist item: Sign on",
+            "    ~ notes: \"Old\" \u{2192} \"New\"",
+            "    + file: visa.pdf",
+            "    - file: passport.pdf",
+            "    - linked task: Medical check",
+            "    + linked equipment/area: Hospital",
+        ])
+        // Formatting-only notes changes and a reordered file bank are not changes.
+        sb.container.richTextXaml = "<Paragraph><Run FontWeight=\"Bold\">Old</Run></Paragraph>"
+        sb.container.files = s.container.files.reversed()
+        sb.taskIds = s.taskIds; sb.equipmentIds = s.equipmentIds
+        #expect(!DataDiff.compareOtherData(current: cur, incoming: inc).hasChanges)
+    }
+
+    @Test func otherDataCrewChecklistFileJourney() async throws {
+        // V2-J4 journey: export a bundle, attach a file to a crew checklist item, preview the bundle → the crew
+        // member is listed as changed (the bundle would drop the file).
+        let made = StoreFactory.make(); let store = made.store, ds = made.dataStore
+        let crew = CrewMember(); crew.lastName = "Smith"; crew.checklist.append(ChecklistStep(title: "Sign on"))
+        store.data.crew.append(crew); try store.save()
+        let out = TempFolder("aa-v2j4"); let zip = out.url.appendingPathComponent("v2j4.zip")
+        try await BundleService.exportFolderToZip(ds, to: zip, includeAttachments: true)
+        let incoming = try #require(BundleService.peekZipData(zip, dataStore: ds))
+        crew.checklist[0].container.files.append(FileItem(name: "passport.pdf", path: "files/z_passport.pdf"))
+        let other = DataDiff.compareOtherData(current: store.data, incoming: incoming)
+        #expect(other.roots.map(\.text).contains { $0.hasPrefix("[Crew member]") })
+        #expect(render(other.roots).contains("    - file: passport.pdf"))
+    }
 }

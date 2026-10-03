@@ -15,13 +15,18 @@ extension AppStore {
     /// delete is logged (`Removed / KindLabel / name / "moved to Trash"`) and the store is marked dirty. References
     /// are NOT scrubbed, so a restore is lossless. Returns nil for anything that is not a top-level item of the live
     /// data (e.g. a nested subtask — use `trashSubtask` — or a detached object; 02 §8 D-2, P2).
-    @discardableResult public func trash(_ item: HierarchyItem, batchID: UUID? = nil) -> TrashedItem? {
+    /// `deletedUtc` stamps the entry (default: one clock read). A batch caller reads the clock ONCE and passes the
+    /// same stamp for every entry, so the REPO-077 undo (DeletedUtc descending, ties → collection order) re-appends
+    /// the batch in its original order instead of reversing it (Stage V2 V2-J1; same rule as `trashAllCrew`).
+    @discardableResult public func trash(_ item: HierarchyItem, batchID: UUID? = nil,
+                                         deletedUtc: NetDateTime? = nil) -> TrashedItem? {
         guard let type = Self.repoTrashType(item.kind) else { return nil }
         let payload = TrashPayload.encode(item)
         guard repoRemoveTopLevel(item) else { return nil }
         let label = Self.kindLabel(item.kind)
         let entry = TrashedItem(itemType: type.rawValue, itemId: item.id, batchId: batchID ?? .netEmpty,
-                                name: item.name, kindLabel: label, deletedUtc: clock.utcNow(), payloadJson: payload)
+                                name: item.name, kindLabel: label, deletedUtc: deletedUtc ?? clock.utcNow(),
+                                payloadJson: payload)
         repoAddToTrash(entry)
         logRemoved(kind: label, name: item.name, detail: "moved to Trash")
         markDirty()
@@ -32,9 +37,13 @@ extension AppStore {
     /// DECISIONS 02 Q-4 for Board subtask cards (REPO-081, VIEW-052): ItemType "Task", the parent id stored as the
     /// unknown member `"ParentTaskId"` on the entry (Windows ignores and preserves it). Removes the subtask from its
     /// parent, purges references to it and its descendants, logs like a task delete and sends `trashChanged`.
-    /// A top-level task is forwarded to `trash(_:)`; an object that is not in the live tree → nil.
-    @discardableResult public func trashSubtask(_ subtask: TaskItem, batchID: UUID? = nil) -> TrashedItem? {
-        if data.tasks.contains(where: { $0 === subtask }) { return trash(subtask, batchID: batchID) }
+    /// A top-level task is forwarded to `trash(_:)`; an object that is not in the live tree → nil. `deletedUtc` as
+    /// for `trash(_:batchID:deletedUtc:)` (one stamp per batch).
+    @discardableResult public func trashSubtask(_ subtask: TaskItem, batchID: UUID? = nil,
+                                                deletedUtc: NetDateTime? = nil) -> TrashedItem? {
+        if data.tasks.contains(where: { $0 === subtask }) {
+            return trash(subtask, batchID: batchID, deletedUtc: deletedUtc)
+        }
         guard let parent = repoParent(ofIdentical: subtask),
               let k = parent.subtasks.firstIndex(where: { $0 === subtask }) else { return nil }
         let payload = TrashPayload.encode(subtask)
@@ -42,7 +51,8 @@ extension AppStore {
         parent.subtasks.remove(at: k)
         var entry = TrashedItem(itemType: TrashItemType.task.rawValue, itemId: subtask.id,
                                 batchId: batchID ?? .netEmpty, name: subtask.name,
-                                kindLabel: Self.kindLabel(.task), deletedUtc: clock.utcNow(), payloadJson: payload)
+                                kindLabel: Self.kindLabel(.task), deletedUtc: deletedUtc ?? clock.utcNow(),
+                                payloadJson: payload)
         entry.extra.set(Self.repoParentTaskKey, .string(parent.id.netString))
         for id in doomed { purgeReferences(to: id) }
         repoAddToTrash(entry)
@@ -53,12 +63,31 @@ extension AppStore {
     }
 
     /// REPO-072: trashes every trashable top-level item of a snapshot of `items` as ONE batch (one new `BatchId`
-    /// shared by every resulting entry). Returns how many were trashed. The caller has confirmed.
+    /// shared by every resulting entry). Returns how many were trashed. The caller has confirmed. Every entry carries
+    /// the SAME `DeletedUtc` (one clock read), so ⌘Z restores the items in their original data order (V2-J1).
     @discardableResult public func trashItems(_ items: [HierarchyItem]) -> Int {
+        trashBatch(items, includeSubtasks: false).count
+    }
+
+    /// One undo batch over `items` in order: one new `BatchId` and ONE `DeletedUtc` for every entry (V2-J1,
+    /// REPO-072/077). With `includeSubtasks` a `TaskItem` goes through `trashSubtask` (nested Board/sidebar
+    /// subtasks, DECISIONS 02 Q-4); otherwise only top-level items are trashed. Returns the items actually trashed,
+    /// in order. The caller has confirmed (and flushed editors / saves afterwards).
+    @discardableResult public func trashBatch(_ items: [HierarchyItem],
+                                              includeSubtasks: Bool = true) -> [HierarchyItem] {
         let batch = UUID()
-        var n = 0
-        for item in Array(items) where trash(item, batchID: batch) != nil { n += 1 }
-        return n
+        let stamp = clock.utcNow()
+        var trashed: [HierarchyItem] = []
+        for item in Array(items) {
+            let entry: TrashedItem?
+            if includeSubtasks, let t = item as? TaskItem {
+                entry = trashSubtask(t, batchID: batch, deletedUtc: stamp)
+            } else {
+                entry = trash(item, batchID: batch, deletedUtc: stamp)
+            }
+            if entry != nil { trashed.append(item) }
+        }
+        return trashed
     }
 
     /// REPO-071: soft-deletes a crew member (ItemType "Crew", KindLabel "Crew member", Name = full name, or the last
