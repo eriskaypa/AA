@@ -2,7 +2,8 @@
 //       Read-Only and everything a new editor starts), DATA-177 (lease lost after wake), DATA-180 (the guard's watcher,
 //       reload and status hooks), DATA-181 (conflict-copies availability for File ▸ Recover Conflict Copies…), DATA-184
 //       (shared-with-Windows evidence banner); ARCHITECTURE.md §6.6, §7.7. The UI-side wiring of W-PERSIST's AACore
-//       machinery to F3's AppEnvironment (REQ-W-PERSIST-01/02: attached from the always-present banner views).
+//       machinery to F3's AppEnvironment (REQ-W-PERSIST-01: attached by F3's LaunchCoordinator after the first load;
+//       F3 stops the watcher on quit).
 import AppKit
 import SwiftUI
 import AACore
@@ -17,7 +18,6 @@ import AACore
     private(set) var windowsWarningDismissed = false
     @ObservationIgnored private var contentBaseline: String?
     @ObservationIgnored private var subscriptions: [EventSubscription] = []
-    @ObservationIgnored private var saveMonitor: Any?
     @ObservationIgnored private var presentingSaveSheet = false
 
     // MARK: Attach (once per environment)
@@ -193,29 +193,7 @@ import AACore
         return (try? JSONWriter.string(.object(o))) ?? ""
     }
 
-    // MARK: ⌘S in a read-only copy (DATA-174; REQ-W-PERSIST-02 workaround)
-
-    /// While this copy is read-only, ⌘S shows the DATA-174 warning sheet instead of reaching F3's Save (which would
-    /// write nothing and still report "Saved"). Installed by the read-only banner; idempotent.
-    func installReadOnlySaveInterceptor() {
-        guard saveMonitor == nil else { return }
-        saveMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard PersistReadOnlyKeys.isSave(event) else { return event }
-            let consumed = MainActor.assumeIsolated { () -> Bool in
-                let bridge = PersistUIBridge.shared
-                guard let env = bridge.env, env.isReadOnlyInstance,
-                      NSApp.modalWindow == nil, NSApp.keyWindow?.attachedSheet == nil else { return false }
-                Task { @MainActor in await bridge.presentReadOnlySaveSheet() }
-                return true
-            }
-            return consumed ? nil : event
-        }
-    }
-
-    func removeReadOnlySaveInterceptor() {
-        if let saveMonitor { NSEvent.removeMonitor(saveMonitor) }
-        saveMonitor = nil
-    }
+    // MARK: ⌘S in a read-only copy (DATA-174 — F3's `AppEnvironment.doSave` presents this sheet)
 
     /// "Read-only — not saving" with "OK" (default) and, when the editing copy runs on this Mac, "Switch to Other AA".
     func presentReadOnlySaveSheet() async {
@@ -246,15 +224,6 @@ import AACore
         Task { @MainActor in
             await env.mainDialogs.info(PersistReadOnlyText.leaseLostTitle, PersistReadOnlyText.leaseLostMessage(host: host))
         }
-    }
-}
-
-/// Key matching for the read-only ⌘S interception.
-enum PersistReadOnlyKeys {
-    /// ⌘S exactly (no ⇧/⌥/⌃ — ⇧⌘S is Save a Copy As, which stays available in a read-only copy).
-    nonisolated static func isSave(_ event: NSEvent) -> Bool {
-        let mods = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        return mods == .command && event.charactersIgnoringModifiers?.lowercased() == "s"
     }
 }
 

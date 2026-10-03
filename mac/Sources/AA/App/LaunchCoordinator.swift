@@ -133,6 +133,9 @@ final class LaunchCoordinator {
     func mainWindowAppeared() {
         guard let env, !env.mainLoaded else { return }
         env.loadDataAndInitUI(reason: .initialLoad, status: nil)
+        // DATA-180 / DATA-174 (REQ-W-PERSIST-01): W-PERSIST's guard hooks (status, reload, mode change), the data-file
+        // watcher for an editor outside safe mode, and the read-only session — once, after the first load.
+        PersistUIBridge.shared.attach(env)
         if let w = mainWindow { env.restoreWindowGeometry(w) }
         env.startAutosaveTimer()
         if snapshotMode { return }

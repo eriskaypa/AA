@@ -21,11 +21,18 @@ struct MainWindowView: View {
                 .safeAreaInset(edge: .bottom, spacing: 0) { ShellBottomBar(toolbarHidden: chrome.toolbarHidden) }
         }
         .navigationTitle(env.windowTitle)
-        .navigationSubtitle(env.status.message)
+        .navigationSubtitle(subtitle)
         .toolbar(id: "main") { ShellMainToolbar() }
         .background(ShellWindowCapture { window in chrome.attach(window) })
         .onAppear { LaunchCoordinator.shared.mainWindowAppeared() }
         .frame(minWidth: 860, minHeight: 560)
+    }
+
+    /// SHELL-022 status line; a read-only copy leads with `"Read-Only"` (01 DATA-174, REQ-W-PERSIST-02).
+    private var subtitle: String {
+        guard env.isReadOnlyInstance else { return env.status.message }
+        let m = env.status.message
+        return m.isEmpty ? PersistReadOnlyText.windowSubtitle : "\(PersistReadOnlyText.windowSubtitle) — \(m)"
     }
 }
 

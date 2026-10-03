@@ -142,7 +142,7 @@ struct ShellXSettingsGeneralTab: View {
     private func commitIdentity() {
         let stored = ShellXDataFlows.setAppIdentity(identityDraft, settings: env.settings)
         identityDraft = stored
-        env.status.post(ShellXText.identitySet(stored))
+        env.postSettingStatus(ShellXText.identitySet(stored))
         if env.settings.lastWriteRefused { env.status.post(SettingsStore.unreadableStatus) }
     }
 
@@ -151,8 +151,8 @@ struct ShellXSettingsGeneralTab: View {
         ShellAppearance.set(mode, settings: env.settings)
         env.router.darkModeChecked = ShellAppearance.isEffectivelyDark
         switch mode {
-        case .dark: env.status.post(ShellStatusText.darkModeOn)
-        case .light: env.status.post(ShellStatusText.darkModeOff)
+        case .dark: env.postSettingStatus(ShellStatusText.darkModeOn)
+        case .light: env.postSettingStatus(ShellStatusText.darkModeOff)
         case .system: break
         }
     }

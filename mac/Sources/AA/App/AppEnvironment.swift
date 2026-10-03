@@ -127,6 +127,10 @@ final class AppEnvironment: SharedSaveHost, DataFileConflictHost {
     // MARK: Save (SHELL-050, DATA-027) and autosave (SHELL-052, DATA-026, REPO-009)
 
     func doSave() {
+        if isReadOnlyInstance {                         // DATA-174: "Read-only — not saving" (REQ-W-PERSIST-02)
+            Task { @MainActor in await PersistUIBridge.shared.presentReadOnlySaveSheet() }
+            return
+        }
         if safeMode {
             Task { @MainActor in await mainDialogs.warning(ShellStatusText.safeModeSaveTitle, ShellStatusText.safeModeSaveMessage) }
             return

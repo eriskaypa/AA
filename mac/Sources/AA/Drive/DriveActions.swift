@@ -222,11 +222,12 @@ import AACore
     static func setSyncOnSave(_ on: Bool, env: AppEnvironment, dialogs: DialogPresenter) async {
         env.settings.setSyncOnSave(on)
         env.driveSync.noteStateChanged()
+        let gated = env.settings.isWriteGated                                   // DATA-174 settings suffix
         guard on else {
-            env.driveSync.post(DriveText.syncOff)
+            env.driveSync.post(ShellXText.settingStatus(DriveText.syncOff, gated: gated))
             return
         }
-        env.driveSync.post(DriveText.syncOn)
+        env.driveSync.post(ShellXText.settingStatus(DriveText.syncOn, gated: gated))
         if !GoogleTokenStore.isConfigured(env.dataStore) {
             await dialogs.info(DriveText.syncTitle, DriveText.syncOnNotConfigured)
         } else {

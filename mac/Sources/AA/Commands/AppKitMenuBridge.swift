@@ -72,7 +72,9 @@ final class AppKitMenuBridge: NSObject, NSMenuItemValidation {
             if let row = match(item, path: path) {
                 let ident = NSUserInterfaceItemIdentifier(row.itemIdentifier)
                 if item.identifier != ident { item.identifier = ident }
-                if let tip = row.help, !tip.isEmpty, item.toolTip != tip { item.toolTip = tip }
+                // DATA-174: a gated command carries its own help ("Not available in a read-only copy of AA.").
+                let gatedHelp = LaunchCoordinator.shared.env?.router.decision(row.command).help
+                if let tip = gatedHelp ?? row.help, !tip.isEmpty, item.toolTip != tip { item.toolTip = tip }
             }
         }
     }

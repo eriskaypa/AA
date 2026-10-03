@@ -243,4 +243,10 @@ import Testing
         #expect(!ShellXDataFlows.isBundleDocument(URL(fileURLWithPath: "/x/data.json")))
         #expect(!ShellXDataFlows.isBundleDocument(URL(fileURLWithPath: "/x/Schedule-A.aasched.json")))
     }
+
+    // TV: 01 DATA-174 / MP.7 R-1 — "Dark mode on. (this window only — read-only)" (REQ-W-PERSIST-02)
+    @Test func settingStatusSuffixWhileWriteGated() {
+        #expect(ShellXText.settingStatus(ShellStatusText.darkModeOn, gated: true) == "Dark mode on. (this window only — read-only)")
+        #expect(ShellXText.settingStatus(ShellStatusText.darkModeOn, gated: false) == "Dark mode on.")
+    }
 }

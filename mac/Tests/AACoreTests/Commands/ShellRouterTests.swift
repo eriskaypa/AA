@@ -239,4 +239,25 @@ import Testing
         #expect(R.state(.shortcutBar, ctx()).checked)
         #expect(R.isTextClass(.deleteFamily) && !R.isTextClass(.save))
     }
+
+    // TV: 01 MP.7 R-4 — in a read-only copy every DATA-174 command is disabled with the help text; browsing, exports,
+    // Save (which shows the "not saving" sheet), Revert to Saved and Lock Now stay available (REQ-W-PERSIST-02).
+    @Test func readOnlyWriteGate() {
+        let ro = ctx { $0.writeGated = true; $0.sharedSaveConfigured = true; $0.conflictCopiesExist = true }
+        for c in R.readOnlyDisabled {
+            let d = R.state(c, ro)
+            #expect(!d.enabled, "\(c) should be disabled")
+            #expect(d.help == "Not available in a read-only copy of AA.")
+            #expect(R.state(c, ctx { $0.sharedSaveConfigured = true; $0.conflictCopiesExist = true }).help == nil)
+        }
+        for c: CommandID in [.save, .saveCopyAs, .reloadFromDisk, .exportDataFolder, .lockNow, .searchAll,
+                             .quickSwitcher, .sireExport] {
+            #expect(R.state(c, ro).enabled, "\(c) should stay enabled")
+        }
+        #expect(R.state(.flashSync, ctx()).enabled)
+        // Undo of the last delete
+        let undo = R.state(.undo, ctx { $0.writeGated = true; $0.pendingUndoCount = 2 })
+        #expect(!undo.enabled && undo.help == PersistReadOnlyText.disabledHelp)
+        #expect(R.state(.undo, ctx { $0.pendingUndoCount = 2 }).enabled)
+    }
 }

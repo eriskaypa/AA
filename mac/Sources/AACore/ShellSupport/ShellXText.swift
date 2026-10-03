@@ -49,6 +49,11 @@ public enum ShellXText {
     }
 
     public static func identitySet(_ identity: String) -> String { "App identity set: \(identity)" }
+    /// 01 DATA-174 settings setters in a read-only copy: the normal status text plus
+    /// `" (this window only — read-only)"` (REQ-W-PERSIST-02).
+    public static func settingStatus(_ text: String, gated: Bool) -> String {
+        gated ? text + PersistReadOnlyText.settingsSuffix : text
+    }
     public static let passwordUpdated = "App password updated."
     public static let lockedNow = "Locked. Locked containers and entries will require re-unlocking."
 

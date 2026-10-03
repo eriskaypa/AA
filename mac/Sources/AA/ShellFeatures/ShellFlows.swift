@@ -267,7 +267,7 @@ import AACore
                                         helpText: ShellXText.identityHelp(defaultName: SettingsStore.defaultIdentity()))
         guard case .ok(let value) = await dialogs.prompt(request) else { return }   // Cancel → nothing at all
         let identity = ShellXDataFlows.setAppIdentity(value, settings: env.settings)
-        env.status.post(ShellXText.identitySet(identity))                          // title follows the settings
+        env.postSettingStatus(ShellXText.identitySet(identity))                    // title follows the settings
         postIfSettingsUnwritable(env)
     }
 
@@ -335,7 +335,7 @@ import AACore
 
     private static func toggleTextOnly(_ env: AppEnvironment) {
         let on = !env.settings.values.textOnlyExport
-        env.status.post(ShellXDataFlows.setTextOnlyExport(on, settings: env.settings))
+        env.postSettingStatus(ShellXDataFlows.setTextOnlyExport(on, settings: env.settings))
         postIfSettingsUnwritable(env)
     }
 
@@ -359,5 +359,13 @@ import AACore
     /// DATA-182: a settings setter that could not write keeps the value for this session; say so.
     private static func postIfSettingsUnwritable(_ env: AppEnvironment) {
         if env.settings.lastWriteRefused { env.status.post(SettingsStore.unreadableStatus) }
+    }
+}
+
+extension AppEnvironment {
+    /// Status of a settings setter (Dark Mode, Export Text Only, identity, Sync on Save…): while `settings.json` is
+    /// write-gated (read-only copy, DATA-180 stopped editing) the DATA-174 suffix says the change is session-only.
+    func postSettingStatus(_ text: String) {
+        status.post(ShellXText.settingStatus(text, gated: settings.isWriteGated))
     }
 }

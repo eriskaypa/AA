@@ -100,8 +100,10 @@ struct ShellSharedSavePopover: View {
             Divider()
             HStack {
                 Button("Check Now") { env.router.perform(.checkSharedSaveNow) }
+                    .disabled(!env.router.decision(.checkSharedSaveNow).enabled)
                 Spacer()
                 Button("Stop Shared Save File…") { env.router.perform(.stopSharedSaveFile) }
+                    .disabled(!env.router.decision(.stopSharedSaveFile).enabled)
             }
             .controlSize(.small)
         }

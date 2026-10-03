@@ -158,6 +158,7 @@ final class CommandRouter {
         c.section = section
         c.sectionOrder = env.navigator.sectionOrder
         c.safeMode = env.isSafeMode
+        c.writeGated = env.isReadOnlyInstance || env.dataFileGuard?.state.mode == .stoppedEditing
         c.hasRepo = phase == .main
         let s = sections[section]
         c.newItemAvailable = s?.hasNewItem ?? false
@@ -374,7 +375,7 @@ final class CommandRouter {
             }
         case .shortcutBar: env.setShortcutBarVisible(!env.store.data.ui.showShortcutBar)
         case .darkMode:
-            env.status.post(ShellAppearance.toggleDarkMode(settings: env.settings))
+            env.postSettingStatus(ShellAppearance.toggleDarkMode(settings: env.settings))
             darkModeChecked = ShellAppearance.isEffectivelyDark
         case .tabColors:
             env.showMainWindow()

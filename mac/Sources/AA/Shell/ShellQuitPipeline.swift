@@ -26,10 +26,12 @@ enum ShellQuitPipeline {
             }
         }
 
-        // 1–2. Stop shared sync, reminders and timers so our own final write cannot trigger a reload.
+        // 1–2. Stop shared sync, reminders, timers and the DATA-180 watcher so our own final write cannot trigger a
+        //      reload (REQ-W-PERSIST-01).
         env.sharedSave.stop()
         ReminderCenter.shared.stop()
         env.stopAutosaveTimer()
+        env.dataFileGuard?.stop()
 
         // 3. Safe mode / read-only instance: nothing is written or pushed.
         if env.isSafeMode || env.isReadOnlyInstance || !env.mainLoaded {
@@ -90,6 +92,7 @@ enum ShellQuitPipeline {
     static func resumeAfterCancelledQuit(_ env: AppEnvironment) {
         env.sharedSave.start()
         env.startAutosaveTimer()
+        if !env.isSafeMode, !env.isReadOnlyInstance, env.dataFileGuard?.state.mode == .normal { env.dataFileGuard?.start() }
         if !env.isSafeMode, !env.isReadOnlyInstance { ReminderCenter.shared.start(env: env) }
         env.showMainWindow()
     }

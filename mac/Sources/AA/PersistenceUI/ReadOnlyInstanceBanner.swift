@@ -20,12 +20,7 @@ struct ReadOnlyInstanceBanner: View {
             onEditHere: { Task { await bridge.editHere() } },
             onStay: { bridge.stayReadOnly() },
             onConflictCopies: { showConflictCopies() })
-            .onAppear {
-                bridge.attach(env)
-                bridge.startReadOnly()
-                bridge.installReadOnlySaveInterceptor()
-            }
-            .onDisappear { bridge.removeReadOnlySaveInterceptor() }
+            .onAppear { bridge.startReadOnly() }
             .animation(.snappy, value: bridge.readOnlySession?.phase)
     }
 
@@ -35,7 +30,7 @@ struct ReadOnlyInstanceBanner: View {
 }
 
 /// The DATA-180 "stopped editing" banner and the DATA-184 shared-with-Windows warning (F3 always includes this view in
-/// the banner area; it also attaches W-PERSIST's machinery to the environment).
+/// the banner area; F3's LaunchCoordinator attaches W-PERSIST's machinery to the environment, REQ-W-PERSIST-01).
 struct DataFileConflictBanner: View {
     @Environment(AppEnvironment.self) private var env
     private var bridge: PersistUIBridge { .shared }
@@ -57,7 +52,6 @@ struct DataFileConflictBanner: View {
             }
         }
         .animation(.snappy, value: stopped)
-        .onAppear { bridge.attach(env) }
     }
 }
 

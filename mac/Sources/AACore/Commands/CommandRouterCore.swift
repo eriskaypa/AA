@@ -102,6 +102,10 @@ public struct CommandContext: Sendable, Equatable {
     public var syncOnSave = false
     public var darkMode = false
     public var showShortcutBar = true
+    /// 01 DATA-174 / §MP.3.5: the data folder may not be written — a read-only instance, or DATA-180 "Stop Editing
+    /// Here" (`writeGate` `.readOnlyInstance` / `.externalConflict`). The DATA-174 list is disabled with
+    /// `PersistReadOnlyText.disabledHelp` (DECISIONS "Contract amendments (post-wave)", REQ-W-PERSIST-02).
+    public var writeGated = false
 
     public init() {}
 }
@@ -138,8 +142,11 @@ public struct CommandDecision: Sendable, Equatable {
     public var title: String
     public var checked: Bool
     public var effect: CommandEffect
-    public init(enabled: Bool, title: String, checked: Bool = false, effect: CommandEffect = .none) {
-        self.enabled = enabled; self.title = title; self.checked = checked; self.effect = effect
+    /// Help/tooltip that replaces the registry row's help while it applies (DATA-174 "Not available in a read-only
+    /// copy of AA."); nil = the registry help.
+    public var help: String?
+    public init(enabled: Bool, title: String, checked: Bool = false, effect: CommandEffect = .none, help: String? = nil) {
+        self.enabled = enabled; self.title = title; self.checked = checked; self.effect = effect; self.help = help
     }
 }
 
@@ -159,6 +166,13 @@ public enum CommandRouterCore {
         .alignRight, .bulletedList, .numberedList, .indent, .outdent, .insertLink, .insertTable, .insertSavedList,
         .clearFormatting, .lockSelection, .unlockSelection]
     static let sireBodyFormat: Set<CommandID> = [.bold, .italic, .underline]
+    /// 01 DATA-174 "Disabled" list (menu rows; in-window controls apply `writeGated` themselves): imports, local
+    /// encryption, shared-save Set/Stop (and the pull of Check Now), app password, Drive commands that load, sign in
+    /// or upload, Flash Sync, crew / Shippalm / ports imports, and conflict-copy recovery (writes into the folder).
+    public static let readOnlyDisabled: Set<CommandID> = [.importFromFile, .importDataFolder, .encryptLocalData,
+        .setSharedSaveFile, .stopSharedSaveFile, .checkSharedSaveNow, .recoverConflictCopies, .setPassword,
+        .driveSaveCopy, .driveSetFolder, .driveUpload, .driveLoad, .driveSetOAuthClient, .driveCheckNewer, .flashSync,
+        .importCompasCrew, .vesselImportWorkOrders, .vesselImportPorts]
     static let systemCommands: Set<CommandID> = [.services, .hideApp, .hideOthers, .showAll, .cut, .copy, .paste,
         .pasteAndMatchStyle, .delete, .selectAll, .spellingAndGrammar, .checkDocumentNow, .substitutions,
         .transformations, .speech, .systemTextServices, .toggleSidebar, .toggleToolbar, .customizeToolbar,
@@ -185,6 +199,10 @@ public enum CommandRouterCore {
         // G2 — sheet / modal key window
         if ctx.keyWinIsSheetOrModal && !modalExempt.contains(c) && !listScoped.contains(c) && !moveCommand(c) {
             return CommandDecision(enabled: false, title: title)
+        }
+        // G3 — DATA-174 write gate
+        if ctx.writeGated && readOnlyDisabled.contains(c) {
+            return CommandDecision(enabled: false, title: title, help: PersistReadOnlyText.disabledHelp)
         }
         return resolve(c, ctx, title: title)
     }
@@ -213,6 +231,9 @@ public enum CommandRouterCore {
                 if ctx.phase != .main { return disabled("Undo") }
                 if ctx.keyWin == .main && !ctx.keyWinIsSheetOrModal {
                     let n = ctx.pendingUndoCount
+                    if ctx.writeGated, n > 0 {               // DATA-174: no undo of the last delete
+                        return CommandDecision(enabled: false, title: "Undo", help: PersistReadOnlyText.disabledHelp)
+                    }
                     if !ctx.hasRepo || ctx.safeMode || n == 0 { return disabled("Undo") }
                     return CommandDecision(enabled: true, title: n == 1 ? "Undo Move to Trash" : "Undo Move to Trash (\(n) Items)",
                                            effect: .undoDelete)
