@@ -127,14 +127,8 @@ struct CalendarTabView: View {
         .help("View")
     }
 
-    /// A short count line under the title (Mac addition; muted).
-    private var summary: String {
-        guard let s = schedule else { return "" }
-        let n = s.rows.count
-        var text = n == 1 ? "1 item" : "\(n) items"
-        if let late = s.groups.first(where: { $0.role == .overdue }) { text += "  \u{00B7}  \(late.rows.count) overdue" }
-        return text
-    }
+    /// A short count line under the title (Mac addition; muted): distinct items, so an Agenda fan-out counts once.
+    private var summary: String { schedule?.summaryLine ?? "" }
 
     // MARK: Editors (VIEW-014)
 
@@ -173,6 +167,9 @@ private struct CalSidebar: View {
                        displayedComponents: .date)
                 .datePickerStyle(.graphical)
                 .labelsHidden()
+                // DECISIONS Stage V ruling / design rule 14: every date picker carries the ISO locale (on the picker
+                // only), so any field rendering reads yyyy-MM-dd and weeks start on Sunday like the Calendar views.
+                .environment(\.locale, CalDateText.pickerLocale)
                 .padding(.horizontal, AASpacing.s)
                 .frame(maxWidth: .infinity)
             // Today + the selected day on one line; in a narrow pane the day moves under the button (never clipped).
@@ -284,16 +281,18 @@ private struct CalScheduleTable: View {
 
     var body: some View {
         let size = CGFloat(model.fontScale)
+        let w = CalColumnWidths.forSize(model.fontScale)
         let groups = schedule?.groups ?? []
         let grouped = schedule?.isGrouped ?? false
-        // Ideal widths sum to what a 1100-pt window leaves the pane, so all five columns are visible there and at the
-        // default 1280 × 820; wider panes grow every column (NSTableView uniform resizing). Windows widths: 56 / 210 /
-        // 120 / 420 / 110 (VIEW-011; Deviations/W-PLAN.md).
+        // `CalColumnWidths` (VIEW-011; Deviations/W-PLAN.md): Done / When / Status / Recurrence hug their content (max =
+        // the widest value), so every spare point goes to Task; the minimums scale with the text size (words in Task
+        // never break; the table scrolls horizontally instead). The ideals fit the pane of an 1100-pt window at the
+        // default size; A- / A+ re-apply them. Windows: 56/210/120/420/110.
         Table(of: CalScheduleRow.self, selection: $selection) {
             TableColumn("Done") { row in
                 CalDoneCell(row: row) { save() }
             }
-            .width(min: 36, ideal: 40, max: 70)
+            .width(min: w.done.min, ideal: w.done.ideal, max: w.done.max ?? w.done.ideal)
             TableColumn("When") { row in
                 Text(row.rangeDisplay)
                     .font(.aaMono(size))
@@ -302,22 +301,22 @@ private struct CalScheduleTable: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .help(CalendarRowBuilder.whenHelp)
             }
-            .width(min: 110, ideal: 150, max: 300)
+            .width(min: w.when.min, ideal: w.when.ideal, max: w.when.max ?? w.when.ideal)
             TableColumn("Status") { row in
                 CalStatusCell(row: row, size: size)
             }
-            .width(min: 80, ideal: 92, max: 170)
+            .width(min: w.status.min, ideal: w.status.ideal, max: w.status.max ?? w.status.ideal)
             TableColumn("Task") { row in
                 CalNameCell(row: row, size: size)
             }
-            .width(min: 140, ideal: 160)
+            .width(min: w.task.min, ideal: w.task.ideal)
             TableColumn("Recurrence") { row in
                 Text(row.recurrence)
                     .font(.aaMono(size))
                     .foregroundStyle(row.recurrence == "None" ? AAColor.muted : AAColor.fg)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .width(min: 84, ideal: 88, max: 140)
+            .width(min: w.recurrence.min, ideal: w.recurrence.ideal, max: w.recurrence.max ?? w.recurrence.ideal)
         } rows: {
             if grouped {
                 ForEach(groups) { g in
@@ -400,7 +399,7 @@ private struct CalStatusCell: View {
     var body: some View {
         let status = row.status
         Text(status)
-            .font(.aaMono(size, weight: .semibold))
+            .font(.aaMono(size))                    // regular weight: the colour carries the status (rule 2)
             .foregroundStyle(color(status))
             .fixedSize(horizontal: false, vertical: true)
     }

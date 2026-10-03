@@ -127,9 +127,11 @@ struct BucketsTabView: View {
                 Image(systemName: "ellipsis.circle")
                     .symbolRenderingMode(.hierarchical)
                     .fontWeight(.regular)
+                    .foregroundStyle(.secondary)
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
+            .tint(.secondary)                       // rule 4: the overflow menu is grey like its sibling icons
             .fixedSize()
             .frame(width: 24, height: 24)
             .help("More bucket commands: \(BucketsModel.renameTitle), \(BucketsModel.setCategoryTitle)")
@@ -287,10 +289,11 @@ private struct BucketIconButton: View {
             Image(systemName: symbol)
                 .symbolRenderingMode(.hierarchical)
                 .fontWeight(.regular)
+                .foregroundStyle(.secondary)        // rule 4: every icon in the bar is .secondary (no accent tint)
                 .frame(width: 24, height: 24)
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.accessoryBar)             // grey like the Hierarchy / Crew icon bars (a borderless button tints)
         .help(help)
         .accessibilityLabel(label)
     }

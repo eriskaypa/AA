@@ -8,7 +8,7 @@ Moved verbatim from `Docs/Deviations/W-PLAN.md` once `check-ownership.sh` mapped
 | Done | 103 |
 | Remaining | 0 |
 | Not applicable | 0 |
-| AACoreTests added (Calendar/, Board/) | 63 (`CalendarRowBuilderTests` 19, `PlannerTests` 20, `BoardModelTests` 13, `BucketsModelTests` 5, `MapLayoutTests` 6) |
+| AACoreTests added (Calendar/, Board/) | 72 (`CalendarRowBuilderTests` 19, `PlannerTests` 20, `CalendarLayoutTests` 9, `BoardModelTests` 13, `BucketsModelTests` 5, `MapLayoutTests` 6) |
 | `Scripts/check-placeholders.sh W-PLAN` | empty |
 | `ContractStatus.wPlanImplemented` | `true` |
 
@@ -62,3 +62,32 @@ Fix pass FIX-W-PLAN (2026-10-03, verification findings V-07 / V-DESIGN; 7 of 7 f
   column 256 pt.
 Design-rule pass on the touched views: no zebra stripes (Calendar table, Buckets members), regular-weight row names
 (Calendar Task, Buckets list), mono digits on dates / durations.
+
+Fix pass FIX2-W-PLAN (2026-10-03, Stage V round-2 findings V2-J1 / V2-J2 / V2-DESIGN / V2-SCALE; 10 of 11 fixed, 1
+informational): new `Sources/AACore/Calendar/CalendarLayout.swift` holds the layout decisions, tested by
+`CalendarLayoutTests` (9 tests).
+* V2-J1 Relationship Map: the colour key moved from a floating capsule over the canvas into a footer bar under it
+  (never covers a node; hidden with no graph); the canvas shows no scroll indicators (no legacy corner square);
+* V2-J2 Planner Week: columns shrink to fit the pane down to 96 pt (`PlannerGeometry.fittedDayWidth`), so the default
+  window shows Sunday→Saturday with the gutter; a narrower pane scrolls today's column into view on every rebuild
+  (`initialScrollX`);
+* V2-J2 Planner due strip: a "+N more" row (hidden chips counted from measured frames, `hiddenChipCount`) expands the
+  strip to 324 pt, "Show less" collapses it; stacks scroll without indicators (an overflowing day's chips were also
+  narrowed by a legacy scroller);
+* V2-J2 Calendar columns (`CalColumnWidths`): When / Status / Recurrence / Done hug their content, Task takes the spare
+  width; minimums scale with the text size (no broken words at A+ 28) and never fall below the header ("Done",
+  "Recurrence" no longer truncated);
+* V2-J2 Calendar header count counts distinct items (`CalSchedule.summaryLine`): Agenda and All Upcoming both read
+  "53 items · 12 overdue" on the snapshot data (Agenda said 73);
+* V2-J2 Board columns: no scroll indicators, so cards sit 6 pt from both borders with "Show scroll bars: Always";
+* V2-DESIGN Calendar mini-month: `.environment(\.locale, CalDateText.pickerLocale)` (en_CA) per the Stage V ruling;
+* V2-DESIGN Buckets icon bar grey (accessory-bar buttons, `.secondary` overflow menu); the same overflow fix for the
+  Hierarchy, Saved Lists and quick-work bars is requested from W-HIER / W-BUILD / W-QUICK;
+* V2-DESIGN Planner chips: opacity on the fill only, ghost labels in the foreground colour, brand mono 11;
+* V2-DESIGN Calendar Status cells regular weight;
+* V2-SCALE timings: informational, no change.
+Snapshots (light + dark, `snapdata-full`, 1280 × 820 unless noted) under `scratchpad/snapshots/fix2-W-PLAN/`: Map
+(focus Main engine), Planner Day / Week / Week 1000 × 760 / Month, Board, Buckets (none / selected), Calendar Day
+(1280 and 1100 × 720) / Agenda / All Upcoming at 15 and 28 / Agenda at 19.5 — no AppKit / SwiftUI runtime warnings
+(a `.id(fontScale)` on the table, tried first, caused a reentrant NSTableView delegate warning and was dropped).
+

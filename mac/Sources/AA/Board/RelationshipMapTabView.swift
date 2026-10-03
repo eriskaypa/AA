@@ -135,7 +135,7 @@ private struct MapCanvasPane: View {
                           symbol: "point.3.connected.trianglepath.dotted") {
                 zoomControls
             }
-            ZStack(alignment: .bottomLeading) {
+            ZStack {
                 GeometryReader { geo in
                     ScrollView([.horizontal, .vertical]) {
                         MapGraphCanvas(model: model, graph: graph)
@@ -147,6 +147,9 @@ private struct MapCanvasPane: View {
                             .gesture(panGesture)
                     }
                     .scrollPosition($position)
+                    // Rule 17: no legacy scroller corner square in the canvas; it pans by drag, trackpad / wheel,
+                    // Fit and Center.
+                    .scrollIndicators(.never)
                     .onScrollGeometryChange(for: CGPoint.self) { $0.contentOffset } action: { _, new in offset = new }
                     .simultaneousGesture(magnifyGesture)
                     .onAppear { viewport = geo.size }
@@ -167,8 +170,16 @@ private struct MapCanvasPane: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .allowsHitTesting(false)
                 }
+            }
+            // The colour key sits in a footer bar under the canvas, so it never covers a node (it used to float over
+            // the bottom-left of the canvas); hidden when there is no graph to explain (design rule 17).
+            if graph != nil {
+                Divider()
                 MapLegend()
-                    .padding(AASpacing.m)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, AASpacing.l)
+                    .frame(height: MapLegend.barHeight)
+                    .background(.bar)
             }
         }
     }
@@ -272,21 +283,20 @@ private struct MapDotGrid: View {
     }
 }
 
-/// Per-kind colour key (DECISIONS 07 Q-10).
+/// Per-kind colour key (DECISIONS 07 Q-10), shown in the footer bar under the canvas.
 private struct MapLegend: View {
+    static let barHeight: CGFloat = 30
+
     var body: some View {
-        HStack(spacing: AASpacing.m) {
+        HStack(spacing: AASpacing.l) {
             ForEach(ItemKind.allKinds, id: \.rawValue) { k in
                 HStack(spacing: 5) {
                     RoundedRectangle(cornerRadius: 3).fill(AAColor.kind(k)).frame(width: 12, height: 12)
                         .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(.black.opacity(0.6), lineWidth: 0.5))
-                    Text(k.name).font(.system(size: 11, weight: .medium)).foregroundStyle(AAColor.fg)
+                    Text(k.name).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.fg).fixedSize()
                 }
             }
         }
-        .padding(.horizontal, AASpacing.m)
-        .padding(.vertical, 6)
-        .aaGlass(in: Capsule())
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Colour key: Equipment blue, Task orange, Procedure green, Vessel purple")
     }
