@@ -229,7 +229,7 @@ import AACore
 
 /// Mac-only explanatory texts of W-PERSIST's UI.
 enum PersistUIText {
-    static let sharedSaveSetup = "Give each computer its own AA data folder (the default one is fine), then point both copies of AA at one shared save file that both can reach — File ▸ Shared Save File ▸ Set… on each.\n\nWith Parallels, keep the shared file in a Mac folder that is shared with Windows: for example ~/AA-Shared/aa-shared.zip on this Mac, which Windows sees as \\\\Mac\\Home\\AA-Shared\\aa-shared.zip.\n\nAA then saves to that file every minute and reloads automatically when the other copy updates it."
+    static let sharedSaveSetup = "Give each computer its own AA data folder (the default one is fine), then point both copies of AA at one shared save file that both can reach — File ▸ Shared Save ▸ Set Shared Save File… on each.\n\nWith Parallels, keep the shared file in a Mac folder that is shared with Windows: for example ~/AA-Shared/aa-shared.zip on this Mac, which Windows sees as \\\\Mac\\Home\\AA-Shared\\aa-shared.zip.\n\nAA then saves to that file every minute and reloads automatically when the other copy updates it."
     static let conflictCopiesEmpty = "When another program changes the data file while AA is open, the version you don't keep is saved here."
     static let conflictCopiesHelp = "Versions of the data file kept when it was changed outside this copy of AA. The newest 20 are kept."
 }

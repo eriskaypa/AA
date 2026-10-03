@@ -27,6 +27,14 @@ blocked) and a read-only lock file, MP.7.2 forward payload and F-2 rule, MP.7.3 
 wake), first launch in lease mode, MP.7.5 X-1…X-11, MP.7.7 E-1/E-2 plus the external-file read-only upgrade, MP.7.8,
 MP.7.9, DATA-175 session incl. Stay Read-Only, path mapping / opener. Gate: 496 tests / 74 suites green.
 
+## Fix round 1 (FIX-W-PERSIST, verifier V-01)
+* DATA-184 banner text (`PersistWindowsEvidence.message`) and the "Show Me How" help (`PersistUIText.sharedSaveSetup`)
+  named `File ▸ Shared Save File ▸ Set…`, which does not exist. They now name the real menu path,
+  `File ▸ Shared Save ▸ Set Shared Save File…` (03 §6.5.1 registry; 03 §X-13 renames 01's title, so 01:4560's quoted
+  banner text is superseded there — not a deviation). New test `windowsEvidenceMenuPath` builds the path from
+  `ShortcutRegistry.row(.setSharedSaveFile)` and checks the banner quotes it. Snapshot `w-persist.banners` re-checked in
+  light and dark: the three-line banner fits, no clipping. Gate: 1,587 tests green, ownership check OK.
+
 ## Snapshots (both appearances, `--sheet w-persist.*`)
 `conflict-changed`, `conflict-unreadable`, `conflict-deleted`, `conflict-copies` (fixture `Fixtures/ui/w-persist/conflicts/`),
 `path-mappings`, `path-mappings-empty`, `path-mappings-unc`, `path-mapping-editor`, `path-mapping-invalid`, `banners`

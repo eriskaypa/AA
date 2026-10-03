@@ -546,6 +546,15 @@ struct PersistInstanceGuardTests {
         #expect(PersistWindowsEvidence.warnedKey(enc.url).rawValue.hasPrefix("AA.SharedWithWindowsWarned."))
     }
 
+    @Test("DATA-184 banner names the real menu path (03 §X-13 final titles)")
+    func windowsEvidenceMenuPath() throws {
+        let row = try #require(ShortcutRegistry.row(.setSharedSaveFile))
+        let path = (row.menuPath + [row.title]).joined(separator: " ▸ ")
+        #expect(path == "File ▸ Shared Save ▸ Set Shared Save File…")
+        #expect(PersistWindowsEvidence.message.contains("(\(path))."))
+        #expect(!PersistWindowsEvidence.message.contains("Shared Save File ▸ Set…"))
+    }
+
     @Test("DATA-175 read-only session: the upgrade poll and the live view")
     func readOnlySession() async throws {
         let t = TempFolder("persist-ro")
