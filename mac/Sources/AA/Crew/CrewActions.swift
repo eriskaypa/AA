@@ -68,7 +68,8 @@ import AACore
                                  style: .informational,
                                  buttons: [AlertButton(title: CrewImportSession.dayFirstButton),
                                            AlertButton(title: CrewImportSession.monthFirstButton),
-                                           AlertButton(title: CrewImportSession.cancelButton, role: .cancel)])
+                                           AlertButton(title: CrewImportSession.cancelButton, role: .cancel)],
+                                 defaultIndex: 2)                    // CREW-033: default = Cancel (Return and ⎋)
             switch await dialogs.alert(spec) {
             case 0: session.answer(.dayFirst)
             case 1: session.answer(.monthFirst)

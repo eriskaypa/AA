@@ -14,10 +14,14 @@ struct BucketsTabView: View {
     @State private var selectedMember: String?
     /// VIEW-147: the new bucket is selected and scrolled into view.
     @State private var scrollTarget: UUID?
+    /// V2-SCALE: the member rows (a walk over every item) are cached and rebuilt only when something they read
+    /// changes — and not at all while the section is hidden (rebuilt once when it is shown again).
+    @State private var rows = CalLive<[BucketMemberRow]>([])
+    @Environment(\.aaSectionIsVisible) private var isVisible
 
     var body: some View {
         let data = env.store.data
-        let memberRows = BucketsModel.memberRows(data)
+        let memberRows = rows.value
         let groups = BucketsModel.groups(data, rows: memberRows)
         let bucket = selectedBucket.flatMap { id in data.quickBuckets.first { $0.id == id } }
         let members = bucket.map { BucketsModel.members(of: $0.id, in: memberRows) } ?? []
@@ -33,7 +37,10 @@ struct BucketsTabView: View {
             selectedMember = nil
         }
         .onChange(of: selectedBucket) { _, _ in selectedMember = nil }
+        .onChange(of: isVisible, initial: true) { _, v in rows.setActive(v) }
         .onAppear {
+            let store = env.store
+            rows.bind { BucketsModel.memberRows(store.data) }
             #if DEBUG
             if ProcessInfo.processInfo.environment["AA_WPLAN_SELECT_FIRST_BUCKET"] != nil, selectedBucket == nil {
                 selectedBucket = groups.first?.rows.first?.id

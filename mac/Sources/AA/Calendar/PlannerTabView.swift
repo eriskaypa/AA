@@ -90,6 +90,7 @@ struct PlannerTabView: View {
     @Environment(\.dialogs) private var dialogs
     @State private var model = PlannerPageModel()
     @FocusState private var searchFocused: Bool
+    @Environment(\.aaSectionIsVisible) private var isVisible
 
     var body: some View {
         VStack(spacing: 0) {
@@ -113,6 +114,9 @@ struct PlannerTabView: View {
         .background(AAColor.bg)
         .onAppear { model.attach(env.store) }
         .onChange(of: env.store.generation) { _, _ in model.attach(env.store) }
+        .onChange(of: isVisible, initial: true) { _, v in                                 // V2-SCALE
+            model.placed.setActive(v); model.pool.setActive(v)
+        }
         .aaSectionCommands(.planner, SectionCommands(plannerPrevious: { model.previous() },
                                                      plannerToday: { model.goToToday() },
                                                      plannerNext: { model.next() },

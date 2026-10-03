@@ -282,11 +282,15 @@ enum CalPersist {
 
 /// Recomputes a derived value whenever anything it read changes (Observation), coalescing bursts into one rebuild
 /// on the next main-actor turn. Inputs that live in the owning page model are tracked the same way.
+/// V2-SCALE: while the owning section is hidden (`aaSectionIsVisible` false → `setActive(false)`) a change only marks
+/// the value stale; showing the section again rebuilds it once — no whole-database rebuild per keystroke elsewhere.
 @MainActor @Observable
 final class CalLive<Value> {
     private(set) var value: Value
     @ObservationIgnored private var compute: (() -> Value)?
     @ObservationIgnored private var token = 0
+    @ObservationIgnored private(set) var isPaused = false
+    @ObservationIgnored private(set) var isStale = false
 
     init(_ initial: Value) { value = initial }
 
@@ -295,8 +299,16 @@ final class CalLive<Value> {
         refresh()
     }
 
+    /// Suspends (false) or resumes (true) rebuilding; resuming rebuilds once when anything changed meanwhile.
+    func setActive(_ active: Bool) {
+        isPaused = !active
+        if active, isStale { refresh() }
+    }
+
     func refresh() {
         guard let compute else { return }
+        if isPaused { isStale = true; return }
+        isStale = false
         token &+= 1
         let mine = token
         value = withObservationTracking(compute) { [weak self] in

@@ -114,8 +114,10 @@ struct HierSidebarIconBar: View {
                     .help(HierText.deleteGroupHelp)
             } label: {
                 Label(HierText.groupCommandsMenu, systemImage: "ellipsis.circle")
+                    .foregroundStyle(.secondary)                    // grey like its sibling icons (rule 4)
             }
             .menuIndicator(.hidden)
+            .tint(.secondary)
             .fixedSize()
             .help(HierText.groupCommandsHelp)
             .accessibilityLabel(HierText.groupCommandsMenu)

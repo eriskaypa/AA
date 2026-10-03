@@ -76,6 +76,7 @@ struct BoardTabView: View {
     @Environment(\.dialogs) private var dialogs
     @State private var model = BoardPageModel()
     @FocusState private var findFocused: Bool
+    @Environment(\.aaSectionIsVisible) private var isVisible
 
     var body: some View {
         VStack(spacing: 0) {
@@ -96,6 +97,7 @@ struct BoardTabView: View {
             model.selection = [:]
             model.attach(env.store)
         }
+        .onChange(of: isVisible, initial: true) { _, v in model.cards.setActive(v) }     // V2-SCALE
         .aaSectionCommands(.board, SectionCommands(focusSearchField: { findFocused = true },
                                                    searchFieldIsFocused: findFocused))
     }

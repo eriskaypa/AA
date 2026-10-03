@@ -30,10 +30,13 @@ struct SavedListsTabView: View {
         let primary = BuilderSavedLists.primary(sections, ids: selection, data: data)
         return HSplitView {
             sidebar(sections: sections, sortAZ: sortAZ)
-                .frame(minWidth: 290, idealWidth: 340, maxWidth: 520, minHeight: 0, maxHeight: .infinity)
+                .frame(minWidth: 240, idealWidth: 340, maxWidth: 520, minHeight: 0, maxHeight: .infinity)
             detail(primary)
-                .frame(minWidth: 420, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
+                .frame(minWidth: 340, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
         }
+        // Laid out inside the floating sidebar's safe area (1-pt inset, as CrewTabView); 228 + 1 + 240 + 1 + 340 ≤ 860,
+        // so the split fits the minimum main window without clipping either side (V2-DESIGN, W-CREW probe 900×640).
+        .padding(.leading, CrewLayout.splitLeadingInset)
         .background(AAColor.bg)
         .onAppear { statusOverride = nil }
         .onChange(of: env.store.generation) { _, _ in
@@ -190,8 +193,10 @@ struct SavedListsTabView: View {
                 Button(PdfExportCommand.savedAll.title, systemImage: PdfExportCommand.savedAll.symbol) { run { await exportAll() } }
             } label: {
                 Image(systemName: "ellipsis.circle").symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)                    // grey like its sibling icons (rule 4)
             }
             .menuStyle(.button)
+            .tint(.secondary)
             .buttonStyle(.accessoryBar)
             .menuIndicator(.hidden)
             .fixedSize()

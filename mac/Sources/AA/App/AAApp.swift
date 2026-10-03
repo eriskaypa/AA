@@ -34,7 +34,7 @@ struct AAApp: App {
             .restorationBehavior(.disabled)
             .commandsRemoved()
             .defaultWindowPlacement { content, context in
-                WindowPlacement(.center, size: CGSize(width: 420, height: 280))
+                WindowPlacement(.center)                                // 420 wide, height hugs content (rule 16)
             }
 
         Window("AA", id: SceneID.main.rawValue) { MainWindowView().aaWindowRoot(.main) }
@@ -81,6 +81,7 @@ struct AAApp: App {
         .restorationBehavior(.disabled)
         .commandsRemoved()
         .defaultSize(width: 500, height: 660)                          // TOOLS-080 (REQ-W-DRIVE-02)
+        .windowResizability(.contentSize)                              // rule 16: the height hugs the rows
 
         Window("Folder builder", id: SceneID.folderBuilder.rawValue) { FolderBuilderView().aaWindowRoot(.folderBuilder) }
             .defaultLaunchBehavior(.suppressed)
@@ -89,7 +90,7 @@ struct AAApp: App {
             .defaultSize(width: 820, height: 660)                      // TOOLS-040 (REQ-W-DRIVE-02)
 
         Window("Date calculator", id: SceneID.dateCalculator.rawValue) {
-            DateCalculatorView().aaWindowRoot(.dateCalc).frame(width: 540, height: 520)
+            DateCalculatorView().aaWindowRoot(.dateCalc)               // 540 wide, height hugs content (rule 16)
         }
         .defaultLaunchBehavior(.suppressed)
         .restorationBehavior(.disabled)

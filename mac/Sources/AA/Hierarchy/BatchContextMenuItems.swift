@@ -100,13 +100,8 @@ struct BatchContextMenuItems: View {
         env.flushAllEditors()
         // Re-evaluate after the confirmation (the model may have changed while the alert was up).
         let picks = BatchDelete.topLevel(items).filter { !isGated($0) }
-        let batch = UUID()
-        var trashed: [HierarchyItem] = []
-        for item in picks {
-            let entry: TrashedItem?
-            if let t = item as? TaskItem { entry = store.trashSubtask(t, batchID: batch) } else { entry = store.trash(item, batchID: batch) }
-            if entry != nil { trashed.append(item) }
-        }
+        // V2-J1: one BatchId and ONE DeletedUtc for the whole batch, so ⌘Z restores the original order.
+        let trashed = store.trashBatch(picks)
         guard !trashed.isEmpty else { return 0 }
         HierPersist.save(env, dialogs: dialogs)
         for item in trashed {

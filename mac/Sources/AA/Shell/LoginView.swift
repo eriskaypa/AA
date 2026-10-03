@@ -77,8 +77,8 @@ struct LoginView: View {
                 .padding(.top, 6)
                 .animation(.easeOut(duration: 0.15), value: model.errorText)
 
-            Spacer(minLength: 0)
-
+            // Design rule 16 (V2-DESIGN): the card hugs its rows — no stretched blank between Password and the
+            // buttons; the window takes the content's height (scene `.windowResizability(.contentSize)`).
             HStack(spacing: AASpacing.s) {
                 Spacer()
                 Button { model.exit() } label: { Text("Exit").frame(minWidth: 70) }
@@ -86,9 +86,11 @@ struct LoginView: View {
                     .keyboardShortcut(.defaultAction)
                     .aaProminent()
             }
+            .padding(.top, 14)
         }
         .padding(22)
-        .frame(width: 420, height: 280)
+        .frame(width: 420)
+        .fixedSize(horizontal: false, vertical: true)
         .background(AAColor.bg)
         .onAppear { focus = .username }
         .onChange(of: model.failureCount) { _, _ in focus = .password }

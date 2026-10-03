@@ -332,7 +332,10 @@ enum PersistBundleIO {
         return out.sorted { $0.1 < $1.1 }
     }
 
-    static func key(_ leaf: String) -> String { NetText.toUpperInvariant(leaf) }
+    /// Case-insensitive AND normalisation-insensitive leaf key: NFC first, so an NFD name on disk (HFS+, Finder copies)
+    /// and the NFC name a bundle carries compare equal — the orphan sweep never deletes the NFD local copy and the
+    /// attachments-match check does not see a change (V2-COMPAT NFC/NFD, defence in depth; ZipWriter writes NFC).
+    static func key(_ leaf: String) -> String { NetText.toUpperInvariant(leaf.precomposedStringWithCanonicalMapping) }
 
     /// `AttachmentsMatch`: same set of top-level names (case-insensitive) with equal sizes; a missing dir is empty.
     static func attachmentsMatch(bundleDir: URL, localDir: URL) -> Bool {

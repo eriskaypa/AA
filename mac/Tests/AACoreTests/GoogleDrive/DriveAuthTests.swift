@@ -46,7 +46,11 @@ import Testing
         #expect(v.load() == t)
         #expect(try secrets.read(service: "AA", account: "google-token-key")?.count == 32)
         let raw = try Data(contentsOf: v.tokenFile)
-        #expect(!String(decoding: raw, as: UTF8.self).contains("AT"))
+        // Encrypted at rest: the Mac magic, and none of the plaintext JSON (names long enough that random AES-GCM
+        // ciphertext cannot contain them by chance — the 2-byte token value "AT" can, which made this flaky).
+        #expect(raw.prefix(8) == Data("AAKCGCM1".utf8))
+        let rawText = String(decoding: raw, as: UTF8.self)
+        for plain in ["access_token", "refresh_token", "\"AT\"", "IssuedUtc"] { #expect(!rawText.contains(plain)) }
 
         // Lost Keychain key → "no token" (the next action re-prompts).
         try secrets.delete(service: "AA", account: "google-token-key")

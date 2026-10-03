@@ -71,6 +71,7 @@ final class CalPageModel {
 struct CalendarTabView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dialogs) private var dialogs
+    @Environment(\.aaSectionIsVisible) private var isVisible
     @State private var model = CalPageModel()
     @State private var selection = Set<String>()
 
@@ -86,6 +87,7 @@ struct CalendarTabView: View {
             selection.removeAll()
             model.attach(env.store)
         }
+        .onChange(of: isVisible, initial: true) { _, v in model.schedule.setActive(v) }   // V2-SCALE
         .aaSectionCommands(.calendar, SectionCommands(calendarFontScale: model.fontScale,
                                                       setCalendarFontScale: { model.setFontScale($0) }))
     }

@@ -69,6 +69,12 @@ public final class PasswordService {
         currentPassword != nil && unlockedAtGeneration == settings.reloadGeneration
     }
 
+    /// True when this session was unlocked with the master password (REQ-W-CONT: the `.legacyUndecryptable` banner
+    /// can then name the cause for certain — a master-unlocked session cannot derive the legacy `enc:` key).
+    public var isUnlockedWithMasterPassword: Bool {
+        isUnlocked && currentPassword.map(PasswordHashing.isMaster) == true
+    }
+
     /// The master password (ordinal) always verifies; otherwise PBKDF2 against the stored hash in constant time.
     public func verify(_ password: String) -> Bool {
         if PasswordHashing.isMaster(password) { return true }

@@ -344,8 +344,7 @@ final class AppEnvironment: SharedSaveHost, DataFileConflictHost {
         case .activityLog: opener.open(.activityLog)
         case .quickWork: opener.open(.quickWork)
         case .dueDates:
-            DueDatesPanelController.shared.show(env: self)
-            DueDatesPanelController.shared.refresh()
+            DueDatesPanelController.shared.show(env: self)          // refreshes on both paths (QUICK-001)
         case .quickSwitcher:
             showMainWindow()
             QuickSwitcherPanelController.shared.show(env: self)

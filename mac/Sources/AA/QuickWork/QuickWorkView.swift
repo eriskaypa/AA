@@ -364,9 +364,10 @@ struct QuickWorkListPane: View {
                     } label: { Label(QuickWorkText.removeFromBuckets, systemImage: "tray") }
                         .help(QuickWorkText.removeFromBucketsHelp)
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: "ellipsis.circle").foregroundStyle(.secondary)   // grey like its siblings (rule 4)
                 }
                 .menuStyle(.button)
+                .tint(.secondary)
                 .buttonStyle(.accessoryBar)
                 .menuIndicator(.hidden)
                 .fixedSize()

@@ -139,6 +139,13 @@ struct ShellXSettingsGeneralTab: View {
             identityDraft = env.settings.appIdentity
             appearance = ShellAppearance.storedMode(settings: env.settings)
         }
+        // REQ-F3-07: ⇧⌘D / the View menu / a reload change the mode while Settings is open — keep the picker in step.
+        .onChange(of: env.router.darkModeChecked) { _, _ in
+            appearance = ShellAppearance.storedMode(settings: env.settings)
+        }
+        .onChange(of: env.settings.values.darkMode) { _, _ in
+            appearance = ShellAppearance.storedMode(settings: env.settings)
+        }
         .onChange(of: identityFocused) { _, focused in
             if !focused, identityDraft != env.settings.appIdentity { commitIdentity() }
         }

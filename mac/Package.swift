@@ -37,7 +37,7 @@ let package = Package(
         ),
         .testTarget(
             name: "AACoreTests",
-            dependencies: ["AACore"],
+            dependencies: ["AACore", "AA"],               // AA: controller-level journeys (`@testable import AA`, V2-J3)
             path: "Tests/AACoreTests",
             resources: [.copy("Fixtures")],
             swiftSettings: swift5

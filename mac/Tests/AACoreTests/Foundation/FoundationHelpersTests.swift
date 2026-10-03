@@ -301,26 +301,13 @@ import CryptoKit
         #expect(!b.bool(forKey: "missing") && b.string(forKey: "missing") == nil && b.data(forKey: "missing") == nil)
     }
 
-    // The transitional TempDefaults shim is in memory: its UserDefaults and MacPreferences share one store
-    @Test func tempDefaultsShimIsInMemory() {
-        let temp = TempDefaults("aa-tests")
-        #expect(temp.defaults is InMemoryUserDefaults)
-        temp.defaults.set(true, forKey: "aa.tests.flag")
-        #expect(temp.preferences.bool(MacPreferences.Key("aa.tests.flag"), default: false))
-        temp.preferences.set("v", MacPreferences.Key("aa.tests.text"))
-        #expect(temp.defaults.string(forKey: "aa.tests.text") == "v")
-        temp.defaults.removeObject(forKey: "aa.tests.text")
-        #expect(temp.preferences.string(MacPreferences.Key("aa.tests.text")) == nil)
-        #expect(TempDefaults("aa-tests").defaults.object(forKey: "aa.tests.flag") == nil)   // isolated
-        temp.remove()
-    }
-
-    // Guard: no test source creates an on-disk UserDefaults suite or uses the standard domain (the in-memory
-    // shim in Support/TestSupport.swift is the only UserDefaults subclass, and it never reads or writes the system).
+    // Guard: no test source creates an on-disk UserDefaults suite or uses the standard domain; tests use
+    // `MacPreferences.inMemory()` (DECISIONS "Stage V rulings"; the TempDefaults shim was removed in round 2).
     @Test func noTestTouchesUserPreferences() throws {
         let tests = Self.macRoot.appending(path: "Tests/AACoreTests", directoryHint: .isDirectory)
         let fm = FileManager.default
-        let banned = ["UserDefaults(suiteName", "UserDefaults.standard", "removePersistentDomain", "CFPreferencesSet"]
+        let banned = ["UserDefaults(suiteName", "UserDefaults.standard", "UserDefaults()", "removePersistentDomain",
+                      "CFPreferencesSet", "TempDefaults("]
         var offenders: [String] = []
         for case let u as URL in fm.enumerator(at: tests, includingPropertiesForKeys: nil)! where u.pathExtension == "swift" {
             if u.lastPathComponent == "FoundationHelpersTests.swift" { continue }       // this list

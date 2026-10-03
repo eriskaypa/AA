@@ -57,6 +57,9 @@ public enum PersistSharedText {
     public private(set) var isHandlingUpdate = false
     public private(set) var isPushRunning = false
     @ObservationIgnored private var stampsInitialized = false
+    /// V2-J6: a close-time push this copy refused (D-2) and has not resolved yet — loaded from the data folder at the
+    /// first start. While set, no push runs and the next readable bundle is always asked about (never pulled silently).
+    public private(set) var pendingClose: SharedSavePendingClose?
 
     @ObservationIgnored private var pushTask: Task<Void, Never>?
     @ObservationIgnored private var pollTask: Task<Void, Never>?
@@ -138,6 +141,16 @@ public enum PersistSharedText {
             lastSeen = store.data.lastModified
             lastSynced = store.data.lastModified
             stampsInitialized = true
+            // V2-J6: the previous session refused its close push because another copy had pushed. The close-save
+            // stamped our data newer than that bundle, so DATA-057's "loaded data is in sync" would let the next push
+            // overwrite the other copy's edit: restore the pre-close sync stamp and ask on the first check instead.
+            if let pending = SharedSavePendingClose.load(ds.appFolder), pending.matches(path) {
+                pendingClose = pending
+                lastSeen = nil
+                lastSynced = pending.lastSynced
+            } else {
+                SharedSavePendingClose.remove(ds.appFolder)
+            }
         }
         let pushEvery = pushInterval, pollEvery = pollInterval
         pushTask = Task { @MainActor [weak self] in
@@ -180,6 +193,7 @@ public enum PersistSharedText {
         guard path != nil, !isHandlingUpdate else { return }
         await checkForUpdate()
         host?.flushAllEditors()
+        guard pendingClose == nil else { return }                  // V2-J6: never push over an unresolved conflict
         guard hasUnsyncedChanges else { return }
         pushInBackground(label: PersistSharedText.periodicLabel)
     }
@@ -282,17 +296,23 @@ public enum PersistSharedText {
         guard FileManager.default.fileExists(atPath: url.path) else { setOnline(false); return }
         guard let fileStamp = BundleService.peekZipLastModified(url) else { return }   // unreadable / mid-write
         let local = store.data.lastModified
-        let newer = local.map { fileStamp > $0 } ?? true
+        // V2-J6: after a refused close push our local stamp is newer than the other copy's bundle, yet that bundle
+        // holds an edit we never loaded — a pending close conflict is always asked about.
+        let pending = pendingClose != nil
+        let newer = pending || (local.map { fileStamp > $0 } ?? true)
         guard newer else { setOnline(false); return }
-        if let seen = lastSeen, fileStamp == seen { setOnline(false); return }
+        if !pending, let seen = lastSeen, fileStamp == seen { setOnline(false); return }
         isHandlingUpdate = true
         defer { isHandlingUpdate = false }
         host?.flushAllEditors()
         // D-12: an unreadable local file (safe mode) is never replaced without asking.
-        let unsynced = hasUnsyncedChanges || ds.lastLoadFailed
+        let unsynced = pending || hasUnsyncedChanges || ds.lastLoadFailed
         if unsynced {
             let reload = await host?.confirmReloadDiscardingChanges() ?? false
             if !reload {
+                // Keep Mine: our next push replaces the bundle, so the other copy's data is kept as a `-theirs`
+                // conflict copy first (DATA-181: neither side is lost).
+                if pending { keepTheirsCopy(url); resolvePendingClose() }
                 lastSeen = fileStamp
                 setOnline(false)
                 return
@@ -311,10 +331,33 @@ public enum PersistSharedText {
             lastSeen = store.data.lastModified
             lastSynced = store.data.lastModified
             stampsInitialized = true
+            resolvePendingClose()
             setOnline(true)
         } catch {
             host?.postStatus(PersistSharedText.skipped(error.localizedDescription))
         }
+    }
+
+    private func resolvePendingClose() {
+        guard pendingClose != nil else { return }
+        pendingClose = nil
+        SharedSavePendingClose.remove(ds.appFolder)
+    }
+
+    /// The bundle's `data.json` bytes as a `-theirs` conflict copy (encrypted like `-mine` when local encryption is
+    /// on). Best effort: a failure leaves the choice as made.
+    private func keepTheirsCopy(_ url: URL) {
+        let bytes: Data? = PersistFileCoordination.read(url) { u in
+            guard let r = try? ZipReader(url: u), let e = r.entry(named: "data.json"),
+                  let d = try? r.data(for: e) else { return nil }
+            return PersistBundleIO.stripBOM(d)
+        } ?? nil
+        guard let bytes else { return }
+        let folder = PersistConflictStore.folder(ds.appFolder)
+        let key = ds.localEncryptionKeyIfEnabled(for: folder.appending(path: "x.json"))
+        guard let payload = try? key.map({ try LocalEncryption.encrypt(bytes, key: $0) }) ?? bytes else { return }
+        _ = try? PersistConflictStore.add(payload, theirs: true, appFolder: ds.appFolder, now: clock.instant(),
+                                          zone: clock.timeZone)
     }
 
     /// D-12: copies the unreadable data file to `data.unreadable-{yyyyMMdd-HHmmss}.json` before a pull replaces it.
@@ -341,10 +384,14 @@ public enum PersistSharedText {
             return
         }
         guard let fileStamp = BundleService.peekZipLastModified(url) else { return }
-        if closePushAllowed(bundleStamp: fileStamp) {
+        if pendingClose == nil, closePushAllowed(bundleStamp: fileStamp) {
             try? push(label: PersistSharedText.onCloseLabel)
         } else {
             _ = try? ConflictCopies.saveMine(store)
+            // V2-J6: remember the refusal, so the next launch asks about the other copy's bundle instead of treating
+            // our (now newer) close-save as in sync and pushing over it. The pre-close sync stamp is kept.
+            let synced = pendingClose?.lastSynced ?? lastSynced
+            SharedSavePendingClose(sharedSaveFile: path, lastSynced: synced, bundleStamp: fileStamp).save(ds.appFolder)
         }
     }
 
@@ -388,6 +435,8 @@ public enum PersistSharedText {
                 stampsInitialized = true
                 try? push(label: PersistSharedText.periodicLabel)
             }
+            resolvePendingClose()
+            SharedSavePendingClose.remove(ds.appFolder)               // a new choice of file supersedes a refusal
             start()
         } catch {
             stop()
@@ -400,8 +449,55 @@ public enum PersistSharedText {
     /// Stops the timers and watcher, clears `SharedSaveFile` and hides the indicator (callers clear nothing).
     public func stopUsing() {
         stop()
+        resolvePendingClose()
+        SharedSavePendingClose.remove(ds.appFolder)
         ds.settings.setSharedSaveFile(nil)
         lastSyncOk = nil
         updateHealth()
     }
+}
+
+/// V2-J6: the record of a refused close push (D-2), kept in the data folder's `conflicts` folder — never exported in a
+/// bundle, never listed as a conflict copy (`PersistConflictStore.parse` ignores it). Mac-only file.
+public struct SharedSavePendingClose: Codable, Equatable, Sendable {
+    public var sharedSaveFile: String
+    /// Our last sync before the close (nil when this copy never synced).
+    public var lastSyncedTicks: Int64?
+    public var lastSyncedKind: UInt8?
+    /// The other copy's bundle `LastModified` the close refused to overwrite.
+    public var bundleTicks: Int64
+
+    public static let fileName = "shared-pending.json"
+
+    public init(sharedSaveFile: String, lastSynced: NetDateTime?, bundleStamp: NetDateTime) {
+        self.sharedSaveFile = sharedSaveFile
+        lastSyncedTicks = lastSynced?.ticks
+        lastSyncedKind = lastSynced?.kind.rawValue
+        bundleTicks = bundleStamp.ticks
+    }
+
+    public var lastSynced: NetDateTime? {
+        lastSyncedTicks.map { NetDateTime(ticks: $0, kind: NetDateTime.Kind(rawValue: lastSyncedKind ?? 0) ?? .unspecified) }
+    }
+
+    public func matches(_ path: String?) -> Bool {
+        guard let path else { return false }
+        return URL(fileURLWithPath: path).standardizedFileURL.path
+            == URL(fileURLWithPath: sharedSaveFile).standardizedFileURL.path
+    }
+
+    public static func url(_ appFolder: URL) -> URL { PersistConflictStore.folder(appFolder).appending(path: fileName) }
+
+    public static func load(_ appFolder: URL) -> SharedSavePendingClose? {
+        guard let d = try? Data(contentsOf: url(appFolder)) else { return nil }
+        return try? JSONDecoder().decode(SharedSavePendingClose.self, from: d)
+    }
+
+    public func save(_ appFolder: URL) {
+        let u = Self.url(appFolder)
+        try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+        if let d = try? JSONEncoder().encode(self) { try? d.write(to: u, options: .atomic) }
+    }
+
+    public static func remove(_ appFolder: URL) { try? FileManager.default.removeItem(at: url(appFolder)) }
 }

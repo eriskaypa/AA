@@ -1131,8 +1131,12 @@ final class EditorController: NSObject {
         let typing = tv.typingAttributes
         switch type {
         case EditorPaste.xamlType:
-            if let xaml = pb.string(forType: type), let frag = XamlReader.readFragment(xaml, destinationContext: .containerEditor) {
-                return insertRich(frag)
+            // V2-J3: the WPF paste shape on the block tree (lists, tables, sections stay whole; CONT-161, §6.6).
+            if let xaml = pb.string(forType: type),
+               let ok = insertStructured(length: xaml.utf16.count, {
+                   XamlReader.insertFragment(xaml, into: $0, replacing: $1, base: .containerEditor)
+               }) {
+                return ok
             }
             return pasteFallback(pb, typing: typing)
         case EditorPaste.fileURLType:
@@ -1146,14 +1150,20 @@ final class EditorController: NSObject {
             guard let a = try? NSAttributedString(data: data, options: [.documentType: docType], documentAttributes: nil)
             else { return pasteFallback(pb, typing: typing) }
             let (clean, images) = EditorRichSanitiser.sanitise(a, base: EditorFormatting.plainBaseAttributes(from: typing))
-            let ok = clean.length == 0 ? true : insertRich(clean)
+            let ok = clean.length == 0 ? true
+                : (insertStructured(length: clean.length, {
+                       XamlReader.insertFragment(attributed: clean, into: $0, replacing: $1, base: .containerEditor)
+                   }) ?? insertRich(clean))
             importImages(images)
             return ok
         case EditorPaste.htmlType:
             if let html = pb.string(forType: type) {
                 let xaml = HTMLToXAML.convert(html)
-                if !NetText.isBlank(xaml), let frag = XamlReader.readFragment(xaml, destinationContext: .containerEditor) {
-                    return insertRich(frag)
+                if !NetText.isBlank(xaml),
+                   let ok = insertStructured(length: xaml.utf16.count, {
+                       XamlReader.insertFragment(xaml, into: $0, replacing: $1, base: .containerEditor)
+                   }) {
+                    return ok
                 }
             }
             return pasteFallback(pb, typing: typing)
@@ -1172,6 +1182,25 @@ final class EditorController: NSObject {
     private func pasteFallback(_ pb: NSPasteboard, typing: [NSAttributedString.Key: Any]) -> Bool {
         guard let s = pb.string(forType: .string), !s.isEmpty else { return false }
         return insertRich(EditorRichSanitiser.plain(s, typing: typing))
+    }
+
+    /// A rich paste through the W-RICH fragment insertion (V2-J3): the lock check comes first (`structural` bypasses
+    /// the lock gate), then one undo swap for the whole insertion. Nil = nothing was inserted (blank or unparseable
+    /// fragment) and the caller falls back; false = blocked by a lock.
+    private func insertStructured(length: Int, _ body: (NSTextStorage, NSRange) -> NSRange?) -> Bool? {
+        let sel = textView.selectedRange()
+        if hasAnyLock, EditorLocking.editBlocked(storage, range: sel, replacementLength: max(1, length)) {
+            showLockedHint()
+            return false
+        }
+        var inserted = false
+        _ = structural("Paste") { s, r in
+            let out = body(s, r)
+            inserted = out != nil
+            return out
+        }
+        if inserted { session.persistNow() }
+        return inserted ? true : nil
     }
 
     private func insertRich(_ text: NSAttributedString) -> Bool {

@@ -352,8 +352,7 @@ import Testing
         #expect(first[0].body == "Aranda: 2 flagged work order(s) overdue — A1 (overdue 9d),   A2 (overdue 2d)")
         #expect(first[0].identifier == "aa.vessel.workorders." + a.id.uuidString.lowercased())
 
-        let temp = TempDefaults("aa.vessel.tests"); defer { temp.remove() }
-        let prefs = temp.preferences
+        let prefs = MacPreferences.inMemory()
         WorkOrderAlerts.storeKeys(Set(first[0].newKeys), prefs, today: today)
         let stored = WorkOrderAlerts.storedKeys(prefs, today: today)
         #expect(stored.count == 2)

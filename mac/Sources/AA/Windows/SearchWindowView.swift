@@ -210,10 +210,12 @@ final class SearchWindowModel {
         }
         status = SearchWindowText.searching
         isRunning = true
-        let docs = SearchService.makeDocuments(store: env.store, isGated: env.locks.isGated)
+        // V2-SCALE: only the raw-string snapshot is taken on the main actor; the XAML → plain-text conversion
+        // (memoised by SearchTextCache.shared) and the scan run detached.
+        let snap = SearchService.snapshot(store: env.store, isGated: env.locks.isGated)
         task = Task { @MainActor [weak self] in
             let found = await Task.detached(priority: .userInitiated) {
-                SearchService.search(docs, query: q, isCancelled: { Task.isCancelled })
+                SearchService.search(SearchService.documents(from: snap), query: q, isCancelled: { Task.isCancelled })
             }.value
             guard let self, gen == self.generation, !Task.isCancelled else { return }
             self.hits = found

@@ -16,16 +16,14 @@ import Testing
     }
 
     @Test func repairRunsOnce() {
-        let temp = TempDefaults("aa.tests.shellx.menubar")
-        defer { temp.remove() }
-        let defaults = temp.defaults
-        let store = ShellXMenuBarGuardStore(prefs: MacPreferences(defaults: defaults))
+        let prefs = MacPreferences.inMemory()
+        let store = ShellXMenuBarGuardStore(prefs: prefs)
         #expect(!store.userHidden && !store.repaired)                // defaults
-        defaults.set(true, forKey: "aa.shellx.menuBarUserHidden")
+        prefs.set(true, MacPreferences.Key("aa.shellx.menuBarUserHidden"))
         #expect(store.userHidden)
         store.markRepaired()
         #expect(store.repaired)
-        #expect(defaults.bool(forKey: "aa.shellx.menuBarRepaired"))
+        #expect(prefs.bool(ShellXMenuBarPolicy.repairedKey, default: false))
         #expect(ShellXMenuBarPolicy.repairedKey.rawValue.hasPrefix("aa.shellx."))
     }
 }

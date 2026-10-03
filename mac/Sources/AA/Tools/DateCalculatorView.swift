@@ -123,7 +123,7 @@ struct ToolDateField: View {
             DatePicker("", selection: $value, displayedComponents: .date)
                 .labelsHidden()
                 .datePickerStyle(.stepperField)
-                .environment(\.locale, ToolDateCalc.pickerLocale)      // ISO field (Stage V ruling, rule 14)
+                .aaISODatePicker()                                      // ISO field (Stage V ruling, rule 14; REQ-F3-06)
             Button { showsCalendar.toggle() } label: { Image(systemName: "calendar") }
                 .buttonStyle(.borderless)
                 .help("Show a calendar")

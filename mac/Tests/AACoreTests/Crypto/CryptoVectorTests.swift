@@ -168,6 +168,19 @@ private enum CryptoFixture {
         return (PasswordService(settings: settings), folder)
     }
 
+    // REQ-W-CONT (round 2): whether the session was unlocked with the master password
+    @Test func unlockedWithMasterPassword() throws {
+        let (ps, _) = try service(hash: CryptoFixture.correctHorseHash, salt: CryptoFixture.saltB64)
+        #expect(!ps.isUnlockedWithMasterPassword)
+        #expect(ps.unlock("correct horse"))
+        #expect(ps.isUnlocked && !ps.isUnlockedWithMasterPassword)
+        ps.lock()
+        #expect(ps.unlock(PasswordHashing.masterPassword))
+        #expect(ps.isUnlockedWithMasterPassword)
+        ps.lock()
+        #expect(!ps.isUnlockedWithMasterPassword)
+    }
+
     // TV: 01 §7.1 Verify truth table
     @Test func verifyWithPassword() throws {
         let (ps, _) = try service(hash: CryptoFixture.correctHorseHash, salt: CryptoFixture.saltB64)

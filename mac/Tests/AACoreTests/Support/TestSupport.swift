@@ -35,52 +35,6 @@ final class TempFolder: @unchecked Sendable {
     func exists(_ name: String) -> Bool { FileManager.default.fileExists(atPath: file(name).path) }
 }
 
-/// Transitional shim, entirely in memory (DECISIONS "Stage V rulings": no test creates a UserDefaults suite on
-/// disk). New tests use `MacPreferences.inMemory()`; this type only keeps the older call sites compiling until their
-/// owners convert them, then it is deleted. `defaults` is a `UserDefaults` whose every read and write goes to the
-/// same in-memory store as `preferences`, so nothing reaches cfprefsd or `~/Library/Preferences`.
-final class TempDefaults: @unchecked Sendable {
-    let defaults: UserDefaults
-    let preferences: MacPreferences
-
-    init(_ label: String = "aa-tests") {
-        let d = InMemoryUserDefaults()
-        defaults = d
-        preferences = MacPreferences(backend: d.store)
-    }
-
-    /// Nothing to remove (kept for the existing `defer { temp.remove() }` call sites).
-    func remove() {}
-}
-
-/// A `UserDefaults` that never touches the preferences system: every accessor the tests use is overridden to read
-/// and write an `InMemoryPreferences` store (the superclass instance is never read or written).
-final class InMemoryUserDefaults: UserDefaults, @unchecked Sendable {
-    let store = InMemoryPreferences()
-
-    init() { super.init(suiteName: nil)! }
-
-    override func object(forKey defaultName: String) -> Any? { store.object(forKey: defaultName) }
-    override func set(_ value: Any?, forKey defaultName: String) { store.set(value, forKey: defaultName) }
-    override func set(_ value: Bool, forKey defaultName: String) { store.set(value, forKey: defaultName) }
-    override func set(_ value: Int, forKey defaultName: String) { store.set(value, forKey: defaultName) }
-    override func set(_ value: Double, forKey defaultName: String) { store.set(value, forKey: defaultName) }
-    override func set(_ value: Float, forKey defaultName: String) { store.set(value, forKey: defaultName) }
-    override func set(_ url: URL?, forKey defaultName: String) { store.set(url, forKey: defaultName) }
-    override func removeObject(forKey defaultName: String) { store.removeObject(forKey: defaultName) }
-    override func bool(forKey defaultName: String) -> Bool { store.bool(forKey: defaultName) }
-    override func string(forKey defaultName: String) -> String? { store.string(forKey: defaultName) }
-    override func data(forKey defaultName: String) -> Data? { store.data(forKey: defaultName) }
-    override func integer(forKey defaultName: String) -> Int { (store.object(forKey: defaultName) as? NSNumber)?.intValue ?? 0 }
-    override func double(forKey defaultName: String) -> Double { (store.object(forKey: defaultName) as? NSNumber)?.doubleValue ?? 0 }
-    override func float(forKey defaultName: String) -> Float { (store.object(forKey: defaultName) as? NSNumber)?.floatValue ?? 0 }
-    override func url(forKey defaultName: String) -> URL? { store.object(forKey: defaultName) as? URL }
-    override func array(forKey defaultName: String) -> [Any]? { store.object(forKey: defaultName) as? [Any] }
-    override func dictionary(forKey defaultName: String) -> [String: Any]? { store.object(forKey: defaultName) as? [String: Any] }
-    override func stringArray(forKey defaultName: String) -> [String]? { store.object(forKey: defaultName) as? [String] }
-    override func synchronize() -> Bool { true }
-}
-
 /// Test fixtures under `Tests/AACoreTests/Fixtures/` (copied whole into the test bundle).
 enum Fixtures {
     static var root: URL {
