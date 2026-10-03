@@ -24,12 +24,16 @@ public struct CrewScheduleGroup: Sendable, Equatable, Identifiable {
     /// `yyyy-MM-dd` of the parsed date, or U+FFFF for undated entries.
     public var sortKey: String
     public var entryIDs: [UUID]
+    /// The entries' positions in the schedule array, parallel to `entryIDs`. The view resolves rows through these, never
+    /// through an id lookup: a hand-edited or foreign data.json may hold two entries with the same `Id`, which WPF lists
+    /// (bound by object reference) show without complaint (V2-COMPAT; ARCHITECTURE.md §9.7).
+    public var entryOffsets: [Int]
     public var id: String { sortKey }
 
     public var count: Int { entryIDs.count }
 
-    public init(label: String, sortKey: String, entryIDs: [UUID]) {
-        self.label = label; self.sortKey = sortKey; self.entryIDs = entryIDs
+    public init(label: String, sortKey: String, entryIDs: [UUID], entryOffsets: [Int] = []) {
+        self.label = label; self.sortKey = sortKey; self.entryIDs = entryIDs; self.entryOffsets = entryOffsets
     }
 }
 
@@ -57,9 +61,10 @@ public enum CrewScheduleTimeline {
             let label = self.label(it.civil, today: today, locale: locale)
             if let k = index[label] {
                 out[k].entryIDs.append(it.id)
+                out[k].entryOffsets.append(it.offset)
             } else {
                 index[label] = out.count
-                out.append(CrewScheduleGroup(label: label, sortKey: it.key, entryIDs: [it.id]))
+                out.append(CrewScheduleGroup(label: label, sortKey: it.key, entryIDs: [it.id], entryOffsets: [it.offset]))
             }
         }
         return out

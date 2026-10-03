@@ -67,3 +67,27 @@ fitted width without the on-open grow (optional; the grow already handles it).
 Snapshots (light + dark, `snapshots/fix1-W-CREW/`): roster, editor Details, editor Checklist, table window.
 
 Gate: build, 1590 tests, `check-ownership.sh` pass.
+
+## Round-2 verification fixes (FIX2-W-CREW, branch fix2/W-CREW)
+
+6 findings: 6 fixed, 0 not fixed, 0 rejected. The two crew-table findings (V2-J5 and V2-DESIGN) were the same defect,
+so one fix covers both.
+
+| Finding | By | IDs | Fix |
+|---|---|---|---|
+| Blocker: duplicate `ScheduleEntry` ids crashed the Schedule tab (`Dictionary(uniqueKeysWithValues:)`) | V2-COMPAT | BUILD-116…119, ARCH §9.7 | `CrewScheduleGroup.entryOffsets` (parallel to `entryIDs`). The timeline resolves rows by position and identifies them by object (`ObjectIdentifier`), so it has no id-keyed dictionary. Two entries with the same Id show as two rows, and delete stays by reference. Repro (snapdata-full, crew[0] with two `55555555-…` entries, `--sheet w-crew.editor-schedule`): exit 0, both rows shown. |
+| Major: the Crew section overflowed the main window below about 1170 pt (sidebar and card clipped, Edit… and Open Checklist… off-screen) | V2-J5 | CREW-010, CREW-020/022, 09 §6.4 | Cause: the section's `HSplitView` runs under the floating sidebar, so each pane's hosting view received the sidebar's leading safe-area inset. The minimum was therefore 290 + 420 + 2 × 228 = 1167 pt. The fix pads the split view 1 pt on the leading edge so it is laid out inside the safe area, and moves the geometry into `AACore/Crew/CrewLayout.swift`: roster minimum 240 (ideal 340), card minimum 340, section minimum 582, so 228 + 582 = 810 ≤ 860. The card's Edit… and Open Checklist… buttons are `fixedSize`. The checklist box moves the button under the summary when the card is narrow (`ViewThatFits`). Checked at 860 × 600, 900 × 640, 1100 × 720 and 1470 × 900: nothing is clipped. |
+| Polish/minor: crew table headers and cells truncated (`Date of Bir…`, `Sign-Off Da…`, `Contract Stat…`, `United Kingd…`) | V2-J5, V2-DESIGN | CREW-103 | `CrewTableSizing.idealWidth`: the larger of the base width, the measured header (aaMono 13) + 22, and the widest cell (aaMono 12) + 14, with cell growth capped at 320 pt. `neededWindowWidth` uses the same values, so the open-time window fit grows with them. Snapshot: all nine default headers and cells are shown in full. |
+| Polish: the card's Review notes header showed two flags | V2-J5 | CREW-024 | The header shows the `flag` symbol and `CrewRoster.reviewNotesLabel` (`Review notes (n)`). `reviewNotesTitle` (with ⚑) stays the accessibility label. |
+| Polish: adopt the V2-J5 crew journey | V2-J5 | 09 §7, 06 §I | Adopted as `Tests/AACoreTests/Crew/V2J5CrewJourneyTests.swift`, together with `crewChecklistDeadlineReachesReminders` from the vessel journey. The vessel journey belongs to W-VESSEL (cross-owner request). |
+
+Design rule 14 (ISO date pickers): the editor's date rows and the schedule add row set
+`.environment(\.locale, en_CA)` on their `OptionalDatePicker`, so the picker shows `2026-10-03`.
+
+Regression tests: `CrewRound2RegressionTests` (6: duplicate ids through a data.json round trip, offsets parallel to
+ids, section minimum width, header and cell column widths with the cap, one flag) and `V2J5CrewJourney` (3).
+
+Snapshots (light and dark) in `snapshots/fix2-W-CREW/`: Crew tab at 860/900/1100/1470, crew table, card notes,
+editor Details, and Schedule with duplicate ids.
+
+Gate: build, 1663 tests, `check-ownership.sh --owner W-CREW` pass.

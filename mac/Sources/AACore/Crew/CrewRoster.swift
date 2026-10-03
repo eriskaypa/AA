@@ -203,7 +203,11 @@ public enum CrewRoster {
     }
 
     /// CREW-024 `"⚑ Review notes ({count})"`.
-    public static func reviewNotesTitle(_ count: Int) -> String { "\u{2691} Review notes (\(count))" }
+    public static func reviewNotesTitle(_ count: Int) -> String { "\u{2691} \(reviewNotesLabel(count))" }
+
+    /// The card header's text beside its `flag` SF Symbol: the title without the ⚑ glyph, so the header shows one
+    /// flag, not two (V2-J5). The full `reviewNotesTitle` stays the header's accessibility label.
+    public static func reviewNotesLabel(_ count: Int) -> String { "Review notes (\(count))" }
 
     /// `"{Field}: {Message}"` (date flags therefore show a doubled prefix — faithful, 09 §8 Q12).
     public static func flagLine(_ f: CrewReviewFlag) -> String { "\(f.field): \(f.message)" }

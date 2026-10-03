@@ -262,6 +262,7 @@ struct CrewEditorSheet: View {
             HStack(spacing: AASpacing.s) {
                 label(f)
                 OptionalDatePicker(value: picker)
+                    .environment(\.locale, Locale(identifier: "en_CA"))   // ISO yyyy-MM-dd (DECISIONS, Stage V ruling)
                 Spacer(minLength: AASpacing.s)
                 TextField("yyyy-MM-dd", text: text(f.key))
                     .textFieldStyle(.roundedBorder)

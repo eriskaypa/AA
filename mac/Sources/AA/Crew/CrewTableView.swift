@@ -276,7 +276,7 @@ struct CrewTableView: View {
                                 .foregroundStyle(cellColor(col, row))
                                 .textSelection(.enabled)
                         }
-                        .width(min: 44, ideal: Self.idealWidth(col))
+                        .width(min: 44, ideal: Self.idealWidth(col, rows: rows))
                     }
                 }
                 .tableStyle(.inset)
@@ -285,25 +285,27 @@ struct CrewTableView: View {
         }
     }
 
-    /// CREW-103: starting widths sized so the nine default columns — Sign-Off Date and Contract Status included —
-    /// fit the default window without horizontal scrolling (WPF auto-sized them); every column stays resizable.
-    static func idealWidth(_ c: CrewColumn) -> CGFloat {
-        switch c.key {
-        case "FullName", "Company", "Vessel", "SourceFile": return 150
-        case "Rank": return 110
-        case "PlaceOfBirth", "NokRelationship", "NokFirstName", "NokLastName": return 120
-        case "LastName", "FirstName", "MiddleName": return 96
-        case "Nationality", "ImportedAt": return 92
-        case "ContractStatus": return 112
-        case "Cid", "Gender", "Height", "EyesColor", "HairColor", "UserType", "ChecklistCount", "RankCode",
-             "DaysUntilSignOff", "SignedOnOff": return 60
-        default: return 100
-        }
+    /// CREW-103: starting widths. WPF's DataGrid auto-sized each column to its header and cells; the ideal width is the
+    /// measured header (the window's aaMono 13) or the widest cell (aaMono 12) plus the column chrome, never below the
+    /// column's base width (`CrewTableSizing`), so no default header or cell starts truncated. Every column stays
+    /// resizable.
+    static func idealWidth(_ c: CrewColumn, cells: [String]) -> CGFloat {
+        CrewTableSizing.idealWidth(key: c.key, header: c.header, cells: cells,
+                                   measureHeader: { measure($0, AAFont.mono(AAType.body)) },
+                                   measureCell: { measure($0, AAFont.mono(AAType.small)) })
+    }
+
+    static func idealWidth(_ c: CrewColumn, rows: [CrewTableRow]) -> CGFloat {
+        idealWidth(c, cells: rows.map { $0.cells[c.key] ?? "" })
+    }
+
+    private static func measure(_ text: String, _ font: NSFont) -> CGFloat {
+        (text as NSString).size(withAttributes: [.font: font]).width
     }
 
     /// The width the grid needs for the shown columns at their ideal widths, plus the chooser.
-    static func neededWindowWidth(_ shown: [CrewColumn]) -> CGFloat {
-        chooserMaxWidth + 1 + tableInsets + shown.reduce(0) { $0 + idealWidth($1) + columnChrome }
+    static func neededWindowWidth(_ shown: [CrewColumn], rows: [CrewTableRow]) -> CGFloat {
+        chooserMaxWidth + 1 + tableInsets + shown.reduce(0) { $0 + idealWidth($1, rows: rows) + columnChrome }
     }
 
     /// CREW-103: WPF's DataGrid auto-sized the columns into view. On open the window grows (never shrinks, never past
@@ -317,7 +319,7 @@ struct CrewTableView: View {
         }
         guard let window, let screen = window.screen ?? NSScreen.main else { return }
         let visible = screen.visibleFrame
-        let target = min(Self.neededWindowWidth(model.shownColumns), visible.width)
+        let target = min(Self.neededWindowWidth(model.shownColumns, rows: rows), visible.width)
         guard window.frame.width < target else { return }
         var f = window.frame
         f.origin.x = max(visible.minX, min(f.origin.x - (target - f.width) / 2, visible.maxX - target))
