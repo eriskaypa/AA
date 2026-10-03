@@ -25,10 +25,12 @@ struct SearchWindowView: View {
                 .padding(.top, 12)
                 .padding(.bottom, 10)
             results
-            Divider()
-            statusBar
-                .padding(.horizontal, 14)
-                .padding(.vertical, 7)
+            if SearchWindowText.showsStatusBar(isRunning: model.isRunning, hitCount: model.hits.count) {
+                Divider()
+                statusBar
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+            }
         }
         .frame(minWidth: 640, idealWidth: 900, minHeight: 360, idealHeight: 640)
         .navigationTitle(SearchWindowText.windowTitle)

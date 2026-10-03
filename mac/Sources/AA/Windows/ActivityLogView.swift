@@ -54,36 +54,37 @@ struct ActivityLogView: View {
         .onChange(of: logSignature) { _, _ in refresh() }
     }
 
-    /// QUICK-152: Name takes the flexible width (it wraps); Detail takes the rest. No stripes (03 §6.6.5).
+    /// QUICK-152: every column fits the 860-pt window (QUICK-150) — the fixed-format columns are sized to their
+    /// content, Name and Detail wrap (up to 4 lines) and Detail takes any extra width. No stripes (03 §6.6.5).
     private var table: some View {
         Table(rows, selection: $selection) {
             TableColumn(ActivityLogText.columns[0]) { r in
                 Text(r.timeUtc).font(.aaMono(AAType.caption)).monospacedDigit().lineLimit(1)
             }
-            .width(min: 168, ideal: 170)
+            .width(min: ActivityLogText.columnWidths[0].min, ideal: ActivityLogText.columnWidths[0].ideal)
             TableColumn(ActivityLogText.columns[1]) { r in
                 Text(r.timeLocal).font(.aaMono(AAType.caption)).monospacedDigit().foregroundStyle(AAColor.muted)
                     .lineLimit(1)
             }
-            .width(min: 138, ideal: 140)
+            .width(min: ActivityLogText.columnWidths[1].min, ideal: ActivityLogText.columnWidths[1].ideal)
             TableColumn(ActivityLogText.columns[2]) { r in
                 ActivityLogActionBadge(action: r.action)
             }
-            .width(min: 64, ideal: 66)
+            .width(min: ActivityLogText.columnWidths[2].min, ideal: ActivityLogText.columnWidths[2].ideal)
             TableColumn(ActivityLogText.columns[3]) { r in
                 Text(r.kind).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted).lineLimit(2)
             }
-            .width(min: 64, ideal: 72)
+            .width(min: ActivityLogText.columnWidths[3].min, ideal: ActivityLogText.columnWidths[3].ideal)
             TableColumn(ActivityLogText.columns[4]) { r in
                 Text(r.name).font(.aaMono(AAType.small)).lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true).help(r.name)
             }
-            .width(min: 160, ideal: 214)
+            .width(min: ActivityLogText.columnWidths[4].min, ideal: ActivityLogText.columnWidths[4].ideal)
             TableColumn(ActivityLogText.columns[5]) { r in
                 Text(r.detail).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted).lineLimit(4)
                     .fixedSize(horizontal: false, vertical: true).help(r.detail)
             }
-            .width(min: 96, ideal: 106)
+            .width(min: ActivityLogText.columnWidths[5].min, ideal: ActivityLogText.columnWidths[5].ideal, max: .infinity)
         }
         .tableStyle(.inset)
         .alternatingRowBackgrounds(.disabled)
