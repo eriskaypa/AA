@@ -145,30 +145,49 @@ final class DialogPresenter {
     // MARK: Alerts
 
     /// Returns the index of the pressed button. Button 0 is the default unless another button has the `.default`
-    /// role; a `.cancel` button answers ⎋; destructive confirmations may default to Cancel.
+    /// role or `spec.defaultIndex` names one; the first `.cancel` button answers ⎋ — also when it is the default
+    /// itself (09 CREW-033), in which case ⎋ is routed to it here; destructive confirmations may default to Cancel.
     func alert(_ spec: AlertSpec) async -> Int {
-        if unboundCall("alert") { return spec.buttons.firstIndex { $0.role == .cancel } ?? max(spec.buttons.count - 1, 0) }
+        let buttons = spec.buttons.isEmpty ? [AlertButton(title: "OK", role: .default)] : spec.buttons
+        let layout = Self.keyLayout(spec)
+        if unboundCall("alert") { return layout.escapeIndex ?? max(buttons.count - 1, 0) }
         if let key = spec.suppressionKey, MacPreferences.shared.bool(key, default: false) {
-            return spec.buttons.firstIndex { $0.role == .default } ?? 0
+            return layout.defaultIndex
         }
         let alert = NSAlert()
         alert.messageText = spec.title
         alert.informativeText = spec.message
         alert.alertStyle = spec.style
-        let buttons = spec.buttons.isEmpty ? [AlertButton(title: "OK", role: .default)] : spec.buttons
-        let defaultIndex = buttons.firstIndex { $0.role == .default } ?? 0
+        var nsButtons: [NSButton] = []
         for (i, b) in buttons.enumerated() {
             let nb = alert.addButton(withTitle: b.title)
-            nb.keyEquivalent = ""
-            if i == defaultIndex { nb.keyEquivalent = "\r" }
-            if b.role == .cancel { nb.keyEquivalent = i == defaultIndex ? "\r" : "\u{1b}" }
+            nb.keyEquivalent = layout.keys[i]
             if b.role == .destructive { nb.hasDestructiveAction = true }
+            nsButtons.append(nb)
         }
         if spec.suppressionKey != nil { alert.showsSuppressionButton = true }
+        // A button carries one key equivalent: when the cancel button is also the default (Return), ⎋ is routed to it.
+        var escMonitor: Any?
+        if layout.escapeNeedsRouting, let esc = layout.escapeIndex {
+            let target = nsButtons[esc]
+            escMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                guard event.keyCode == 53, event.window === alert.window else { return event }
+                target.performClick(nil)
+                return nil
+            }
+        }
         let response = await run(alert)
+        if let escMonitor { NSEvent.removeMonitor(escMonitor) }
         if let key = spec.suppressionKey, alert.suppressionButton?.state == .on { MacPreferences.shared.set(true, key) }
         let idx = response.rawValue - NSApplication.ModalResponse.alertFirstButtonReturn.rawValue
-        return (0..<buttons.count).contains(idx) ? idx : (buttons.firstIndex { $0.role == .cancel } ?? 0)
+        return (0..<buttons.count).contains(idx) ? idx : (layout.escapeIndex ?? 0)
+    }
+
+    /// The Return / ⎋ layout of `spec` (pure rules in AACore `ShellAlertKeys`).
+    static func keyLayout(_ spec: AlertSpec) -> ShellAlertKeys.Layout {
+        let buttons = spec.buttons.isEmpty ? [AlertButton(title: "OK", role: .default)] : spec.buttons
+        return ShellAlertKeys.layout(count: buttons.count, cancel: buttons.map { $0.role == .cancel },
+                                     defaultRole: buttons.map { $0.role == .default }, explicitDefault: spec.defaultIndex)
     }
 
     private func run(_ alert: NSAlert) async -> NSApplication.ModalResponse {

@@ -41,7 +41,7 @@ import Testing
     }
 
     @Test func changePasswordPromptNamesTheLineBelow() {
-        #expect(ShellPasswordMode.changeExisting.prompt == "Enter the new password and confirm it on the line below.")
+        #expect(ShellPasswordMode.changeExisting.prompt == "Enter your current password, then the new password and confirm it on the line below.")
     }
 
     @Test func sharedSaveHelpSaysEveryComputer() {

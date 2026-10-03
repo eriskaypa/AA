@@ -69,6 +69,12 @@ final class ShellMainChromeState {
 
 // MARK: Content host
 
+extension EnvironmentValues {
+    /// False while a visited section is kept alive but hidden (`SectionContentHost`). A page whose model is expensive
+    /// to rebuild marks itself stale instead of rebuilding while this is false, and rebuilds on the change to true.
+    @Entry var aaSectionIsVisible: Bool = true
+}
+
 /// Shows the selected section's root; visited roots stay alive (opacity / hit testing) so page state survives
 /// switching, like WPF tabs (ARCH §7.2).
 struct SectionContentHost: View {
@@ -85,6 +91,9 @@ struct SectionContentHost: View {
                     // A hidden page keeps its state but leaves the key-view loop and its keyboard shortcuts (HIER-025).
                     .disabled(s != selected)
                     .accessibilityHidden(s != selected)
+                    // V2-SCALE: pages that rebuild whole-database models (Calendar, Board, Buckets) read this to
+                    // suspend observation-driven rebuilds while hidden and rebuild once when shown again.
+                    .environment(\.aaSectionIsVisible, s == selected)
                     .zIndex(s == selected ? 1 : 0)
             }
         }

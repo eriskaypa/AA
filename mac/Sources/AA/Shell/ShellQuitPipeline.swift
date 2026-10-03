@@ -1,6 +1,7 @@
 // Spec: 03 SHELL-056 (close/exit pipeline), SHELL-505 (⌘Q deferred by a decision sheet, close-type sheets close first),
 //       SHELL-513 (⌘W on main = quit), SHELL-054 (flush + close item windows first), 01 DATA-028, DECISIONS 03 Q-5
-//       (failed final save → Retry / Quit Anyway / Cancel); ARCHITECTURE.md §5.4 (quit row).
+//       (failed final save → Retry / Quit Anyway / Cancel), 01 DATA-180 (quitting while editing is stopped writes
+//       nothing); ARCHITECTURE.md §5.4 (quit row).
 import AppKit
 import AACore
 
@@ -33,8 +34,10 @@ enum ShellQuitPipeline {
         env.stopAutosaveTimer()
         env.dataFileGuard?.stop()
 
-        // 3. Safe mode / read-only instance: nothing is written or pushed.
-        if env.isSafeMode || env.isReadOnlyInstance || !env.mainLoaded {
+        // 3. Safe mode / read-only instance / editing stopped here (DATA-180): nothing is written or pushed.
+        if ShellQuitPlan.skipsFinalSave(safeMode: env.isSafeMode, readOnlyInstance: env.isReadOnlyInstance,
+                                        mainLoaded: env.mainLoaded,
+                                        stoppedEditing: env.dataFileGuard?.state.mode == .stoppedEditing) {
             InstanceGuard.releaseExternal()
             return .terminateNow
         }

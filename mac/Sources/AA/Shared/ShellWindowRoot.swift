@@ -59,7 +59,8 @@ struct ShellWindowRoot<Content: View>: View {
                 .environment(\.aaRouter, env.router)
                 .environment(\.aaWindowRole, role)
                 .font(.aaMono(AAType.body))
-                .tint(AAColor.tint)
+                // Design rule 15: no window-wide `.tint` — on macOS 26 it recolours every `.bordered` push button.
+                // Selection, links and toggles follow the system accent; `.aaProminent()` carries the brand tint.
                 .background(ShellWindowCapture { window in
                     SceneOpener.shared.register(window: window, role: role, dialogs: presenter)
                 })

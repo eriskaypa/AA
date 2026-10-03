@@ -123,12 +123,21 @@ struct ShellSectionRow: View {
                     .overlay(RoundedRectangle(cornerRadius: AARadius.sidebarTile, style: .continuous)
                         .strokeBorder(AAColor.border, lineWidth: 0.5))
             } else {
-                Image(systemName: section.symbol)
-                    .symbolRenderingMode(.hierarchical)
-                    .foregroundStyle(AAColor.muted)
-                    .frame(width: 20, height: 20)
+                // Same glyph scale as the coloured tile; a wide symbol (person.3) steps down until it fits the 20-pt
+                // slot, so the title column lines up whether or not a section has a colour.
+                ViewThatFits(in: .horizontal) {
+                    sidebarGlyph.imageScale(.small)
+                    sidebarGlyph.imageScale(.small).font(.system(size: 10))
+                    sidebarGlyph.imageScale(.small).font(.system(size: 8))
+                }
+                .foregroundStyle(AAColor.muted)
+                .frame(width: 20, height: 20)
             }
         }
         .accessibilityElement(children: .combine)
+    }
+
+    private var sidebarGlyph: some View {
+        Image(systemName: section.symbol).symbolRenderingMode(.hierarchical).fixedSize()
     }
 }

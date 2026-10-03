@@ -1,7 +1,9 @@
 // Spec: 04 HIER-132, 07 VIEW-203, 08 QUICK-230 (date prompt: title, wrapping prompt, date pre-set, Clear deadline (help
 //       text), Cancel, OK default; OK without a date → info "Pick a date, or use "Clear deadline" to remove it." titled
 //       "Set deadline", the sheet stays), 06 §6.2 / OC-55 / 08 OQ-5 (OptionalDatePicker: a field + an explicit clear
-//       button + a "no date" state), DECISIONS Q-6 (edits produce .unspecified dates); ARCHITECTURE.md §7.5, §9.8.
+//       button + a "no date" state), DECISIONS Q-6 (edits produce .unspecified dates), DECISIONS "Stage V rulings"
+//       (the field shows ISO yyyy-MM-dd; the graphical month view keeps Locale.current names, design rule 14);
+//       ARCHITECTURE.md §7.5, §9.8.
 import AppKit
 import SwiftUI
 import AACore
@@ -121,6 +123,7 @@ struct OptionalDatePicker: View {
                            in: range, displayedComponents: .date)
                     .datePickerStyle(.field)
                     .labelsHidden()
+                    .aaISODatePicker()
                     .fixedSize()
                 Button { withAnimation(.snappy) { value = nil } } label: {
                     Image(systemName: "xmark.circle.fill").foregroundStyle(AAColor.muted)
