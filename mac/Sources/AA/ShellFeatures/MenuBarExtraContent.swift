@@ -11,7 +11,8 @@ struct MenuBarExtraContent: View {
 
     var body: some View {
         Section {
-            Text(reminders.headline)
+            // The Windows headline (`Headline()` + crew suffix, REPO-112) split into one line per non-zero part, each
+            // with the exact wording of that part; "Nothing due." when nothing is due.
             if reminders.summary.any {
                 if reminders.summary.overdue > 0 {
                     Label("\(reminders.summary.overdue) overdue", systemImage: "exclamationmark.circle")
@@ -22,6 +23,8 @@ struct MenuBarExtraContent: View {
                 if reminders.summary.dueWeek > 0 {
                     Label("\(reminders.summary.dueWeek) due this week", systemImage: "calendar.badge.clock")
                 }
+            } else {
+                Label("Nothing due.", systemImage: "checkmark.circle")
             }
             if reminders.crewExpiring > 0 {
                 Label("\(reminders.crewExpiring) crew contract(s) expiring", systemImage: "person.badge.clock")

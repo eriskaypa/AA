@@ -66,6 +66,7 @@ struct ShellXSettingsGeneralTab: View {
                         TextField("App identity", text: $identityDraft, prompt: Text(defaultName))
                             .labelsHidden()
                             .textFieldStyle(.roundedBorder)
+                            .multilineTextAlignment(.leading)    // a Form row right-aligns field text by default
                             .focused($identityFocused)
                             .onSubmit(commitIdentity)
                             .frame(minWidth: 180)

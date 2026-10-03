@@ -19,24 +19,43 @@ struct KeyboardShortcutsView: View {
         VStack(spacing: 0) {
             header(count: ShellXShortcutCatalog.count(groups))
             Divider()
-            ShellXShortcutColumnsHeader()
-            Divider()
             if groups.isEmpty {
                 AAEmptyState(title: "No Matching Shortcuts", symbol: "magnifyingglass",
                              message: "Nothing in the registry matches “\(NetText.trim(query))”.")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
+                // A native table: real column headers that always line up with the cells, resizable columns.
+                Table(of: ShellXShortcutEntry.self) {
+                    TableColumn("Command") { ShellXShortcutCommandCell(entry: $0) }
+                        .width(min: 190, ideal: 260)
+                    TableColumn("Mac") { ShellXKeycaps(chords: $0.chords) }
+                        .width(min: 100, ideal: 140)
+                    TableColumn("Windows") { e in
+                        Text(e.windows)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                            .help(e.windows)
+                    }
+                    .width(min: 150, ideal: 250)
+                    TableColumn("Menu") { e in
+                        Text(e.menu)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .help(e.menu)
+                    }
+                    .width(min: 90, ideal: 150)
+                } rows: {
                     ForEach(groups) { group in
                         Section {
-                            ForEach(group.entries) { ShellXShortcutRow(entry: $0) }
+                            ForEach(group.entries) { TableRow($0) }
                         } header: {
                             AASectionHeader(title: group.title, count: group.entries.count)
                         }
                     }
                 }
-                .listStyle(.inset)
-                .alternatingRowBackgrounds(.enabled)
+                .tableStyle(.inset(alternatesRowBackgrounds: true))
+                .font(.system(size: AAType.small))
             }
         }
         .frame(minWidth: 820, minHeight: 480)
@@ -64,58 +83,17 @@ struct KeyboardShortcutsView: View {
     }
 }
 
-/// Column widths shared by the header and the rows.
-private enum ShellXShortcutColumns {
-    static let command: CGFloat = 270
-    static let mac: CGFloat = 150
-    static let menu: CGFloat = 170
-}
-
-private struct ShellXShortcutColumnsHeader: View {
-    var body: some View {
-        HStack(spacing: AASpacing.m) {
-            Text("Command").frame(width: ShellXShortcutColumns.command, alignment: .leading)
-            Text("Mac").frame(width: ShellXShortcutColumns.mac, alignment: .leading)
-            Text("Windows").frame(maxWidth: .infinity, alignment: .leading)
-            Text("Menu").frame(width: ShellXShortcutColumns.menu, alignment: .leading)
-        }
-        .font(.system(size: AAType.caption, weight: .semibold))
-        .foregroundStyle(.secondary)
-        .padding(.horizontal, AASpacing.l + 6)
-        .padding(.vertical, 6)
-        .background(AAColor.panelAlt)
-    }
-}
-
-private struct ShellXShortcutRow: View {
+/// The Command cell: the menu item's SF Symbol (a muted ⌘ when it has none) and its title; the WPF tooltip on hover.
+private struct ShellXShortcutCommandCell: View {
     let entry: ShellXShortcutEntry
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: AASpacing.m) {
-            HStack(spacing: 6) {
-                Image(systemName: entry.symbol ?? "command")
-                    .foregroundStyle(entry.symbol == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(AAColor.tint))
-                    .frame(width: 16)
-                Text(entry.title).lineLimit(2)
-            }
-            .frame(width: ShellXShortcutColumns.command, alignment: .leading)
-
-            ShellXKeycaps(chords: entry.chords)
-                .frame(width: ShellXShortcutColumns.mac, alignment: .leading)
-
-            Text(entry.windows)
-                .foregroundStyle(.secondary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Text(entry.menu)
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(width: ShellXShortcutColumns.menu, alignment: .leading)
+        HStack(spacing: 6) {
+            Image(systemName: entry.symbol ?? "command")
+                .foregroundStyle(entry.symbol == nil ? AnyShapeStyle(.tertiary) : AnyShapeStyle(AAColor.tint))
+                .frame(width: 16)
+            Text(entry.title).lineLimit(2)
         }
-        .font(.system(size: AAType.small))
-        .padding(.vertical, 2)
         .help(entry.help ?? entry.title)
         .accessibilityElement(children: .combine)
     }

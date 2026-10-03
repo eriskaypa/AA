@@ -23,8 +23,10 @@ at all, the Settings ▸ General toggle being the switch).
 Why: the getter is `phase == .main && enabled && !snapshot && !smoke`; when SwiftUI pushes `false` back through the
 binding while the getter is false (splash, login, snapshot and smoke runs), `aa.menuBarExtra` is written `false`
 and the item never appears again. On the build Mac the preference already reads `0` after test runs.
-Workaround in place: none possible from W-SHELL's files; Settings ▸ General ▸ "Show AA in the menu bar" writes the
-preference back to on.
+Workaround in place (W-SHELL files only): when `ReminderCenter` starts in the main phase (not in snapshot or smoke
+runs) it turns `aa.menuBarExtra` back on unless the user hid the item on purpose, and from then on records every
+change of the preference (Settings toggle, ⌘-drag out of the menu bar) in `aa.shellx.menuBarUserHidden`
+(`ShellXMenuBarPolicy`, `ReminderCenter.startMenuBarGuard`). The binding fix above makes the guard a no-op.
 
 ## REQ-W-SHELL-03: `Docs/Progress/<agent-id>.md` is unowned in `check-ownership.sh`
 Target: `Scripts/check-ownership.sh` (owner F1) and `Docs/OWNERSHIP.md` §2 (lead) — DECISIONS "Foundation requests"
