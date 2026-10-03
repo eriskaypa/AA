@@ -71,3 +71,17 @@ Also per the design rules: quick-card header in mono, editor header = `BuilderSh
 Tests: +7 (`VesselQuickCardOpenTests` 6, boundary vectors 1). Snapshots (light + dark, looked at):
 `w-vessel.work-orders`, `-readonly`, `w-vessel.ports`, `w-vessel.quick-cards`, `w-vessel.quick-card-editor`,
 `-readonly`, `TabPorts` (with and without selection).
+
+## Fix round 2 (FIX2-W-VESSEL, verifier findings V2-J5 / V2-DESIGN)
+
+| Finding | Result |
+|---|---|
+| V2-J5 VESSEL-253: visits Vessel column truncated `BW Pavilion…` | Fixed — the Vessel cell wraps (`BW Pavilion` / `Aranda`), full name also in the tooltip. Rejected part: the claimed ~400 pt of free width does not exist (the original snapshot has ~10 pt to spare), and the suggested 220-pt ideal pushed `Imported` past the pane edge at 1280 pt (checked in a snapshot), so the widths stay fitted to the pane: Vessel 110 / Arrival 130 / Departure 130 / Imported 126 from `PortsAnalysis.visitsColumns` (DEVIATIONS VESSEL-253). |
+| V2-DESIGN rule 17: scroller corner square in the Quick Cards canvas | Fixed — `.scrollIndicators(.never)` on the two-axis canvas (overrides "Show scroll bars: Always"); checked with `-AppleShowScrollBars Always` per process. The Relationship Map half (`Sources/AA/Board/RelationshipMapTabView.swift`) is W-PLAN's — cross-owner request. |
+| V2-DESIGN rule 11: Quick Cards header hint truncated | Fixed — `AAHelpText`, wraps to a second line, no `lineLimit(1)`; the `+ Quick card` button is `fixedSize` so it never truncates instead. The SIRE body hint half (`Sources/AA/Sire/SireDetailPane.swift`) is W-SIRE's — cross-owner request. |
+
+Tests: +5 (`VesselDesignRound2Tests`: column specs and pane budget, header-width fit, the visits table wires the
+shared widths and wraps the vessel name, the header hint wraps, the canvas hides its scrollers). Snapshots (light +
+dark, looked at, no runtime warnings in the logs): `TabPorts` with `AA_SNAPSHOT_PORT=Bonny`, `TabVessels --select`
+(Quick Cards), `--sheet w-vessel.quick-cards`, both with and without `-AppleShowScrollBars Always`.
+

@@ -174,6 +174,9 @@ public enum QuickCardLayout {
 
     public static let headerTitle = "Quick Cards"
     public static let headerHint = "Double-click a card to open it. Drag to move, drag the corner to resize, right-click to edit."
+    /// The two-axis canvas pans with the trackpad / wheel; it shows no scrollers, so no legacy scroller corner square
+    /// is drawn inside the rounded canvas (design rule 17).
+    public static let canvasShowsScrollers = false
     public static let addButtonTitle = "+ Quick card"
     public static let emptyText = "No quick cards yet for this vessel.\nClick '+ Quick card' to add a shortcut to a file, folder, or web link."
     public static let noTargetTitle = "Quick card"
