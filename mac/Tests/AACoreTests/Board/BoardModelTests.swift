@@ -21,6 +21,9 @@ import Testing
         let t = D.task("t", deadline: "2026-09-20")
         t.recurrence = .weekly
         #expect(BoardModel.meta(t, today: D.today) == "Due 2026-09-20  \u{00B7}  OVERDUE   \u{00B7}   Weekly")
+        // The card draws the same parts with OVERDUE as a chip (V-DESIGN rule 8).
+        #expect(BoardModel.metaParts(t, today: D.today)
+                == .init(dates: "Due 2026-09-20", overdue: true, recurrence: "Weekly"))
         #expect(BoardModel.isOverdue(t, today: D.today))
         t.status = .done
         #expect(BoardModel.meta(t, today: D.today) == "Due 2026-09-20   \u{00B7}   Weekly")

@@ -79,14 +79,18 @@ struct RelationshipMapTabView: View {
                 }
             })) {
                 ForEach(rows) { row in
-                    HStack(spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Circle().fill(AAColor.kind(row.item.kind)).frame(width: 9, height: 9)
                             .overlay(Circle().strokeBorder(AAColor.border, lineWidth: 0.5))
+                            .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 1 }
+                        // "[Kind] Name" kept intact: wraps to two lines, then truncates in the middle.
                         Text(row.text)
                             .font(.aaMono(AAType.small))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                            .lineLimit(2)
+                            .truncationMode(.middle)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
+                    .padding(.vertical, 2)
                     .help(row.text)
                     .tag(row.id)
                 }

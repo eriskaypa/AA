@@ -185,16 +185,24 @@ struct BoardActions {
         }
     }
 
-    /// VIEW-052 + DECISIONS 02 Q-4: same confirmation text, then the card goes to the Trash (⌘Z restores it).
+    /// VIEW-052 + DECISIONS 02 Q-4: same confirmation text, then the card goes to the Trash (⌘Z restores it). After
+    /// the confirmation the open editors are flushed first (so the Trash payload holds the last edits), the task is
+    /// re-resolved and trashed, and its detached item window is closed — the same steps as the batch path
+    /// (`BatchActions.confirmAndTrash`).
     func delete(_ taskID: UUID) async {
         guard let t = env.store.task(id: taskID) else { return }
         let ok = await dialogs.confirm(BoardModel.confirmTitle, BoardModel.deleteMessage(t), confirm: "Move to Trash",
                                        destructive: true, defaultIsCancel: true)
-        guard ok, let live = env.store.task(id: taskID) else { return }
+        guard ok else { return }
+        env.flushAllEditors()
+        guard let live = env.store.task(id: taskID) else { return }
         let name = live.name
         guard BoardModel.moveToTrash(live, store: env.store) else { return }
         CalPersist.saveNow(env, dialogs)
+        env.store.detachedItemIDs.remove(taskID)
+        SceneOpener.shared.itemWindow(taskID)?.close()
         env.status.post(BatchDelete.statusAfterDelete(count: 1, firstName: name))
+        env.refreshAfterTrashChange()
         model.selection = [:]
         withAnimation(.snappy) { model.cards.refresh() }
     }
@@ -362,8 +370,8 @@ private struct BoardCardView: View {
         let t = card.task
         let today = env.store.clock.today()
         let meta = BoardModel.meta(t, today: today)
+        let parts = BoardModel.metaParts(t, today: today)
         let badges = BoardModel.badges(t)
-        let overdue = BoardModel.isOverdue(t, today: today)
         HStack(spacing: 0) {
             Rectangle().fill(color).frame(width: 6)
             VStack(alignment: .leading, spacing: 0) {
@@ -381,15 +389,30 @@ private struct BoardCardView: View {
                     .foregroundStyle(t.isComplete ? AAColor.muted : AAColor.fg)
                     .fixedSize(horizontal: false, vertical: true)
                 if !meta.isEmpty {
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        if overdue {
-                            Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10))
+                    // Dates, an OVERDUE chip, then the recurrence: each part wraps as a unit, so the chip never
+                    // lands on a line of its own behind a dangling separator. The Windows string stays the
+                    // accessibility label and tooltip.
+                    CalFlowLayout(spacing: AASpacing.s, lineSpacing: AASpacing.xs) {
+                        if let dates = parts.dates {
+                            Text(dates)
+                                .foregroundStyle(parts.overdue ? AAColor.Status.overdueMeta : Self.metaColor)
                         }
-                        Text(meta).fixedSize(horizontal: false, vertical: true)
+                        if parts.overdue {
+                            AAStatusCapsule(text: BoardModel.overdueWord, symbol: "exclamationmark.triangle.fill",
+                                            color: AAColor.Status.overdueMeta)
+                        }
+                        if let recurrence = parts.recurrence {
+                            Label(recurrence, systemImage: "arrow.triangle.2.circlepath")
+                                .labelStyle(.titleAndIcon)
+                                .symbolRenderingMode(.hierarchical)
+                                .foregroundStyle(Self.metaColor)
+                        }
                     }
-                    .font(.aaMono(12.5))
-                    .foregroundStyle(overdue ? AAColor.Status.overdueMeta : Self.metaColor)
+                    .font(.aaMono(12.5).monospacedDigit())
                     .padding(.top, 4)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(meta)
+                    .help(meta)
                 }
                 if !badges.isEmpty {
                     Text(badges)

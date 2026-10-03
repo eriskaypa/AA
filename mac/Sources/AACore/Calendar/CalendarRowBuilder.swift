@@ -95,12 +95,12 @@ public struct CalScheduleRow: @MainActor Identifiable {
     /// The day the group label is computed from.
     public var groupDay: CivilDate { occurrenceDate ?? deadline.civilDate }
 
-    /// Status column, read live: task/procedure enum name (`Todo`, `InProgress`, `Blocked`, `Done`), step
-    /// `"Done"`/`"Step"`.
+    /// Status column, read live: task/procedure friendly label (`To Do`, `In Progress`, `Blocked`, `Done` —
+    /// DECISIONS 04 Q-G / 08 OQ-10 outrank VIEW-012's enum name; Deviations/W-PLAN.md), step `"Done"`/`"Step"`.
     public var status: String {
         switch item {
-        case let t as TaskItem: return t.status.name
-        case let p as Procedure: return p.status.name
+        case let t as TaskItem: return t.status.friendlyLabel
+        case let p as Procedure: return p.status.friendlyLabel
         case let s as ChecklistStep: return s.done ? "Done" : "Step"
         default: return ""
         }
@@ -210,12 +210,12 @@ public enum CalendarRowBuilder {
 
     static func forTask(_ t: TaskItem, deadline: NetDateTime) -> CalScheduleRow {
         CalScheduleRow(id: "t-" + t.id.netString, item: t, itemID: t.id, kind: .task, ownerID: nil, name: t.name,
-                       deadline: deadline, rangeStart: t.rangeStart, recurrence: t.recurrence.name)
+                       deadline: deadline, rangeStart: t.rangeStart, recurrence: t.recurrence.friendlyLabel)
     }
 
     static func forProcedure(_ p: Procedure, deadline: NetDateTime) -> CalScheduleRow {
         CalScheduleRow(id: "p-" + p.id.netString, item: p, itemID: p.id, kind: .procedure, ownerID: nil, name: p.name,
-                       deadline: deadline, rangeStart: nil, recurrence: p.recurrence.name)
+                       deadline: deadline, rangeStart: nil, recurrence: p.recurrence.friendlyLabel)
     }
 
     /// `"{Title}   ·  [{Procedure}]"` (3 spaces, U+00B7, 2 spaces).
@@ -402,6 +402,9 @@ public enum CalFontScale {
     }
 
     public static func clamp(_ v: Double) -> Double { min(max(v, minimum), maximum) }
+
+    /// A- / A+ are enabled whenever a click would change the size (C18: from a stored 30, A+ → 28; from 10, A- → 11).
+    public static func canStep(_ current: Double, bigger: Bool) -> Bool { stepped(current, bigger: bigger) != current }
 }
 
 /// Locale-aware day / month names for chrome (DECISIONS 07 Q-09) over invariant civil dates.

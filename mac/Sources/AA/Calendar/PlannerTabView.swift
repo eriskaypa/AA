@@ -90,7 +90,7 @@ struct PlannerTabView: View {
                           symbol: "calendar.day.timeline.left") {
                 navigation
             }
-            CalSplitView(minLeading: 200, idealLeading: 230, maxLeading: 400, minTrailing: 420) {
+            CalSplitView(minLeading: 200, idealLeading: 256, maxLeading: 400, minTrailing: 420) {
                 PlannerPoolPane(model: model, actions: actions, searchFocused: $searchFocused)
             } trailing: {
                 Group {
@@ -261,26 +261,30 @@ private struct PlannerPoolPane: View {
             .padding(.vertical, AASpacing.s)
             List {
                 ForEach(rows) { row in
-                    HStack(spacing: 8) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(row.isDone ? AAColor.Status.plannerMuted : AAColor.Status.plannerBlock)
                             .frame(width: 4, height: 16)
-                        // VIEW-084 text "{JobName}   ·   {dur}" on one line; a long name truncates, the duration
-                        // stays readable.
-                        HStack(spacing: 0) {
+                            .alignmentGuide(.firstTextBaseline) { d in d[.bottom] - 3 }
+                        // VIEW-084 text "{JobName}   ·   {dur}": a long name wraps to two lines before it
+                        // truncates; the duration stays readable on the first line.
+                        HStack(alignment: .firstTextBaseline, spacing: 0) {
                             Text(row.job.jobName)
-                                .lineLimit(1)
+                                .lineLimit(2)
                                 .truncationMode(.tail)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .strikethrough(row.isDone)
+                                .frame(maxWidth: .infinity, alignment: .leading)
                             Text(String(row.text.dropFirst(row.job.jobName.count)))
                                 .lineLimit(1)
                                 .fixedSize()
+                                .monospacedDigit()
                                 .foregroundStyle(AAColor.muted)
                         }
                         .font(.aaMono(AAType.small))
                         .foregroundStyle(row.isDone ? AAColor.muted : AAColor.fg)
-                        Spacer(minLength: 0)
                     }
+                    .padding(.vertical, 2)
                     .contentShape(Rectangle())
                     .help(row.text)
                     .onTapGesture(count: 2) { actions.edit(row.ref) }
