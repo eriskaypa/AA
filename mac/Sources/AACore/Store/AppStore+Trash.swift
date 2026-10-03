@@ -69,12 +69,15 @@ extension AppStore {
     }
 
     /// DECISIONS 09: "Clear all" = one Trash batch (undoable as a whole); logs `Removed / "Crew" /
-    /// "all {n} member(s)"` once. Returns the number of members moved.
+    /// "all {n} member(s)"` once. Returns the number of members moved. Every entry of the batch carries the SAME
+    /// `DeletedUtc` (one clock read), so the REPO-077 undo (DeletedUtc descending, ties → collection order)
+    /// re-appends the roster in its original order instead of reversing it (CREW-061/062).
     @discardableResult public func trashAllCrew() -> Int {
         let members = data.crew
         guard !members.isEmpty else { return 0 }
         let batch = UUID()
-        for m in members { _ = repoTrashCrew(m, batchID: batch, log: false) }
+        let stamp = clock.utcNow()
+        for m in members { _ = repoTrashCrew(m, batchID: batch, log: false, deletedUtc: stamp) }
         logRemoved(kind: "Crew", name: "all \(members.count) member(s)", detail: "")
         markDirty()
         trashChanged.send(())
@@ -233,12 +236,13 @@ extension AppStore {
         return UUID(netString: text)
     }
 
-    private func repoTrashCrew(_ member: CrewMember, batchID: UUID?, log: Bool) -> TrashedItem {
+    private func repoTrashCrew(_ member: CrewMember, batchID: UUID?, log: Bool,
+                               deletedUtc: NetDateTime? = nil) -> TrashedItem {
         let full = member.fullName
         let name = NetText.isBlank(full) ? member.lastName : full
         let entry = TrashedItem(itemType: TrashItemType.crew.rawValue, itemId: member.id,
                                 batchId: batchID ?? .netEmpty, name: name, kindLabel: "Crew member",
-                                deletedUtc: clock.utcNow(), payloadJson: TrashPayload.encode(member))
+                                deletedUtc: deletedUtc ?? clock.utcNow(), payloadJson: TrashPayload.encode(member))
         guard let k = data.crew.firstIndex(where: { $0 === member }) else { return entry }
         data.crew.remove(at: k)
         repoAddToTrash(entry)

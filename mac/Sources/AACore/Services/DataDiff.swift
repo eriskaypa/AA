@@ -1,6 +1,7 @@
 // Spec: 08 §3.7 (exact algorithm), QUICK-194/195, 01 §3.15, DATA-102/103, §7.8; 08 §7.7 (T-DF-*); OC-13 (count-aware
 //       file keys, never crash — 01 §8 D-10 / 08 Q-8 P2; link order = first occurrence in collection order);
-//       DECISIONS 01 Q-3 ("Other data": crew, saved lists, ports, SIRE — additive, Mac only).
+//       DECISIONS 01 Q-3 ("Other data": crew, saved lists, ports, SIRE — additive, Mac only); DECISIONS 08 OQ-10
+//       (status/recurrence lines use `.friendlyLabel`).
 import Foundation
 
 public struct DiffNode: Sendable, Identifiable, Hashable {
@@ -177,10 +178,13 @@ public struct DiffResult: Sendable {
         case let (ta as TaskItem, tb as TaskItem):
             if ta.deadline != tb.deadline { n.append(field("deadline: \(fmt(ta.deadline)) \u{2192} \(fmt(tb.deadline))")) }
             if ta.rangeStart != tb.rangeStart { n.append(field("start: \(fmt(ta.rangeStart)) \u{2192} \(fmt(tb.rangeStart))")) }
+            // DECISIONS 08 OQ-10: friendly labels ("To Do → Done", "None → Weekly"); stored integers unchanged.
             if ta.recurrence != tb.recurrence {
-                n.append(field("recurrence: \(ta.recurrence.name) \u{2192} \(tb.recurrence.name)"))
+                n.append(field("recurrence: \(ta.recurrence.friendlyLabel) \u{2192} \(tb.recurrence.friendlyLabel)"))
             }
-            if ta.status != tb.status { n.append(field("status: \(ta.status.name) \u{2192} \(tb.status.name)")) }
+            if ta.status != tb.status {
+                n.append(field("status: \(ta.status.friendlyLabel) \u{2192} \(tb.status.friendlyLabel)"))
+            }
             var seen = seen
             if seen.insert(ObjectIdentifier(tb)).inserted {
                 diffTasks(ta.subtasks, tb.subtasks, names, seen, into: &n)
