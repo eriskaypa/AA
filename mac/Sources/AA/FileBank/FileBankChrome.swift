@@ -273,7 +273,7 @@ struct FileBankSharingMenu: View {
                 ForEach(Array(with.enumerated()), id: \.offset) { _, e in
                     Menu(e.owner.label) {
                         Button(FileBankText.menuGoToOwner) { FileBankNavigation.reveal(e.owner, env: env) }
-                        Button("Stop Sharing") { controller.stopSharing(with: e.container) }.disabled(!editable)
+                        Button(FileBankText.stopSharing) { controller.stopSharing(with: e.container) }.disabled(!editable)
                     }
                 }
             }

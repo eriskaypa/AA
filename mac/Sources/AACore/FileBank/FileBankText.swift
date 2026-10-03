@@ -99,6 +99,7 @@ public enum FileBankText {
     // MARK: Shared containers (DECISIONS 05 — Container.SharedWithContainerIds)
 
     public static let sharedTab = "Shared"
+    public static let stopSharing = "Stop Sharing"
     public static let sharing = "Sharing"
     public static let shareWith = "Share With…"
     public static let sharedWithHeader = "This file bank is shared with"
@@ -123,6 +124,8 @@ public enum FileBankText {
     public static func backlinksCount(_ n: Int) -> String { n == 1 ? "1 file is linked to this item" : "\(n) files are linked to this item" }
     public static let backlinksEmpty = "No files are linked to this item. Use Link to Items… on a file in any file bank."
     public static let backlinksInColumn = "In"
+    public static let unlinkFromItem = "Unlink from This Item"
+    public static let entryGone = "That file is no longer in the loaded data — nothing was changed."
 
     // MARK: Read-only viewer (04 HIER-136, 05 CONT-098, 01 OC-12)
 

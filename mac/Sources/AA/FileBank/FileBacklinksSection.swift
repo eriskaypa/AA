@@ -59,9 +59,9 @@ struct FileBacklinksSection: View {
         } primaryAction: { ids in
             open(model.rows.filter { ids.contains($0.id) })
         }
-        .background(FileBankKeyAnchor(monitor: keys))
-        .onAppear { wire(model); keys.install() }
-        .onChange(of: selection) { _, _ in wire(model) }
+        .background(FileBankKeyAnchor(monitor: keys, onSpace: { [sel = selection] in quickLook(model, sel, toggle: true) },
+                                      onOpen: { [sel = selection] in open(model.rows.filter { sel.contains($0.id) }) }))
+        .onAppear { keys.install() }
         .onDisappear { keys.remove() }
         .aaListCommands(ListCommands(role: .other, selectionCount: selection.count,
                                      quickLook: { [sel = selection] in quickLook(model, sel, toggle: false) },
@@ -102,17 +102,11 @@ struct FileBacklinksSection: View {
                 let c = FileBankController(container: first.link.container, env: env, dialogs: dialogs)
                 Task { await c.linkToItems(first.link.file) }
             }
-            Button("Unlink from This Item") { unlink(picked) }
+            Button(FileBankText.unlinkFromItem) { unlink(picked) }
         }
     }
 
     // MARK: Behaviour
-
-    private func wire(_ model: FileBankBacklinksModel) {
-        let sel = selection
-        keys.onSpace = { quickLook(model, sel, toggle: true) }
-        keys.onOpen = { open(model.rows.filter { sel.contains($0.id) }) }
-    }
 
     private func open(_ rows: [FileBankBacklinkRow]) {
         Task { for r in rows { await FileBankOpening.open(r.link.file, env: env, dialogs: dialogs, style: .fileBank) } }

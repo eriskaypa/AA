@@ -151,16 +151,9 @@ struct FileBankTable: View {
         .onCopyCommand { providers(for: actions.copyForPasteboard(selection)) }
         .onCutCommand { isShared ? [] : providers(for: actions.cutForPasteboard(selection)) }
         .onPasteCommand(of: [.item]) { _ in if !isShared { actions.paste() } }
-        .background(FileBankKeyAnchor(monitor: keys))
-        .onAppear {
-            keys.onSpace = { actions.quickLook(selection, true) }
-            keys.onOpen = { if !selection.isEmpty { actions.open(selection) } }
-            keys.install()
-        }
-        .onChange(of: selection) { _, _ in
-            keys.onSpace = { actions.quickLook(selection, true) }
-            keys.onOpen = { if !selection.isEmpty { actions.open(selection) } }
-        }
+        .background(FileBankKeyAnchor(monitor: keys, onSpace: { actions.quickLook(selection, true) },
+                                      onOpen: { if !selection.isEmpty { actions.open(selection) } }))
+        .onAppear { keys.install() }
         .onDisappear { keys.remove() }
         .aaListCommands(listCommands)
     }
@@ -394,13 +387,26 @@ struct FileBankGrid: View {
     }
 }
 
-/// The NSView behind the table, used to tell whether the focused NSTableView is this file bank's.
+/// The NSView behind the table, used to tell whether the focused NSTableView is this file bank's. Every render hands
+/// the monitor fresh handlers (they resolve ids against the rows of that render) and installs it while on screen.
 struct FileBankKeyAnchor: NSViewRepresentable {
     let monitor: FileBankKeyMonitor
+    let onSpace: () -> Void
+    let onOpen: () -> Void
+
     func makeNSView(context: Context) -> NSView {
         let v = NSView(frame: .zero)
-        monitor.anchor = v
+        apply(v)
         return v
     }
-    func updateNSView(_ nsView: NSView, context: Context) { monitor.anchor = nsView }
+
+    func updateNSView(_ nsView: NSView, context: Context) { apply(nsView) }
+
+    static func dismantleNSView(_ nsView: NSView, coordinator: ()) {}
+
+    private func apply(_ v: NSView) {
+        monitor.anchor = v
+        monitor.onSpace = onSpace
+        monitor.onOpen = onOpen
+    }
 }

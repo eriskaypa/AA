@@ -149,9 +149,9 @@ struct FileBankViewerContent: View {
         } primaryAction: { ids in
             open(rows.filter { ids.contains($0.id) }.map(\.file))         // double-click opens (HIER-136)
         }
-        .background(FileBankKeyAnchor(monitor: keys))
-        .onAppear { wireKeys(rows); keys.install() }
-        .onChange(of: selection) { _, _ in wireKeys(rows) }
+        .background(FileBankKeyAnchor(monitor: keys, onSpace: { [sel = selection] in quickLook(rows, sel, toggle: true) },
+                                      onOpen: { [sel = selection] in open(rows.filter { sel.contains($0.id) }.map(\.file)) }))
+        .onAppear { keys.install() }
         .onDisappear { keys.remove() }
         .aaListCommands(ListCommands(role: .viewerFiles, selectionCount: selection.count,
                                      quickLook: { [sel = selection] in quickLook(rows, sel, toggle: false) },
@@ -189,12 +189,6 @@ struct FileBankViewerContent: View {
                                container: container, owner: nil, visual: FileBankVisual(f, dataStore: env.dataStore),
                                linkedSummary: "", added: "")
         }
-    }
-
-    private func wireKeys(_ rows: [FileBankRow]) {
-        let sel = selection
-        keys.onSpace = { quickLook(rows, sel, toggle: true) }
-        keys.onOpen = { open(rows.filter { sel.contains($0.id) }.map(\.file)) }
     }
 
     private func open(_ files: [FileItem]) {

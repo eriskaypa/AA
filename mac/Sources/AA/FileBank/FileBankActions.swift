@@ -169,7 +169,7 @@ import AACore
     private func stillHolds(_ file: FileItem) -> Bool {
         if isLive, container.files.contains(where: { $0 === file }) { return true }
         Task { @MainActor in
-            await dialogs.warning(FileBankText.title, "That file is no longer in the loaded data — nothing was changed.")
+            await dialogs.warning(FileBankText.title, FileBankText.entryGone)
         }
         return false
     }
