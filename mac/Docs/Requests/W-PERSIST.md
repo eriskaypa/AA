@@ -18,7 +18,11 @@ every DATA-174 "disabled" command disabled with help `PersistReadOnlyText.disabl
 when `settings.isWriteGated`.
 Why: these surfaces belong to F3/W-SHELL; the texts and state live in W-PERSIST (AACore `PersistReadOnlyText`, `PersistConflictState`).
 Workaround in place: the read-only and stopped-editing banners state the mode; `SettingsStore.isWriteGated`/`suspendSaving` already
-keep everything from being written.
+keep everything from being written, and W-PERSIST's own writers refuse with `PersistWriteGateError.readOnly` while the gate is
+closed (Deviations W-PERSIST-14). ⌘S in a read-only copy is intercepted by a local key monitor installed by `ReadOnlyInstanceBanner`
+(`PersistUIBridge.installReadOnlySaveInterceptor`, Deviations W-PERSIST-15) — remove it when F3's `doSave` shows the sheet itself.
+Still open in F3/W-SHELL code: the window subtitle "Read-Only", greyed DATA-174 commands with the help text, and the settings
+status suffix.
 
 ## REQ-W-PERSIST-03: an `InstanceGuardResult` case for "same user, no app bundle"
 Target: `Sources/AACore/Instance/InstanceGuard.swift` contract (ARCH §6.6, lead) — 01 §MP.3.3 `.sameUserNoApp`
