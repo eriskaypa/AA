@@ -39,8 +39,8 @@ final class BuilderChecklistModel {
         engine = makeEngine()
     }
 
-    /// The template's name when the editor opened (for the vanished-template rescue, D3).
-    var templateName: String { session?.openedName ?? "" }
+    /// The template's latest known name (for the vanished-template rescue, D3).
+    var templateName: String { session?.lastKnownName ?? "" }
 
     // MARK: Host resolution (ARCH §2.4)
 

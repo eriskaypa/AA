@@ -13,28 +13,37 @@ import Foundation
     public let templateID: UUID
     /// The template's items as detached steps (`ToSteps`, cloned containers) — what the builder edits.
     public var steps: [ChecklistStep]
-    /// The template's name when the editor opened (the name of the rescue list when it vanished, D3).
-    public private(set) var openedName: String
     public private(set) var isFinished = false
+    /// The template object last resolved by id. Kept after a delete so the rescue list carries the name the list had
+    /// when it vanished (a rename mutates this same object in place), not the name the editor opened with (D3).
+    private var lastResolved: ChecklistTemplate?
 
     public init(store: AppStore, templateID: UUID) {
         self.store = store
         self.templateID = templateID
         if let t = store.template(id: templateID) {
             steps = ChecklistTemplateService.toSteps(t)
-            openedName = t.name
+            lastResolved = t
         } else {
             steps = []
-            openedName = ""
         }
     }
 
-    /// The live template (nil when it was deleted or a reload dropped it).
-    public var template: ChecklistTemplate? { store.template(id: templateID) }
+    /// The live template (nil when it was deleted or a reload dropped it). Every successful resolution is remembered
+    /// (R1: a reload's new object replaces the old one).
+    public var template: ChecklistTemplate? {
+        let t = store.template(id: templateID)
+        if let t { lastResolved = t }
+        return t
+    }
+
+    /// The template's latest known name: the live name, or the name it had when it vanished (renames made through
+    /// "Manage saved lists…" while the editor was open included). `""` when it never resolved.
+    public var lastKnownName: String { template?.name ?? lastResolved?.name ?? "" }
 
     /// BUILD-001 owner name of the saved-list host: the live name (a rename through "Manage saved lists…" shows at
-    /// once), else the name the editor opened with.
-    public var ownerName: String { template?.name ?? openedName }
+    /// once), else the name it had when it vanished.
+    public var ownerName: String { lastKnownName }
 
     /// Whether writing back now would change the template.
     public var hasChanges: Bool {
@@ -63,11 +72,11 @@ import Foundation
         return writeBack()
     }
 
-    /// D3 rescue: the edited items captured as a new list (named as the vanished one), appended at the end of
+    /// D3 rescue: the edited items captured as a new list (named as the vanished one, latest name), appended at the end of
     /// `ChecklistTemplates`, ungrouped, logged `Added / "Saved list" / name / "{n} item(s)"` like "Save as list".
     @discardableResult
     public func saveAsNewList() -> ChecklistTemplate {
-        let t = ChecklistTemplateService.captureFromSteps(name: openedName, steps: steps)
+        let t = ChecklistTemplateService.captureFromSteps(name: lastKnownName, steps: steps)
         store.data.checklistTemplates.append(t)
         store.logAdded(kind: "Saved list", name: t.name, detail: "\(t.items.count) item(s)")
         return t

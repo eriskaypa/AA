@@ -1,6 +1,7 @@
 // Spec: 06 §G (BUILD-070…090), BUILD-A10 (tab rows), BUILD-017 (manage), BUILD-135 (log entries), 02 REPO-130…134
 //       (arranged order, guards and messages), 06 §7.5 / §7.6 vectors, §8 D1 (group by Id; dangling ids are
-//       ungrouped), D2 (Move to group preselects the current group); DECISIONS 06.
+//       ungrouped), D2 (Move to group preselects the current group), D8 + DECISIONS 06 "log the unlogged actions"
+//       (group create / rename / delete, list rename and Move to group are logged additively); DECISIONS 06.
 // The Saved Lists tab's derived rows, texts and model operations. Ordering of the collection itself (Nudge / MoveTo)
 // follows F2's `SavedListOrder` (REPO-131…133), applied to the resolved group so a dangling `GroupId` arranges
 // inside "Ungrouped" where the tab shows it (D1); this file never re-sorts `ChecklistTemplates`.
@@ -317,14 +318,25 @@ public enum BuilderReorderCheck {
         return t
     }
 
-    /// BUILD-017 / BUILD-081: rename (trimmed); blank → false. Not logged.
+    /// BUILD-017 / BUILD-081: rename (trimmed); blank → false. DECISIONS 06 / §8 D8 (additive): a real change is
+    /// logged `Added / "Saved list" / new name / "renamed from '{old}'"`; an unchanged name is not logged.
     @discardableResult
     public static func rename(_ store: AppStore, _ t: ChecklistTemplate, rawName: String) -> Bool {
         guard !NetText.isBlank(rawName) else { return false }
+        let old = t.name
         t.name = NetText.trim(rawName)
         store.markDirty()
+        if t.name != old { store.logAdded(kind: "Saved list", name: t.name, detail: renamedDetail(old)) }
         return true
     }
+
+    /// The detail of a rename log entry (DECISIONS 06 / D8): `"renamed from '{old}'"` (`"(unnamed)"` when blank).
+    public static func renamedDetail(_ old: String) -> String {
+        "renamed from '\(NetText.isBlank(old) ? "(unnamed)" : NetText.trim(old))'"
+    }
+
+    /// The `"List group"` log kind (DECISIONS 06 / §8 D8 additive entries).
+    public static let groupLogKind = "List group"
 
     /// BUILD-017 / BUILD-082: permanent removal, logged `Removed / "Saved list" / name / ""`.
     public static func delete(_ store: AppStore, _ t: ChecklistTemplate) {
@@ -343,36 +355,52 @@ public enum BuilderReorderCheck {
         return copy
     }
 
-    /// BUILD-077: `+ Group` — appended with a trimmed name; blank → nil. Not logged.
+    /// BUILD-077: `+ Group` — appended with a trimmed name; blank → nil. DECISIONS 06 / D8 (additive): logged
+    /// `Added / "List group" / name / ""`.
     @discardableResult
     public static func newGroup(_ store: AppStore, rawName: String) -> ListGroup? {
         guard !NetText.isBlank(rawName) else { return nil }
         let g = ListGroup(name: NetText.trim(rawName))
         store.data.listGroups.append(g)
         store.markDirty()
+        store.logAdded(kind: groupLogKind, name: g.name, detail: "")
         return g
     }
 
-    /// BUILD-078 rename: trimmed; blank → false. Not logged.
+    /// BUILD-078 rename: trimmed; blank → false. DECISIONS 06 / D8 (additive): a real change is logged
+    /// `Added / "List group" / new name / "renamed from '{old}'"`; an unchanged name is not logged.
     @discardableResult
     public static func renameGroup(_ store: AppStore, _ g: ListGroup, rawName: String) -> Bool {
         guard !NetText.isBlank(rawName) else { return false }
+        let old = g.name
         g.name = NetText.trim(rawName)
         store.markDirty()
+        if g.name != old { store.logAdded(kind: groupLogKind, name: g.name, detail: renamedDetail(old)) }
         return true
     }
 
     /// BUILD-078 delete: every list of that group becomes ungrouped (flat positions unchanged), the group is removed.
+    /// DECISIONS 06 / D8 (additive): logged `Removed / "List group" / name / "{n} list(s) ungrouped"`.
     public static func deleteGroup(_ store: AppStore, _ g: ListGroup) {
-        for t in store.data.checklistTemplates where t.groupId == g.id { t.groupId = nil }
+        var ungrouped = 0
+        for t in store.data.checklistTemplates where t.groupId == g.id { t.groupId = nil; ungrouped += 1 }
         store.data.listGroups.removeAll { $0 === g }
         store.markDirty()
+        store.logRemoved(kind: groupLogKind, name: g.name, detail: "\(ungrouped) list(s) ungrouped")
     }
 
-    /// BUILD-079: the list keeps its flat position; `GroupId` = the chosen group (nil = ungrouped).
+    /// BUILD-079: the list keeps its flat position; `GroupId` = the chosen group (nil = ungrouped). DECISIONS 06
+    /// (additive, with D8's group entries): a real move is logged `Added / "Saved list" / name / "moved to group
+    /// '{group}'"` or `"moved to Ungrouped"`; choosing the current group is not logged.
     public static func assign(_ store: AppStore, _ t: ChecklistTemplate, toGroup groupID: UUID?) {
+        let changed = t.groupId != groupID
         t.groupId = groupID
         store.markDirty()
+        guard changed else { return }
+        let target = groupID.flatMap { gid in store.data.listGroups.first { $0.id == gid } }
+        let detail = target.map { "moved to group '\($0.name.isEmpty ? "(unnamed group)" : $0.name)'" }
+            ?? "moved to Ungrouped"
+        store.logAdded(kind: "Saved list", name: t.name, detail: detail)
     }
 
     /// BUILD-088: persists `Ui.SortAZ["savedlists"]` (the arrangement underneath never changes).
