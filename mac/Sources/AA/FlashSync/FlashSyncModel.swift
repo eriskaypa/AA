@@ -133,7 +133,9 @@ final class FlashSyncModel {
 
     // MARK: Send (FLASH-010…024)
 
-    /// Flushes every editor, saves synchronously, then builds the payload off the main actor.
+    /// Flushes every editor, saves synchronously, then reads the sources and builds the payload off the main actor
+    /// (`FlashSyncStore.captureSendInputs(live:)`: on main only the live model's encoding, unless the file on disk
+    /// differs from it — V2-SCALE).
     func prepareSend() {
         guard let env, let store, send.canRePrepare else { return }
         prepareToken += 1
@@ -146,29 +148,35 @@ final class FlashSyncModel {
         env.flushAllEditors()                                              // FLASH-002 / §6.6 point 1
         if env.store.isDirty { try? env.saveQuietly() }
         let fingerprint = store.sourceFingerprint()
-        let inputs: FlashSendInputs
-        do { inputs = try store.captureSendInputs() } catch {
-            dropStream()
-            send.didFail(error.localizedDescription)
-            return
-        }
         preparing = true
         let identity = env.settings.appIdentity
         let now = env.clock.now()
-        Task.detached(priority: .userInitiated) {
+        let live = env.store.data
+        Task { @MainActor [weak self] in
             let result: Result<(FlashOutgoing, FlashEncoder)?, Error>
             do {
-                if let out = try FlashSyncStore.buildOutgoing(inputs, from: identity, now: now) {
-                    let enc = try FlashEncoder(payload: out.payload, kind: out.kind, label: out.label,
-                                               session: FlashEncoder.newSession())
-                    result = .success((out, enc))
-                } else {
-                    result = .success(nil)
-                }
+                let inputs = try await store.captureSendInputs(live: live)
+                guard token == self?.prepareToken else { return }          // superseded while reading
+                result = await Task.detached(priority: .userInitiated) {
+                    FlashSyncModel.build(inputs, from: identity, now: now)
+                }.value
             } catch {
                 result = .failure(error)
             }
-            await MainActor.run { [weak self] in self?.prepared(result, token: token, from: fingerprint) }
+            self?.prepared(result, token: token, from: fingerprint)
+        }
+    }
+
+    /// The diff / snapshot, encoding and DEFLATE (off the main actor).
+    private nonisolated static func build(_ inputs: FlashSendInputs, from identity: String,
+                                          now: NetDateTime) -> Result<(FlashOutgoing, FlashEncoder)?, Error> {
+        do {
+            guard let out = try FlashSyncStore.buildOutgoing(inputs, from: identity, now: now) else { return .success(nil) }
+            let enc = try FlashEncoder(payload: out.payload, kind: out.kind, label: out.label,
+                                       session: FlashEncoder.newSession())
+            return .success((out, enc))
+        } catch {
+            return .failure(error)
         }
     }
 
