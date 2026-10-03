@@ -191,6 +191,7 @@ struct DueDatesView: View {
                                 .font(.system(size: 26, weight: .light))
                                 .foregroundStyle(AAColor.Status.ok)
                             Text(DueList.emptyMessage)
+                                .font(.aaMono(AAType.body))
                                 .foregroundStyle(AAColor.muted)
                                 .multilineTextAlignment(.center)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -223,11 +224,12 @@ struct DueDatesView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 7) {
                     Image(systemName: "pin.fill").font(.system(size: 14, weight: .semibold)).rotationEffect(.degrees(30))
-                    Text(DueList.headerTitle).font(.system(size: 17, weight: .bold))
+                    Text(DueList.headerTitle).font(.aaMono(AAType.title, weight: .bold))
                 }
                 .foregroundStyle(.white)
                 Text(model.list.headerSubtitle)
-                    .font(.system(size: 11))
+                    .font(.aaMono(AAType.caption))
+                    .monospacedDigit()
                     .foregroundStyle(AAColor.Status.floatingTint)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
@@ -298,13 +300,14 @@ struct DueSectionView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(section.header)
-                .font(.system(size: 12, weight: .bold))
+                .font(.aaMono(AAType.small, weight: .bold))
+                .monospacedDigit()
                 .foregroundStyle(section.isOverdue ? AAColor.Status.floatingOverdue : AAColor.muted)
                 .padding(.leading, 2)
                 .padding(.bottom, 1)
             if section.rows.isEmpty {
                 Text(DueList.nothingLine)
-                    .font(.system(size: 11))
+                    .font(.aaMono(AAType.caption))
                     .foregroundStyle(AAColor.muted)
                     .padding(.leading, 6)
             } else {
@@ -345,11 +348,12 @@ struct DueRowView: View {
                 .accessibilityLabel(row.icon.glyph)
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.title)
-                    .fontWeight(.semibold)
+                    .font(.aaMono(AAType.body))
                     .foregroundStyle(AAColor.fg)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(row.subtitle)
-                    .font(.system(size: 11))
+                    .font(.aaMono(AAType.caption))
+                    .monospacedDigit()
                     .foregroundStyle(AAColor.Status.neutral)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -377,10 +381,10 @@ struct DueRowView: View {
             .strokeBorder(AAColor.border.opacity(0.6), lineWidth: 0.5))
         .contentShape(Rectangle())
         .onTapGesture { if row.isClickable { onOpen(row) } }
-        .onHover { inside in
-            withAnimation(.easeOut(duration: 0.12)) { hovering = inside }
-            if row.isClickable { if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() } }
-        }
+        // QUICK-010 / QUICK-020: hand over clickable rows, arrow elsewhere. A declarative pointer style (not an
+        // NSCursor push/pop pair) so a row removed under the mouse by its own tick (QUICK-022) cannot leak a cursor.
+        .pointerStyle(row.isClickable ? .link : nil)
+        .onHover { inside in withAnimation(.easeOut(duration: 0.12)) { hovering = inside } }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(row.isClickable ? .isButton : [])
     }
@@ -402,7 +406,7 @@ struct DueResizeGrip: View {
         .frame(width: 18, height: 18)
         .contentShape(Rectangle())
         .help(DueList.resizeHelp)
-        .onHover { inside in if inside { NSCursor.frameResize(position: .bottomRight, directions: .all).push() } else { NSCursor.pop() } }
+        .pointerStyle(.frameResize(position: .bottomTrailing))
         .gesture(DragGesture(minimumDistance: 0)
             .onChanged { _ in
                 // Screen coordinates: the grip moves with the window while it resizes, so view-relative

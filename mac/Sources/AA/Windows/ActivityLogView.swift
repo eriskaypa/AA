@@ -28,47 +28,19 @@ struct ActivityLogView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
                 .padding(.bottom, 10)
-            Table(rows, selection: $selection) {
-                TableColumn(ActivityLogText.columns[0]) { r in
-                    Text(r.timeUtc).font(.aaMono(AAType.caption)).monospacedDigit().lineLimit(1)
-                }
-                .width(min: 164, ideal: 166)
-                TableColumn(ActivityLogText.columns[1]) { r in
-                    Text(r.timeLocal).font(.aaMono(AAType.caption)).monospacedDigit().foregroundStyle(AAColor.muted)
-                        .lineLimit(1)
-                }
-                .width(min: 134, ideal: 136)
-                TableColumn(ActivityLogText.columns[2]) { r in
-                    ActivityLogActionBadge(action: r.action)
-                }
-                .width(min: 68, ideal: 72)
-                TableColumn(ActivityLogText.columns[3]) { r in
-                    Text(r.kind).lineLimit(2)
-                }
-                .width(min: 90, ideal: 104)
-                TableColumn(ActivityLogText.columns[4]) { r in
-                    Text(r.name).lineLimit(4).fixedSize(horizontal: false, vertical: true).help(r.name)
-                }
-                .width(min: 110, ideal: 140)
-                TableColumn(ActivityLogText.columns[5]) { r in
-                    Text(r.detail).foregroundStyle(AAColor.muted).lineLimit(4)
-                        .fixedSize(horizontal: false, vertical: true).help(r.detail)
-                }
-                .width(min: 110, ideal: 140)
-            }
-            .tableStyle(.inset(alternatesRowBackgrounds: true))
-            .font(.aaMono(AAType.small))
-            .overlay {
-                if rows.isEmpty {
-                    AAEmptyState(title: env.store.data.log.isEmpty ? "No activity yet" : "No matching entries",
-                                 symbol: "list.bullet.clipboard",
-                                 message: env.store.data.log.isEmpty ? nil : "Nothing matches \u{201C}\(NetText.trim(filter))\u{201D}.")
-                        .allowsHitTesting(false)
-                }
+            if rows.isEmpty {
+                AAEmptyState(title: env.store.data.log.isEmpty ? "No activity yet" : "No matching entries",
+                             symbol: "list.bullet.clipboard",
+                             message: env.store.data.log.isEmpty
+                                ? "Adding or removing an item records it here."
+                                : "Nothing matches \u{201C}\(NetText.trim(filter))\u{201D}. Clear the filter to see every entry.")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                table
             }
             Divider()
             Text(ActivityLogText.countLine(shown: rows.count, total: env.store.data.log.count))
-                .font(.system(size: AAType.caption))
+                .font(.aaMono(AAType.caption))
                 .foregroundStyle(AAColor.muted)
                 .monospacedDigit()
                 .padding(.horizontal, 16)
@@ -80,6 +52,41 @@ struct ActivityLogView: View {
         .onAppear(perform: refresh)
         .onChange(of: filter) { _, _ in refresh() }
         .onChange(of: logSignature) { _, _ in refresh() }
+    }
+
+    /// QUICK-152: Name takes the flexible width (it wraps); Detail takes the rest. No stripes (03 §6.6.5).
+    private var table: some View {
+        Table(rows, selection: $selection) {
+            TableColumn(ActivityLogText.columns[0]) { r in
+                Text(r.timeUtc).font(.aaMono(AAType.caption)).monospacedDigit().lineLimit(1)
+            }
+            .width(min: 168, ideal: 170)
+            TableColumn(ActivityLogText.columns[1]) { r in
+                Text(r.timeLocal).font(.aaMono(AAType.caption)).monospacedDigit().foregroundStyle(AAColor.muted)
+                    .lineLimit(1)
+            }
+            .width(min: 138, ideal: 140)
+            TableColumn(ActivityLogText.columns[2]) { r in
+                ActivityLogActionBadge(action: r.action)
+            }
+            .width(min: 64, ideal: 66)
+            TableColumn(ActivityLogText.columns[3]) { r in
+                Text(r.kind).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted).lineLimit(2)
+            }
+            .width(min: 64, ideal: 72)
+            TableColumn(ActivityLogText.columns[4]) { r in
+                Text(r.name).font(.aaMono(AAType.small)).lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true).help(r.name)
+            }
+            .width(min: 160, ideal: 214)
+            TableColumn(ActivityLogText.columns[5]) { r in
+                Text(r.detail).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted).lineLimit(4)
+                    .fixedSize(horizontal: false, vertical: true).help(r.detail)
+            }
+            .width(min: 96, ideal: 106)
+        }
+        .tableStyle(.inset)
+        .alternatingRowBackgrounds(.disabled)
     }
 
     private var header: some View {
@@ -157,7 +164,7 @@ struct ActivityLogActionBadge: View {
         let added = action == "Added", removed = action == "Removed"
         let color: Color = added ? AAColor.Status.diffAdded : (removed ? AAColor.Status.diffRemoved : AAColor.muted)
         Text(action)
-            .font(.system(size: AAType.caption, weight: .semibold))
+            .font(.aaMono(AAType.caption, weight: .semibold))
             .foregroundStyle(color)
             .padding(.horizontal, 6)
             .padding(.vertical, 1)

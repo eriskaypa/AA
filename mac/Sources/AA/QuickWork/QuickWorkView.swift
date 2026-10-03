@@ -20,12 +20,7 @@ struct QuickWorkView: View {
     var body: some View {
         VStack(spacing: 10) {
             QuickWorkPinnedBoard(model: model)
-            HSplitView {
-                QuickWorkListPane(model: model)
-                    .frame(minWidth: 300, idealWidth: 360, maxWidth: 560)
-                QuickWorkDetailPane(model: model)
-                    .frame(minWidth: 420, maxWidth: .infinity)
-            }
+            QuickWorkSplit(model: model)
         }
         .padding(10)
         .background(AAColor.bg)
@@ -57,6 +52,59 @@ struct QuickWorkView: View {
                 QuickWorkFlows.flushIfDirty(env, dialogs: dialogs)
             }
         }
+    }
+}
+
+// MARK: - Split (QUICK-041)
+
+/// QUICK-041 / §6.2-B: the left list opens at 360 pt, an 8-pt draggable splitter (not persisted), the detail fills the
+/// rest. A plain HStack with a drag handle: `HSplitView` ignores `idealWidth` and opened the split near the middle.
+struct QuickWorkSplit: View {
+    @Bindable var model: QuickWorkModel
+    @State private var listWidth = QuickWorkSplitGeometry.initialListWidth
+    @State private var dragBase: CGFloat?
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = QuickWorkSplitGeometry.clamp(listWidth, total: geo.size.width)
+            HStack(spacing: 0) {
+                QuickWorkListPane(model: model)
+                    .frame(width: width)
+                splitter(total: geo.size.width, current: width)
+                QuickWorkDetailPane(model: model)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    private func splitter(total: CGFloat, current: CGFloat) -> some View {
+        Color.clear
+            .frame(width: QuickWorkSplitGeometry.splitterWidth)
+            .contentShape(Rectangle())
+            .pointerStyle(.columnResize)
+            .gesture(DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { g in
+                    let base = dragBase ?? current
+                    if dragBase == nil { dragBase = base }
+                    listWidth = QuickWorkSplitGeometry.clamp(base + g.translation.width, total: total)
+                }
+                .onEnded { _ in dragBase = nil })
+            .accessibilityElement()
+            .accessibilityLabel("Resize the list")
+            .accessibilityAddTraits(.allowsDirectInteraction)
+    }
+}
+
+/// Split geometry (QUICK-041): 360 initial, 8 splitter; the list keeps ≥ 300, the detail ≥ 420.
+enum QuickWorkSplitGeometry {
+    static let initialListWidth: CGFloat = 360
+    static let splitterWidth: CGFloat = 8
+    static let minList: CGFloat = 300
+    static let minDetail: CGFloat = 420
+
+    static func clamp(_ w: CGFloat, total: CGFloat) -> CGFloat {
+        let upper = max(minList, total - splitterWidth - minDetail)
+        return min(max(w, minList), upper)
     }
 }
 
@@ -106,10 +154,10 @@ struct QuickWorkPinnedBoard: View {
                 Image(systemName: "pin.fill").foregroundStyle(AAColor.tint).rotationEffect(.degrees(30))
                 Text(QuickWorkText.pinnedHeader).font(.aaMono(AAType.body, weight: .bold)).foregroundStyle(AAColor.accent)
                 if !model.tiles.isEmpty {
-                    Text("\(model.tiles.count)").font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
+                    Text("\(model.tiles.count)").font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
                 } else {
                     Text(QuickWorkText.pinnedHint)
-                        .font(.system(size: AAType.caption))
+                        .font(.aaMono(AAType.caption))
                         .foregroundStyle(AAColor.muted)
                         .lineLimit(1)
                         .truncationMode(.tail)
@@ -157,14 +205,14 @@ struct QuickWorkTileView: View {
                 Spacer(minLength: 2)
                 Button(action: onUnpin) {
                     Image(systemName: hovering ? "pin.slash.fill" : "pin.fill")
-                        .font(.system(size: 11))
+                        .font(.aaMono(AAType.caption))
                         .foregroundStyle(hovering ? AAColor.Status.danger : AAColor.muted)
                         .contentTransition(.symbolEffect(.replace))
                 }
                 .buttonStyle(.plain)
                 .help(QuickWorkText.unpinHelp)
             }
-            .font(.system(size: 11))
+            .font(.aaMono(AAType.caption))
             Text(tile.displayName)
                 .font(.aaMono(AAType.body, weight: .bold))
                 .foregroundStyle(AAColor.fg)
@@ -172,7 +220,7 @@ struct QuickWorkTileView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.vertical, 4)
             Spacer(minLength: 2)
-            Text(tile.progressText).font(.system(size: 11)).foregroundStyle(AAColor.muted)
+            Text(tile.progressText).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
             if tile.progressTotal > 0 {
                 ProgressView(value: tile.fraction)
                     .progressViewStyle(.linear)
@@ -183,14 +231,14 @@ struct QuickWorkTileView: View {
             HStack(spacing: 4) {
                 if let chip = tile.deadlineText {
                     Text(chip)
-                        .font(.system(size: 11, weight: tile.deadlineIsOverdue ? .semibold : .regular))
+                        .font(.aaMono(AAType.caption, weight: tile.deadlineIsOverdue ? .semibold : .regular))
                         .foregroundStyle(tile.deadlineIsOverdue ? AAColor.Status.danger : AAColor.muted)
                         .monospacedDigit()
                 }
                 Spacer(minLength: 2)
                 Toggle("Done", isOn: Binding(get: { tile.isDone }, set: { onDone($0) }))
                     .toggleStyle(.checkbox)
-                    .font(.system(size: 11))
+                    .font(.aaMono(AAType.caption))
             }
             .padding(.top, 6)
         }
@@ -251,58 +299,93 @@ struct QuickWorkListPane: View {
 
     var body: some View {
         QuickWorkPanelBox {
-            Text(QuickWorkText.listHeader)
-                .font(.aaMono(15, weight: .bold))
-                .foregroundStyle(AAColor.accent)
+            HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
+                Text(QuickWorkText.listHeader)
+                    .font(.aaMono(AAType.body, weight: .semibold))
+                    .foregroundStyle(AAColor.accent)
+                Spacer(minLength: AASpacing.s)
+                Text("\(model.listing.itemCount)")
+                    .font(.aaMono(AAType.caption))
+                    .monospacedDigit()
+                    .foregroundStyle(AAColor.muted)
+            }
         } content: {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: AASpacing.s) {
                 controls
                 list
                 Text(model.listing.countLine)
-                    .font(.system(size: AAType.caption))
+                    .font(.aaMono(AAType.caption))
+                    .monospacedDigit()
                     .foregroundStyle(AAColor.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, AASpacing.s)
                     .padding(.bottom, 6)
             }
         }
     }
 
+    /// QUICK-042 as one icon bar (V-DESIGN rule 4): the All / Tasks / Procedures filter, `plus` (click = + Task; its
+    /// menu lists + Task and + Procedure), and the overflow menu with Sort into Buckets… / Remove from Buckets; then
+    /// the search field.
     private var controls: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
+        VStack(alignment: .leading, spacing: AASpacing.s) {
+            HStack(spacing: AASpacing.s) {
                 Picker("", selection: $model.filter) {
                     ForEach(QuickWorkFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
+                .frame(maxWidth: 260)
+                .layoutPriority(-1)
+                Spacer(minLength: AASpacing.xs)
+                Menu {
+                    Button { newItem(.task) } label: { Label(QuickWorkText.newTask, systemImage: "checkmark.circle") }
+                        .help(Self.newTaskHelp)
+                    Button { newItem(.procedure) } label: { Label(QuickWorkText.newProcedure, systemImage: "list.clipboard") }
+                        .help(Self.newProcedureHelp)
+                } label: {
+                    Image(systemName: "plus")
+                } primaryAction: {
+                    newItem(.task)
+                }
+                .menuStyle(.button)
+                .buttonStyle(.accessoryBar)
+                .menuIndicator(.visible)
                 .fixedSize()
-                Spacer(minLength: 4)
-                Button { Task { await QuickWorkFlows.newItem(.task, env: env, dialogs: dialogs, model: model) } } label: {
-                    Label(QuickWorkText.newTask, systemImage: "plus").labelStyle(.titleOnly)
+                .help("\(Self.newTaskHelp) Use the arrow for \(QuickWorkText.newProcedure).")
+                .accessibilityLabel(QuickWorkText.newTask)
+                Menu {
+                    Button {
+                        Task { await QuickWorkFlows.sortCurrentIntoBuckets(model.currentItem, env: env, dialogs: dialogs, model: model) }
+                    } label: { Label(QuickWorkText.sortIntoBuckets, systemImage: "tray.2") }
+                        .help(QuickWorkText.sortIntoBucketsHelp)
+                    Button {
+                        QuickWorkFlows.removeFromBuckets(model.currentItem, env: env, dialogs: dialogs, model: model)
+                    } label: { Label(QuickWorkText.removeFromBuckets, systemImage: "tray") }
+                        .help(QuickWorkText.removeFromBucketsHelp)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
-                .help("Create a task (it is added to the Tasks list).")
-                Button { Task { await QuickWorkFlows.newItem(.procedure, env: env, dialogs: dialogs, model: model) } } label: {
-                    Text(QuickWorkText.newProcedure)
-                }
-                .help("Create a procedure (it is added to the Procedures list).")
+                .menuStyle(.button)
+                .buttonStyle(.accessoryBar)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .help("\(QuickWorkText.sortIntoBuckets) / \(QuickWorkText.removeFromBuckets)")
+                .accessibilityLabel("More")
             }
-            HStack(spacing: 6) {
-                Button {
-                    Task { await QuickWorkFlows.sortCurrentIntoBuckets(model.currentItem, env: env, dialogs: dialogs, model: model) }
-                } label: { Label(QuickWorkText.sortIntoBuckets, systemImage: "tray.2") }
-                    .help(QuickWorkText.sortIntoBucketsHelp)
-                Button(QuickWorkText.removeFromBuckets) {
-                    QuickWorkFlows.removeFromBuckets(model.currentItem, env: env, dialogs: dialogs, model: model)
-                }
-                .help(QuickWorkText.removeFromBucketsHelp)
-            }
-            .controlSize(.small)
+            .symbolRenderingMode(.hierarchical)
             AASearchField(text: $model.query, prompt: QuickWorkText.searchPrompt)
                 .aaFilterField(for: .quickWork)
         }
-        .padding(.horizontal, 8)
-        .padding(.top, 8)
+        .padding(.horizontal, AASpacing.s)
+        .padding(.top, AASpacing.s)
+    }
+
+    static let newTaskHelp = "Create a task (it is added to the Tasks list)."
+    static let newProcedureHelp = "Create a procedure (it is added to the Procedures list)."
+
+    private func newItem(_ kind: ItemKind) {
+        Task { await QuickWorkFlows.newItem(kind, env: env, dialogs: dialogs, model: model) }
     }
 
     @ViewBuilder
@@ -376,35 +459,40 @@ struct QuickWorkGroupHeader: View {
             Image(systemName: group.key.isEmpty ? "tray" : "tray.2.fill")
                 .foregroundStyle(group.key.isEmpty ? AAColor.muted : AAColor.tint)
             Text(group.name).font(.aaMono(AAType.small, weight: .bold)).foregroundStyle(AAColor.accent)
-            Text("(\(group.rows.count))").font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
+            Text("(\(group.rows.count))").font(.aaMono(AAType.caption)).monospacedDigit().foregroundStyle(AAColor.muted)
         }
         .accessibilityLabel(group.header)
     }
 }
 
-/// QUICK-044: bold title (struck through when done), muted 11-pt subtitle; both wrap.
+/// QUICK-044: title (struck through when done), muted 11-pt subtitle; both wrap. Overdue = red subtitle (Mac grace).
 struct QuickWorkRowView: View {
     let row: QuickWorkRow
 
     var body: some View {
-        HStack(alignment: .top, spacing: 8) {
+        HStack(alignment: .top, spacing: AASpacing.s) {
             Image(systemName: row.isDone ? "checkmark.circle.fill" : (row.kind == .task ? "circle" : "list.clipboard"))
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(row.isDone ? AAColor.Status.ok : AAColor.kindGlyph(row.kind))
-                .font(.system(size: 13))
+                .font(.aaMono(AAType.body))
                 .padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.title)
-                    .font(.aaMono(AAType.body, weight: .bold))
+                    .font(.aaMono(AAType.body))
                     .strikethrough(row.isDone)
                     .foregroundStyle(row.isDone ? AAColor.muted : AAColor.fg)
+                    .lineLimit(2)
+                    .truncationMode(.tail)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(row.subtitle)
-                    .font(.system(size: AAType.caption))
-                    .foregroundStyle(row.subtitle.contains("OVERDUE") && !row.isDone ? AAColor.Status.danger : AAColor.muted)
+                    .font(.aaMono(AAType.caption))
+                    .monospacedDigit()
+                    .foregroundStyle(row.subtitle.contains("OVERDUE") && !row.isDone ? AAColor.Status.overdueMeta : AAColor.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, AASpacing.xs)
+        .frame(minHeight: 22)
         .accessibilityElement(children: .combine)
     }
 }

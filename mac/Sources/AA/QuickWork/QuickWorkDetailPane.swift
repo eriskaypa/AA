@@ -15,24 +15,20 @@ struct QuickWorkDetailPane: View {
     var body: some View {
         QuickWorkPanelBox {
             HStack(spacing: 6) {
-                Image(systemName: "hammer").foregroundStyle(AAColor.muted)
-                Text("Builder").font(.aaMono(AAType.body, weight: .bold)).foregroundStyle(AAColor.accent)
+                Image(systemName: "hammer").symbolRenderingMode(.hierarchical).foregroundStyle(AAColor.muted)
+                Text("Builder").font(.aaMono(AAType.body, weight: .semibold)).foregroundStyle(AAColor.accent)
             }
         } content: {
-            ScrollView {
-                if let item = model.currentItem {
+            if let item = model.currentItem {
+                ScrollView {
                     QuickWorkDetailContent(model: model, item: item)
                         .id(model.detailToken)
-                        .padding(14)
-                } else {
-                    Text(QuickWorkText.detailEmpty)
-                        .foregroundStyle(AAColor.muted)
-                        .multilineTextAlignment(.center)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity)
-                        .padding(.top, 20)
-                        .padding(14)
+                        .padding(AASpacing.l)
                 }
+            } else {
+                // QUICK-070: the spec's empty-detail sentence, as the empty state's next step.
+                AAEmptyState(title: "Nothing selected", symbol: "hammer", message: QuickWorkText.detailEmpty)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }
@@ -59,9 +55,9 @@ struct QuickWorkDetailContent: View {
         let pinned = model.isPinned(item.id)
         return HStack(spacing: 8) {
             Text(item is TaskItem ? "Task" : "Procedure")
-                .font(.aaMono(20, weight: .bold))
+                .font(.aaMono(AAType.title, weight: .bold))
                 .foregroundStyle(AAColor.accent)
-            Spacer(minLength: 8)
+            Spacer(minLength: AASpacing.s)
             Button { QuickWorkFlows.togglePin(item.id, env: env, dialogs: dialogs, model: model) } label: {
                 Label(pinned ? QuickWorkText.unpin : QuickWorkText.pin, systemImage: pinned ? "pin.slash" : "pin")
                     .fontWeight(.bold)
@@ -76,6 +72,9 @@ struct QuickWorkDetailContent: View {
             }
             .help("Show this item in the main window.")
         }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .symbolRenderingMode(.hierarchical)
     }
 
     // MARK: Header fields (QUICK-074)
@@ -126,8 +125,9 @@ struct QuickWorkDetailContent: View {
         .onDisappear { model.refresh() }
     }
 
+    /// V-DESIGN rule 2/6: aaMono 13, muted, trailing-aligned in a fixed label column.
     private func label(_ s: String) -> some View {
-        Text(s).foregroundStyle(AAColor.fg).frame(width: 100, alignment: .leading)
+        Text(s).font(.aaMono(AAType.body)).foregroundStyle(AAColor.muted).frame(width: 100, alignment: .trailing)
     }
 }
 
@@ -148,9 +148,9 @@ struct QuickWorkChildrenBuilder: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(QuickWorkText.builderHeading(noun: kind.noun))
-                .font(.aaMono(14, weight: .bold))
+                .font(.aaMono(AAType.body, weight: .semibold))
                 .foregroundStyle(AAColor.accent)
-            Text(QuickWorkText.bulkLabel(noun: kind.noun)).foregroundStyle(AAColor.fg)
+            Text(QuickWorkText.bulkLabel(noun: kind.noun)).font(.aaMono(AAType.body)).foregroundStyle(AAColor.muted)
             TextEditor(text: $bulk)
                 .font(.aaMono(AAType.body))
                 .scrollContentBackground(.hidden)
@@ -164,7 +164,7 @@ struct QuickWorkChildrenBuilder: View {
                     .disabled(QuickWorkActions.bulkLines(bulk).isEmpty)
                 Toggle(QuickWorkText.replaceExisting, isOn: $replace).toggleStyle(.checkbox)
                 Spacer()
-                Text(progressText).font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
+                Text(progressText).font(.aaMono(AAType.caption)).monospacedDigit().foregroundStyle(AAColor.muted)
             }
             .padding(.bottom, 4)
             childList
@@ -185,12 +185,16 @@ struct QuickWorkChildrenBuilder: View {
             ForEach(children) { c in
                 HStack(spacing: 8) {
                     Image(systemName: c.isDone ? "checkmark.circle.fill" : "circle")
+                        .symbolRenderingMode(.hierarchical)
                         .foregroundStyle(c.isDone ? AAColor.Status.ok : AAColor.muted)
                     Text(c.title.isEmpty ? " " : c.title)
+                        .font(.aaMono(AAType.body))
                         .strikethrough(c.isDone)
                         .foregroundStyle(c.isDone ? AAColor.muted : AAColor.fg)
                         .fixedSize(horizontal: false, vertical: true)
                 }
+                .padding(.vertical, AASpacing.xs)
+                .frame(minHeight: 22)
                 .tag(c.id)
             }
             .onMove { from, to in
@@ -198,7 +202,7 @@ struct QuickWorkChildrenBuilder: View {
             }
         }
         .listStyle(.bordered)
-        .alternatingRowBackgrounds(.enabled)
+        .alternatingRowBackgrounds(.disabled)
         .frame(height: 300)
         .contextMenu(forSelectionType: UUID.self) { ids in
             if !ids.isEmpty {
@@ -220,9 +224,10 @@ struct QuickWorkChildrenBuilder: View {
         }
         .overlay {
             if children.isEmpty {
-                Text("No \(kind.noun)s yet \u{2014} add one below or paste a list above.")
-                    .foregroundStyle(AAColor.muted)
-                    .font(.system(size: AAType.small))
+                AAEmptyState(title: "No \(kind.noun)s yet", symbol: "checklist",
+                             message: "Add one below or paste a list above.")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(AAColor.panel)
                     .allowsHitTesting(false)
             }
         }

@@ -66,6 +66,14 @@ public enum TrashText {
     public static let deleteTitle = "Delete permanently"
     public static let emptyTitle = "Empty Trash"
     public static let emptyListMessage = "The Trash is empty."
+    /// The empty state's one-line next step (Mac addition, V-DESIGN rule 12).
+    public static let emptyListHint = "Items you delete land here. Put them back from this window, or undo the last delete with \u{2318}Z."
+
+    /// 01 DATA-174: Put Back, Delete Immediately and Empty Trash are disabled in a read-only copy of AA, with the shared
+    /// help text instead of their own tooltips.
+    public static func help(_ normal: String, readOnly: Bool) -> String {
+        readOnly ? PersistReadOnlyText.disabledHelp : normal
+    }
 
     public static func deleteMessage(_ n: Int) -> String {
         "Permanently delete \(n) item(s) from the Trash? This cannot be undone."
