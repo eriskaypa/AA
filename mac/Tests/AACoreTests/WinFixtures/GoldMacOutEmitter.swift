@@ -50,7 +50,10 @@ enum GoldMacOut {
             report.skipped.append("bundles/: needs W-PERSIST's BundleService (ContractStatus.wPersist not flipped)")
         }
         if ContractStatus.isImplemented(.wRich) {
-            try emitXaml(write, wpfCapture: wpfCapture, skipped: &report.skipped)
+            // A local list: `write` mutates `report` too, so passing `&report.skipped` is an exclusivity conflict.
+            var xamlSkipped: [String] = []
+            try emitXaml(write, wpfCapture: wpfCapture, skipped: &xamlSkipped)
+            report.skipped += xamlSkipped
         } else {
             report.skipped.append("xaml/: needs W-RICH's XamlReader/XamlWriter (ContractStatus.wRich not flipped)")
         }
@@ -199,7 +202,9 @@ enum GoldMacOut {
             }
             try Data("unsanitised".utf8).write(to: ds.filesFolder.appending(path: "Mac: notes?.txt"))
             try ds.serializeForSave(data).write(to: ds.defaultDataFile)
-            let out = folder.file("\(name).zip")
+            // DATA-041 / D-13: an export into the data folder itself is refused, so the zip goes beside it.
+            let outFolder = TempFolder("gold-macout-bundle-out")
+            let out = outFolder.file("\(name).zip")
             try await BundleService.exportFolderToZip(ds, to: out, includeAttachments: attachments)
             try write("bundles/\(name).zip", try Data(contentsOf: out))
             try writeJSON("bundles/\(name).expect.json", GoldDotNet.obj([
