@@ -1,5 +1,5 @@
 // Spec: 09 CREW-001 (Crew section; refresh on selection), CREW-005 (navigate in), §B CREW-010…018 (roster: header,
-//       wrapping toolbar, search, three-line rows, expiring filter, sort, status line, selection), §F CREW-060/061
+//       toolbar — one icon bar per the design rules —, search, three-line rows, expiring filter, sort, status line, selection), §F CREW-060/061
 //       (Move to Trash / Clear all — DECISIONS 09: one Trash batch), CREW-100 (table view launcher), §6.4 (Mac layout:
 //       roster + card split, context menu, ⌘⌫ / ⌫ Move to Trash, ⌥⌘F search); 03 SHELL-516/517 (list and filter
 //       publishing); ARCHITECTURE.md §7.2 (HSplitView inside sections), §7.6, §7.7, §8.
@@ -31,12 +31,12 @@ struct CrewTabView: View {
         }
         .aaSectionCommands(.crew, SectionCommands(focusSearchField: { CrewSearchFocus.focus() }))
         .onAppear {
-            model.keyLookup = { [weak store = env.store] id in store?.crewMember(id: id)?.key }
-            model.today = env.clock.today()
+            model.attach(env.store)
+            if !model.importing { model.refresh(today: env.clock.today()) }   // CREW-001: selecting the tab refreshes
             consumeNavigation()
         }
         .onChange(of: env.navigator.selectedSection) { _, s in
-            if s == .crew { model.today = env.clock.today() }            // CREW-001: refresh day counts
+            if s == .crew, !model.importing { model.refresh(today: env.clock.today()) }   // CREW-001 / CREW-016
         }
         .onChange(of: env.navigator.crewRequest) { _, _ in consumeNavigation() }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
@@ -76,8 +76,8 @@ struct CrewRosterPane: View {
         let expiring = CrewExpiry.expiringCount(crew, today: model.today)
         VStack(alignment: .leading, spacing: 0) {
             header(count: crew.count, expiring: expiring)
-            toolbar
-                .padding(.horizontal, AASpacing.m)
+            iconBar
+                .padding(.horizontal, AASpacing.s)
                 .padding(.bottom, AASpacing.s)
             AASearchField(text: $model.query, prompt: CrewRoster.searchPrompt)
                 .padding(.horizontal, AASpacing.m)
@@ -98,55 +98,47 @@ struct CrewRosterPane: View {
         .onChange(of: rows.map(\.id), initial: true) { _, _ in model.reconcile(rows: rows) }
     }
 
-    // CREW-010
+    // CREW-010 — one compact row: title, the expiring capsule, the member count (trailing, muted).
     private func header(count: Int, expiring: Int) -> some View {
-        HStack(alignment: .center, spacing: AASpacing.s) {
-            Text("Crew").font(.aaMono(15, weight: .bold)).foregroundStyle(AAColor.accent)
+        HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
+            Text("Crew")
+                .font(.aaMono(AAType.title, weight: .bold))
+                .foregroundStyle(AAColor.accent)
             if expiring > 0 {
                 AAStatusCapsule(text: "\u{26A0} \(expiring)", color: AAColor.Status.dueSoon)
                     .help(CrewExpiry.badgeText(expiring))
                     .accessibilityLabel("\(expiring) crew contracts expiring")
             }
             Spacer(minLength: AASpacing.s)
-            Button {
-                Task { await CrewActions.importCompas(env: env, dialogs: dialogs) }
-            } label: {
-                Label("Import COMPAS…", systemImage: "square.and.arrow.down")
-            }
-            .aaProminent()
-            .controlSize(.small)
-            .disabled(model.importing)
-            .help("Import a COMPAS crew report (.xlsx) and keep each member as an info card.")
-            Button {
-                Task { await deleteSelected() }
-            } label: {
-                Label("Delete", systemImage: "trash")
-            }
-            .controlSize(.small)
-            .disabled(model.selectedID == nil)
-            .help("Remove the selected crew member.")
+            Text("\(count)")
+                .font(.aaMono(AAType.caption))
+                .monospacedDigit()
+                .foregroundStyle(AAColor.muted)
+                .accessibilityLabel("\(count) crew")
         }
-        .labelStyle(.titleAndIcon)
         .padding(.horizontal, AASpacing.m)
-        .padding(.top, AASpacing.m)
-        .padding(.bottom, AASpacing.s)
+        .frame(minHeight: 36)
+        .padding(.top, AASpacing.xs)
     }
 
-    // CREW-011
-    private var toolbar: some View {
-        CrewFlowLayout(spacing: 6, lineSpacing: 6) {
-            Button {
-                Task { await CrewActions.checkExpiries(env: env, dialogs: dialogs, showWhenNone: true) }
-            } label: {
-                Label("Contract Expiries", systemImage: "exclamationmark.triangle")
+    // CREW-010 / CREW-011 as ONE icon bar (design rule 4): Import COMPAS… · Delete │ Sort · Expiring Only · Contract
+    // Expiries … overflow (Table View…, Clear All…). Every command keeps its spec name (accessibility label / menu
+    // title) and tooltip; the row context menu and the Tools menu keep theirs.
+    private var iconBar: some View {
+        let gated = CrewActions.importGated(env)
+        return HStack(spacing: 2) {
+            CrewIconButton(title: "Import COMPAS…", symbol: "square.and.arrow.down.on.square",
+                           help: CrewActions.importHelp(env)) {
+                Task { await CrewActions.importCompas(env: env, dialogs: dialogs) }
             }
-            .help("List crew whose contracts (sign-off dates) are due soon or overdue.")
+            .disabled(model.importing || gated)
 
-            Toggle(isOn: $model.expiringOnly.animation(.snappy)) {
-                Label("Expiring Only", systemImage: "line.3.horizontal.decrease.circle")
+            CrewIconButton(title: "Delete", symbol: "trash", help: "Remove the selected crew member.") {
+                Task { await deleteSelected() }
             }
-            .toggleStyle(.button)
-            .help("Show only crew whose contract is overdue or within 60 days.")
+            .disabled(model.selectedID == nil)
+
+            CrewIconBarDivider()
 
             Menu {
                 Picker("Sort", selection: Binding(get: { sortMode }, set: setSort)) {
@@ -155,30 +147,66 @@ struct CrewRosterPane: View {
                 .pickerStyle(.inline)
                 .labelsHidden()
             } label: {
-                Label("Sort: \(sortMode.label)", systemImage: "arrow.up.arrow.down")
+                Image(systemName: "arrow.up.arrow.down")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
             }
             .menuStyle(.button)
+            .tint(.secondary)
+            .buttonStyle(.accessoryBar)
+            .menuIndicator(.hidden)
             .fixedSize()
-            .help("Order the roster by last name, first name, CID, birth date or sign-off date.")
+            .help("Order the roster by last name, first name, CID, birth date or sign-off date. (Sort: \(sortMode.label))")
+            .accessibilityLabel("Sort: \(sortMode.label)")
 
-            Button {
-                openTable()
-            } label: {
-                Label("Table View…", systemImage: "tablecells")
+            Toggle(isOn: $model.expiringOnly.animation(.snappy)) {
+                Label("Expiring Only", systemImage: "line.3.horizontal.decrease.circle")
+                    .labelStyle(.iconOnly)
+                    .symbolVariant(model.expiringOnly ? .fill : .none)
+                    .frame(width: 24, height: 24)
             }
-            .help("Open all crew in a tabulated window: choose columns and order, set the date format, and export to Excel.")
+            .toggleStyle(.button)
+            .buttonStyle(.accessoryBar)
+            .help("Show only crew whose contract is overdue or within 60 days.")
+            .accessibilityLabel("Expiring Only")
 
-            Button(role: .destructive) {
-                Task { await clearAll() }
-            } label: {
-                Label("Clear All…", systemImage: "trash.slash")
+            CrewIconButton(title: "Contract Expiries", symbol: "exclamationmark.triangle",
+                           help: "List crew whose contracts (sign-off dates) are due soon or overdue.") {
+                Task { await CrewActions.checkExpiries(env: env, dialogs: dialogs, showWhenNone: true) }
             }
-            .disabled(env.store.data.crew.isEmpty)
-            .help("Remove every crew member from the roster.")
+
+            Spacer(minLength: AASpacing.s)
+
+            Menu {
+                Button {
+                    openTable()
+                } label: {
+                    Label("Table View…", systemImage: "tablecells")
+                }
+                .help("Open all crew in a tabulated window: choose columns and order, set the date format, and export to Excel.")
+                Divider()
+                Button(role: .destructive) {
+                    Task { await clearAll() }
+                } label: {
+                    Label("Clear All…", systemImage: "trash.slash")
+                }
+                .disabled(env.store.data.crew.isEmpty)
+                .help("Remove every crew member from the roster.")
+            } label: {
+                Image(systemName: "ellipsis.circle")
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+            }
+            .menuStyle(.button)
+            .tint(.secondary)
+            .buttonStyle(.accessoryBar)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help("More crew commands: Table View…, Clear All…")
+            .accessibilityLabel("More")
         }
-        .controlSize(.small)
-        .buttonStyle(.bordered)
-        .labelStyle(.titleAndIcon)
+        .symbolRenderingMode(.hierarchical)
+        .fontWeight(.regular)
     }
 
     private func list(_ rows: [CrewRosterRow]) -> some View {
@@ -267,7 +295,7 @@ struct CrewRosterPane: View {
         guard n > 0 else { return }
         let spec = AlertSpec(title: CrewRoster.clearTitle, message: CrewRoster.clearMessage(count: n), style: .warning,
                              buttons: [AlertButton(title: "Clear All", role: .destructive),
-                                       AlertButton(title: "Cancel", role: .default)])
+                                       AlertButton(title: "Cancel", role: .cancel)])   // ⎋ cancels (as Move to Trash)
         guard await dialogs.alert(spec) == 0 else { return }
         env.store.trashAllCrew()
         model.selectedID = nil
@@ -283,7 +311,7 @@ struct CrewRosterRowView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(row.name)
-                .font(.aaMono(AAType.body, weight: .bold))
+                .font(.aaMono(AAType.body))
                 .foregroundStyle(AAColor.fg)
                 .fixedSize(horizontal: false, vertical: true)
             if !row.sub.isEmpty {
@@ -294,12 +322,42 @@ struct CrewRosterRowView: View {
             }
             if !row.expiryText.isEmpty {
                 Text(row.expiryText)
-                    .font(.aaMono(AAType.caption, weight: .bold))
+                    .font(.aaMono(AAType.caption, weight: .semibold))
+                    .monospacedDigit()
                     .foregroundStyle(CrewPalette.color(row.tone))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, AASpacing.xs)
+        .frame(minHeight: 22, alignment: .leading)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A 24-pt borderless icon button of a list icon bar (design rule 4): the spec name is the accessibility label, the spec
+/// tooltip the help.
+struct CrewIconButton: View {
+    let title: String
+    let symbol: String
+    let help: String
+    var role: ButtonRole? = nil
+    let action: () -> Void
+
+    var body: some View {
+        Button(role: role, action: action) {
+            Label(title, systemImage: symbol)
+                .labelStyle(.iconOnly)
+                .frame(width: 24, height: 24)
+        }
+        .buttonStyle(.accessoryBar)
+        .help(help)
+        .accessibilityLabel(title)
+    }
+}
+
+/// The hairline between icon groups.
+struct CrewIconBarDivider: View {
+    var body: some View {
+        Rectangle().fill(AAColor.border).frame(width: 1, height: 16).padding(.horizontal, AASpacing.xs)
     }
 }

@@ -44,3 +44,26 @@ Re-checked in light and dark: roster, card, card notes, editor Details / Schedul
 
 Gate: build and 470 tests pass. `check-placeholders.sh W-CREW` prints nothing. `check-ownership.sh` steps 2–4 pass.
 Step 1 flags only this file, because `Docs/Progress/*.md` has no owner rule (REQ-W-CREW-03, pending the lead).
+
+## Verification fixes (FIX-W-CREW, branch fix1/W-CREW)
+
+9 findings: 9 fixed, 0 not fixed.
+
+| Finding | IDs | Fix |
+|---|---|---|
+| Editor Save wrote a stale pre-reload draft (major) | CREW-072…074, DECISIONS 06 R1 | `CrewEditorDraft` subscribes to `store.dataReplaced` and re-bases (untouched rows take the reloaded values, edits kept, note shown); Save uses `CrewEditorForm.apply(_:original:to:)`, which never writes an untouched row whose stored value changed under the editor. Tests: `CrewEditorReloadTests` (4). |
+| Import COMPAS… not gated in a read-only copy / stopped editing | CREW-003/010/030, DATA-174 | `CrewActions.importGated` (= the router's `writeGated`) disables the roster and empty-state buttons with `PersistReadOnlyText.disabledHelp`; `importCompas` itself refuses (status line). |
+| Import summary survived a tab switch / reload | CREW-001, CREW-016 | `CrewRosterModel.refresh(today:)` on tab selection (and appear) clears the summary; the model subscribes to `dataReplaced` and clears it on every reload. |
+| Import selected the first FILE row | CREW-017, CREW-034 | Explicit select removed; `CrewRosterModel.reconcile` keeps the Key or selects the first row in the roster's sort order. |
+| Table window wrote stale chooser state after a reload | CREW-104 | `CrewTableModel.attach` re-reads the four Ui keys on `dataReplaced` (selection kept). |
+| Clear All: Esc did not cancel | CREW-061 | Cancel has `role: .cancel` (⎋); Clear All stays the Return default like Move to Trash (Trash batch, ⌘Z). |
+| Table: Sign-Off Date / Contract Status off-screen | CREW-103 | Starting column widths reduced; on open the window grows (never past the screen) to fit the shown columns; chooser max 280. Stripes off. |
+| Editor too narrow for the checklist builder | BUILD-002/019, CREW-075 | Sheet grows from 640 to 860 pt on the Checklist tab. |
+| Header: two rows of text buttons (design) | CREW-010/011 | One header row + one 24-pt icon bar + overflow menu, spec names as accessibility labels and spec tooltips as help. Card, editor and row restyled to the design rules (mono hierarchy, trailing muted labels, BuilderSheetHeader, 44-pt footer). |
+
+Cross-owner request: F3 `AAApp.swift` — `crew-table` `.defaultSize(width: 1100, …)` → `1360` so the window opens at the
+fitted width without the on-open grow (optional; the grow already handles it).
+
+Snapshots (light + dark, `snapshots/fix1-W-CREW/`): roster, editor Details, editor Checklist, table window.
+
+Gate: build, 1590 tests, `check-ownership.sh` pass.

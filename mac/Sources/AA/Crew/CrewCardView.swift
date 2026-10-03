@@ -30,9 +30,10 @@ struct CrewCardPane: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Button {
                     Task { await CrewActions.importCompas(env: env, dialogs: dialogs) }
-                } label: { Label("Import COMPAS…", systemImage: "square.and.arrow.down") }
+                } label: { Label("Import COMPAS…", systemImage: "square.and.arrow.down.on.square") }
                 .aaProminent()
-                .disabled(model.importing)
+                .disabled(model.importing || CrewActions.importGated(env))       // 01 DATA-174
+                .help(CrewActions.importHelp(env))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .background(AAColor.bg, ignoresSafeAreaEdges: [])
@@ -76,19 +77,20 @@ struct CrewCardView: View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .firstTextBaseline, spacing: AASpacing.m) {
                 Text(CrewRoster.displayName(m))
-                    .font(.aaMono(22, weight: .bold))
+                    .font(.aaMono(AAType.title, weight: .bold))
                     .foregroundStyle(AAColor.fg)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
                 Spacer(minLength: AASpacing.s)
                 Button(action: edit) { Label("Edit…", systemImage: "pencil") }
-                    .controlSize(.regular)
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
                     .help("Edit this crew member's details (including the sign-off / contract date).")
             }
             let sub = CrewRoster.subtitle(m)
             if !sub.isEmpty {
                 Text(sub)
-                    .font(.aaMono(AAType.body))
+                    .font(.aaMono(AAType.caption))
                     .foregroundStyle(AAColor.muted)
                     .fixedSize(horizontal: false, vertical: true)
                     .textSelection(.enabled)
@@ -100,18 +102,22 @@ struct CrewCardView: View {
     private func checklistBox(_ m: CrewMember) -> some View {
         HStack(alignment: .top, spacing: AASpacing.m) {
             Image(systemName: "checklist")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.title3)
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(AAColor.Status.crewAccent)
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 3) {
-                Text("Checklist").font(.aaMono(AAType.body, weight: .bold)).foregroundStyle(AAColor.accent)
+                Text("Checklist").font(.aaMono(AAType.body, weight: .semibold)).foregroundStyle(AAColor.accent)
                 Text(CrewRoster.checklistSummary(m))
-                    .font(.aaMono(AAType.small))
+                    .font(.aaMono(AAType.caption))
+                    .monospacedDigit()
                     .foregroundStyle(AAColor.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: AASpacing.s)
             Button(action: openChecklist) { Label("Open Checklist…", systemImage: "list.bullet.clipboard") }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
                 .help("Build this crew member's checklist — items with a due date show in the due-dates window and Calendar.")
         }
         .padding(.horizontal, AASpacing.m)
@@ -125,17 +131,18 @@ struct CrewCardView: View {
         AACard(padding: 10) {
             VStack(alignment: .leading, spacing: 6) {
                 Label(CrewRoster.reviewNotesTitle(m.flags.count), systemImage: "flag")
-                    .labelStyle(.titleOnly)
-                    .font(.aaMono(AAType.body, weight: .bold))
+                    .font(.aaMono(AAType.body, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(AAColor.fg)
                 ForEach(Array(m.flags.enumerated()), id: \.offset) { _, f in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Image(systemName: "circle.fill")
-                            .font(.system(size: 7))
+                            .imageScale(.small)
+                            .font(.caption2)
                             .foregroundStyle(CrewPalette.color(f.severity))
                             .accessibilityLabel(CrewPalette.severityName(f.severity))
                         Text(CrewRoster.flagLine(f))
-                            .font(.aaMono(AAType.small))
+                            .font(.aaMono(AAType.caption))
                             .foregroundStyle(AAColor.fg)
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
@@ -158,7 +165,8 @@ struct CrewContractBanner: View {
         let color = known ? CrewPalette.color(e.tone) : AAColor.Status.neutral
         HStack(alignment: .center, spacing: AASpacing.m) {
             Image(systemName: known ? (e.tone == .green ? "checkmark.seal" : "calendar.badge.exclamationmark") : "calendar.badge.minus")
-                .font(.system(size: 20, weight: .medium))
+                .font(.title2)
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(color)
                 .frame(width: 26)
             VStack(alignment: .leading, spacing: 2) {
@@ -166,7 +174,8 @@ struct CrewContractBanner: View {
                     .font(.aaMono(AAType.caption, weight: .bold))
                     .foregroundStyle(AAColor.Status.neutral)
                 Text(known ? e.text : CrewExpiry.noSignOffDate)
-                    .font(.aaMono(15, weight: .bold))
+                    .font(.aaMono(AAType.body, weight: .bold))
+                    .monospacedDigit()
                     .foregroundStyle(color)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -201,18 +210,19 @@ struct CrewCardSectionView: View {
         AACard(padding: 10) {
             VStack(alignment: .leading, spacing: 8) {
                 Label(section.title, systemImage: Self.symbol(section.title))
-                    .font(.aaMono(AAType.body, weight: .bold))
+                    .font(.aaMono(AAType.body, weight: .semibold))
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(AAColor.accent)
                 Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 3) {
                     ForEach(section.fields) { f in
                         GridRow {
                             Text(f.label)
-                                .font(.aaMono(AAType.small))
+                                .font(.aaMono(AAType.body))
                                 .foregroundStyle(AAColor.muted)
-                                .frame(width: 170, alignment: .leading)
+                                .frame(width: 170, alignment: .trailing)
                                 .fixedSize(horizontal: false, vertical: true)
                             Text(f.display)
-                                .font(.aaMono(AAType.small))
+                                .font(.aaMono(AAType.body))
                                 .foregroundStyle(NetText.isBlank(f.value) ? AAColor.muted : AAColor.fg)
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)

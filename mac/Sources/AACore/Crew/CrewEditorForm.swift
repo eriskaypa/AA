@@ -120,10 +120,44 @@ public enum CrewEditorForm {
 
     /// CREW-074 Save: every row applied in form order (text trimmed; dates per `storedDate`).
     @MainActor public static func apply(_ draft: [String: String], to m: CrewMember) {
+        for f in allFields { applyRow(f, draft[f.key] ?? "", to: m) }
+    }
+
+    /// CREW-074 Save with DECISIONS 06 R1 ("never orphan edits"): `original` is the draft the form was filled with.
+    /// A row the user left untouched (`draft == original`) whose stored value has changed since — a reload, shared-save
+    /// pull, Flash Sync apply or Drive import replaced the member while the editor was open — keeps the newer stored
+    /// value instead of writing the stale pre-reload text back. Every other row is applied exactly as `apply(_:to:)`
+    /// (so an untouched row whose stored value did not change is still trimmed / normalised, as on Windows).
+    /// Returns the keys that were kept because they changed under the editor.
+    @discardableResult
+    @MainActor public static func apply(_ draft: [String: String], original: [String: String],
+                                        to m: CrewMember) -> [String] {
+        var kept: [String] = []
         for f in allFields {
             let text = draft[f.key] ?? ""
-            let v = f.isDate ? storedDate(text) : NetText.trim(text)
-            if !Ordinal.equals(m.stringField(f.key), v) { m.setStringField(f.key, v) }
+            let base = original[f.key] ?? ""
+            if Ordinal.equals(text, base), !Ordinal.equals(m.stringField(f.key), base) {
+                kept.append(f.key)
+                continue
+            }
+            applyRow(f, text, to: m)
         }
+        return kept
+    }
+
+    /// After the store was replaced under an open editor: rows the user has not touched take the member's fresh
+    /// values, edited rows keep the user's text, and the baseline becomes the fresh stored values.
+    @MainActor public static func rebase(draft: inout [String: String], original: inout [String: String],
+                                         onto m: CrewMember) {
+        let fresh = self.draft(of: m)
+        for f in allFields where Ordinal.equals(draft[f.key] ?? "", original[f.key] ?? "") {
+            draft[f.key] = fresh[f.key] ?? ""
+        }
+        original = fresh
+    }
+
+    @MainActor private static func applyRow(_ f: CrewEditorField, _ text: String, to m: CrewMember) {
+        let v = f.isDate ? storedDate(text) : NetText.trim(text)
+        if !Ordinal.equals(m.stringField(f.key), v) { m.setStringField(f.key, v) }
     }
 }

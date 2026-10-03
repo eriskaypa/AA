@@ -1,5 +1,6 @@
 // Spec: 09 §B CREW-012…018 (per-page roster state: search, Expiring-only toggle — not persisted, survives reloads —,
-//       selection by Key, status line overwritten by the import summary until the next refresh), CREW-005 (navigate in),
+//       selection by Key, status line overwritten by the import summary until the next refresh — tab selection and
+//       every data reload refresh, §3.7), CREW-005 (navigate in),
 //       CREW-015 (sort mode in Ui.CrewSortMode), §8 Q15 (Mac: refresh at day rollover); ARCHITECTURE.md §2.4 (hold ids,
 //       never model references), §8.2 (expiry colours are the fixed semantic tokens).
 import AppKit
@@ -29,6 +30,27 @@ final class CrewRosterModel {
     var scrollTarget: UUID?
 
     @ObservationIgnored var keyLookup: ((UUID) -> String?)?
+    @ObservationIgnored private weak var attachedStore: AppStore?
+    @ObservationIgnored private var replaceSubscription: EventSubscription?
+
+    /// §3.7: `Init → Refresh()` runs on every data (re)load, so a reload ends the import summary (CREW-016/038).
+    /// The search text and the Expiring-only toggle survive (CREW-014); the selection is re-kept by Key (CREW-017).
+    func attach(_ store: AppStore) {
+        guard attachedStore !== store else { return }
+        attachedStore = store
+        keyLookup = { [weak store] id in store?.crewMember(id: id)?.key }
+        replaceSubscription = store.dataReplaced.subscribe { [weak self] _ in self?.dataReplaced() }
+    }
+
+    /// CREW-001 / §3.7 Refresh: the day counts are recomputed and the import summary gives way to the status line.
+    func refresh(today: CivilDate) {
+        self.today = today
+        statusOverride = nil
+    }
+
+    private func dataReplaced() {
+        statusOverride = nil
+    }
 
     /// CREW-017: keeps the selection on the remembered key, else the first row, else nothing.
     func reconcile(rows: [CrewRosterRow]) {
@@ -115,35 +137,5 @@ enum CrewPalette {
         }
         for sub in view.subviews { if let f = find(in: sub) { return f } }
         return nil
-    }
-}
-
-/// A wrapping row of controls (the WPF WrapPanel toolbars).
-struct CrewFlowLayout: Layout {
-    var spacing: CGFloat = 6
-    var lineSpacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? .infinity
-        var x: CGFloat = 0, y: CGFloat = 0, lineHeight: CGFloat = 0, maxX: CGFloat = 0
-        for v in subviews {
-            let s = v.sizeThatFits(.unspecified)
-            if x > 0, x + s.width > width { x = 0; y += lineHeight + lineSpacing; lineHeight = 0 }
-            x += s.width + spacing
-            maxX = max(maxX, x - spacing)
-            lineHeight = max(lineHeight, s.height)
-        }
-        return CGSize(width: proposal.width ?? maxX, height: y + lineHeight)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, lineHeight: CGFloat = 0
-        for v in subviews {
-            let s = v.sizeThatFits(.unspecified)
-            if x > bounds.minX, x + s.width > bounds.maxX { x = bounds.minX; y += lineHeight + lineSpacing; lineHeight = 0 }
-            v.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(s))
-            x += s.width + spacing
-            lineHeight = max(lineHeight, s.height)
-        }
     }
 }

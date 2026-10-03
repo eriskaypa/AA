@@ -22,6 +22,33 @@ final class CrewTableModel {
     var separator = "-"
     var selectedKey: String?
     var loaded = false
+    @ObservationIgnored private weak var attachedStore: AppStore?
+    @ObservationIgnored private var replaceSubscription: EventSubscription?
+
+    /// CREW-104 across a reload (shared-save pull, reload from disk, Flash Sync apply, Drive import — DATA-093 carries
+    /// the CrewTable* Ui keys): the open window re-reads the four keys of the NEW data instead of writing its pre-reload
+    /// choices back over them on the next rebuild or on close.
+    func attach(_ store: AppStore) {
+        guard attachedStore !== store else { return }
+        attachedStore = store
+        replaceSubscription = store.dataReplaced.subscribe { [weak self, weak store] _ in
+            guard let self, let store, self.loaded else { return }
+            self.reload(store.data.ui)
+        }
+    }
+
+    func detach() {
+        replaceSubscription?.cancel()
+        replaceSubscription = nil
+        attachedStore = nil
+    }
+
+    /// Re-reads the stored choices, keeping the chooser's selected row when that column still exists.
+    func reload(_ ui: UiState) {
+        let keep = selectedKey
+        load(ui)
+        selectedKey = keep.flatMap { k in choices.contains { $0.column.key == k } ? k : nil }
+    }
 
     var shownColumns: [CrewColumn] { choices.filter(\.shown).map(\.column) }
 
@@ -71,6 +98,12 @@ struct CrewTableView: View {
     @Environment(\.dialogs) private var dialogs
     @Environment(\.dismissWindow) private var dismissWindow
     @State private var model = CrewTableModel()
+    @State private var fitted = false
+
+    /// The chooser's widest split position (HSplitView hands the chooser its maximum on open).
+    static let chooserMaxWidth: CGFloat = 280
+    /// Per-column cell padding / intercell spacing of the inset `Table`, and the table's own side insets.
+    static let columnChrome: CGFloat = 20, tableInsets: CGFloat = 32
 
     var body: some View {
         Group {
@@ -86,8 +119,14 @@ struct CrewTableView: View {
         .frame(minWidth: 860, idealWidth: 1120, minHeight: 480, idealHeight: 640)
         .background(AAColor.bg, ignoresSafeAreaEdges: [])
         .onAppear {
+            model.attach(env.store)
             if !model.loaded { model.load(env.store.data.ui) }
             model.persist(env.store.data.ui, store: env.store)
+        }
+        .task {
+            guard !fitted else { return }
+            fitted = true
+            await fitWindowToShownColumns()
         }
         .onChange(of: model.choices) { _, _ in model.persist(env.store.data.ui, store: env.store) }
         .onChange(of: model.format) { _, _ in model.persist(env.store.data.ui, store: env.store) }
@@ -99,6 +138,7 @@ struct CrewTableView: View {
         .onDisappear {
             model.persist(env.store.data.ui, store: env.store)
             CrewPersist.flush(env)                                // CREW-100: FlushIfDirty on close
+            model.detach()
         }
     }
 
@@ -122,7 +162,7 @@ struct CrewTableView: View {
             Divider()
             HSplitView {
                 chooser
-                    .frame(minWidth: 240, idealWidth: 270, maxWidth: 360)
+                    .frame(minWidth: 220, idealWidth: 236, maxWidth: Self.chooserMaxWidth)
                 grid(rows, shown)
                     .frame(minWidth: 480, maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -236,22 +276,53 @@ struct CrewTableView: View {
                                 .foregroundStyle(cellColor(col, row))
                                 .textSelection(.enabled)
                         }
-                        .width(min: 60, ideal: idealWidth(col))
+                        .width(min: 44, ideal: Self.idealWidth(col))
                     }
                 }
                 .tableStyle(.inset)
-                .alternatingRowBackgrounds(.enabled)
+                .alternatingRowBackgrounds(.disabled)
             }
         }
     }
 
-    private func idealWidth(_ c: CrewColumn) -> CGFloat {
+    /// CREW-103: starting widths sized so the nine default columns — Sign-Off Date and Contract Status included —
+    /// fit the default window without horizontal scrolling (WPF auto-sized them); every column stays resizable.
+    static func idealWidth(_ c: CrewColumn) -> CGFloat {
         switch c.key {
-        case "FullName", "Company", "Vessel", "SourceFile": return 170
-        case "Rank", "PlaceOfBirth", "NokRelationship": return 140
-        case "Cid", "Gender", "Height", "EyesColor", "HairColor", "UserType", "ChecklistCount", "RankCode": return 75
-        default: return c.isDate ? 118 : 115
+        case "FullName", "Company", "Vessel", "SourceFile": return 150
+        case "Rank": return 110
+        case "PlaceOfBirth", "NokRelationship", "NokFirstName", "NokLastName": return 120
+        case "LastName", "FirstName", "MiddleName": return 96
+        case "Nationality", "ImportedAt": return 92
+        case "ContractStatus": return 112
+        case "Cid", "Gender", "Height", "EyesColor", "HairColor", "UserType", "ChecklistCount", "RankCode",
+             "DaysUntilSignOff", "SignedOnOff": return 60
+        default: return 100
         }
+    }
+
+    /// The width the grid needs for the shown columns at their ideal widths, plus the chooser.
+    static func neededWindowWidth(_ shown: [CrewColumn]) -> CGFloat {
+        chooserMaxWidth + 1 + tableInsets + shown.reduce(0) { $0 + idealWidth($1) + columnChrome }
+    }
+
+    /// CREW-103: WPF's DataGrid auto-sized the columns into view. On open the window grows (never shrinks, never past
+    /// the screen) so the shown columns — with the defaults, Sign-Off Date and Contract Status — need no scrolling.
+    private func fitWindowToShownColumns() async {
+        var window: NSWindow?
+        for _ in 0..<20 {
+            window = SceneOpener.shared.window(for: .crewTable)
+            if window != nil { break }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        guard let window, let screen = window.screen ?? NSScreen.main else { return }
+        let visible = screen.visibleFrame
+        let target = min(Self.neededWindowWidth(model.shownColumns), visible.width)
+        guard window.frame.width < target else { return }
+        var f = window.frame
+        f.origin.x = max(visible.minX, min(f.origin.x - (target - f.width) / 2, visible.maxX - target))
+        f.size.width = target
+        window.setFrame(f, display: true, animate: false)
     }
 
     /// The Contract Status / Days columns pick up the roster's expiry colours (display only).
