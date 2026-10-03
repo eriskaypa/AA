@@ -815,6 +815,7 @@ struct XamlWriterEmitter {
             while j < segs.count, (segs[j].0.lock == .inlineAncestor) == inSpan { j += 1 }
             if inSpan { out += "<Span Background=\"" + XamlValues.formatColor(XamlValues.sentinelARGB) + "\">" }
             for k in i..<j { segment(segs[k], style, inLink: inLink) }
+            flushRun()
             if inSpan { out += "</Span>" }
             i = j
         }
@@ -824,13 +825,17 @@ struct XamlWriterEmitter {
                                   inLink: Bool) {
         switch s.1 {
         case .raw(let xml):
+            flushRun()
             out += xml
         case .lineBreak:
+            flushRun()
             out += "<LineBreak />"
         case .text(let t):
             var base = style
             currentKey = s.0
             pendingPropertyElements = []
+            let saved = out
+            out = ""
             open("Run")
             var fgOverride: XamlBrush?? = nil
             if s.0.linkStyled && !inLink {
@@ -850,8 +855,25 @@ struct XamlWriterEmitter {
             for (prop, xml) in pendingPropertyElements {
                 out += prop.isEmpty ? xml : "<Run." + prop + ">" + xml + "</Run." + prop + ">"
             }
-            out += Self.escapeText(t) + "</Run>"
+            let startTag = out
+            out = saved
             currentKey = nil
+            // Neighbours whose differences vanish in the output (equal under `same()`, or display-only) are one Run,
+            // so that reading the output back and writing it again gives the same bytes (01 §4.11).
+            if let p = pendingRun, p.startTag == startTag {
+                pendingRun = (startTag, p.text + Self.escapeText(t))
+            } else {
+                flushRun()
+                pendingRun = (startTag, Self.escapeText(t))
+            }
         }
+    }
+
+    private var pendingRun: (startTag: String, text: String)?
+
+    private mutating func flushRun() {
+        guard let p = pendingRun else { return }
+        out += p.startTag + p.text + "</Run>"
+        pendingRun = nil
     }
 }

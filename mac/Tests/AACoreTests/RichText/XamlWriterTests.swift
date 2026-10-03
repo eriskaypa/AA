@@ -359,3 +359,24 @@ import Testing
         #expect(!XamlWriterEmitter.namespaceNeeds(RichDoc.build(from: s), metadata: m).check)
     }
 }
+
+@MainActor
+@Suite struct XamlWriterRunMergeTests {
+    /// XD.2.10 "display-only differences never split runs", extended to differences `same()` absorbs: neighbours
+    /// whose emitted Run is identical are one Run, so read → write of a Mac-written body is byte-stable (01 §4.11).
+    @Test func neighboursWithIdenticalOutputAreOneRun() {
+        let base = RichEditTree.defaultCharacterAttributes
+        var other = base
+        other[.aaXmlLang] = "EN-US"                      // same() as the inherited en-us
+        other[.aaFontWeightToken] = "Regular"            // same() as Normal
+        let s = NSMutableAttributedString(string: "ab", attributes: base)
+        s.append(NSAttributedString(string: "cd\n", attributes: other))
+        let out = XamlWriter.write(s, metadata: RichTextMetadata(context: .containerEditor), context: .containerEditor)
+        #expect(RichTest.body(out) == "<Paragraph><Run>abcd</Run></Paragraph>")
+        #expect(RichTest.roundTrip(out) == out)
+        // Line breaks and opaque content still separate runs.
+        let t = NSMutableAttributedString(string: "a\u{2028}b\n", attributes: base)
+        #expect(RichTest.body(XamlWriter.write(t, metadata: RichTextMetadata(context: .containerEditor), context: .containerEditor))
+                == "<Paragraph><Run>a</Run><LineBreak /><Run>b</Run></Paragraph>")
+    }
+}
