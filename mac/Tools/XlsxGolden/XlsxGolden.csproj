@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    XlsxGolden: the XLSX-reader oracle of spec 10 Addendum X (§X.7.6). For every workbook fixture it records what the
+    real ClosedXML 0.104.2 + the app's own three cell renderers (COMPAS CellString, Shippalm Cell/ExcelDate, Ports
+    Cell/NormDate/NormTime — linked, read-only, invoked by reflection) produce, so the Swift XlsxWorkbook + XlsxRender
+    can be asserted against Windows. Dev-only; not referenced by mac/Package.swift; never shipped.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>XlsxGolden</RootNamespace>
+    <AssemblyName>XlsxGolden</AssemblyName>
+    <Version>1.0.0</Version>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS8600;CS8602;CS8603;CS8604;CS8618;CS8625</NoWarn>
+    <AASrc>$(MSBuildThisFileDirectory)..\..\..\AA\</AASrc>
+  </PropertyGroup>
+  <ItemGroup Label="Linked read-only sources (hash-pinned by mac/Docs/original-source-checksums.sha256)">
+    <Compile Include="$(AASrc)Models\Models.cs"              Link="Linked\Models\Models.cs" />
+    <Compile Include="$(AASrc)Models\CrewMember.cs"          Link="Linked\Models\CrewMember.cs" />
+    <Compile Include="$(AASrc)Sire\SireState.cs"             Link="Linked\Sire\SireState.cs" />
+    <Compile Include="$(AASrc)Sire\SireModels.cs"            Link="Linked\Sire\SireModels.cs" />
+    <Compile Include="$(AASrc)Services\CrewMapping.cs"       Link="Linked\Services\CrewMapping.cs" />
+    <Compile Include="$(AASrc)Services\CompasReader.cs"      Link="Linked\Services\CompasReader.cs" />
+    <Compile Include="$(AASrc)Services\ShippalmReader.cs"    Link="Linked\Services\ShippalmReader.cs" />
+    <Compile Include="$(AASrc)Services\PortCallReader.cs"    Link="Linked\Services\PortCallReader.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+  </ItemGroup>
+</Project>

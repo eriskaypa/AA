@@ -477,6 +477,40 @@ internal static class FamilyA
             },
         };
 
+        // ---- W19: real DPAPI samples (windows run only, GF.6.8) ------------------------------------------------
+        yield return new CaseDef
+        {
+            Id = "W19", Family = F, Runs = Runs.Windows, Title = "real AAENC1 data file and AADPAPI1 token file (detection samples)",
+            Settles = new[] { "01 §4.6", "01 §7.3" },
+            Run = r =>
+            {
+                DataStore.SetEncryptLocalData(true);
+                DataStore.Save(KitchenSink.Build());
+                var sample = File.ReadAllBytes(DataStore.CurrentDataFile);
+                r.Bytes("aaenc1", "aaenc1-sample", "bin", sample, "bytes", mac: false);
+                var reloaded = DataStore.Load();
+                var dest = Path.Combine(r.DataDir.TrimEnd('\\', '/') + "-scratch", "W19.bundle.zip");
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                DataStore.ExportFolderToZip(dest);
+                bool plaintext;
+                using (var z = System.IO.Compression.ZipFile.OpenRead(dest))
+                using (var s = z.GetEntry("data.json")!.Open())
+                    plaintext = s.ReadByte() == '{';
+                r.Json("windows", "windows-behaviour", new JsonObject
+                {
+                    ["magic"] = Encoding.ASCII.GetString(sample, 0, 7).Replace("\n", "\\n"),
+                    ["windowsLoadOk"] = !DataStore.LastLoadFailed && reloaded.Tasks.Count == 1,
+                    ["bundleDataJsonPlaintext"] = plaintext,
+                }, mac: false);
+                var token = Encoding.ASCII.GetBytes("AADPAPI1").Concat(Dpapi.Protect(Utf8("{\"access_token\":\"fixture\"}"))).ToArray();
+                r.Bytes("aadpapi1", "aadpapi1-sample", "bin", token, "bytes", mac: false);
+                r.Divergent("outcome", Fx.Expect(new JsonObject { ["lastLoadFailed"] = true, ["detectedWindowsEncryption"] = true }),
+                            "01 §4.6 / DECISIONS 01: the Mac detects the AAENC1 magic and refuses (\"encrypted on another computer\"), never garbage",
+                            "json-semantic");
+                DataStore.SetEncryptLocalData(false);
+            },
+        };
+
         // ---- A21: duplicate member ----------------------------------------------------------------------------------
         yield return new CaseDef
         {
