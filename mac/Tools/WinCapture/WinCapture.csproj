@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- WinCapture: Part 2 capture harness (Windows only; spec 01 GF.6.3, DATA-321/322/325). Runs WPF's own serializer
+       and editing commands on RichTextBoxes configured exactly like AA's ContainerEditor, and links the WPF-bound AA
+       files that produce stored XAML. Dev-only; never shipped; not referenced by mac/Package.swift. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>            <!-- console subsystem (stdout + exit code), still a WPF app -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>WinCapture</RootNamespace>
+    <AssemblyName>WinCapture</AssemblyName>
+    <Version>1.0.0</Version>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS8600;CS8602;CS8603;CS8604;CS8618;CS8625</NoWarn>
+    <AASrc>$(MSBuildThisFileDirectory)..\..\..\AA\</AASrc>
+  </PropertyGroup>
+  <ItemGroup Label="Linked read-only sources (hash-pinned by mac/Docs/original-source-checksums.sha256)">
+    <Compile Include="$(AASrc)Services\ListFormatting.cs"      Link="Linked\ListFormatting.cs" />
+    <Compile Include="$(AASrc)Services\HtmlToXamlConverter.cs" Link="Linked\HtmlToXamlConverter.cs" />
+    <Compile Include="$(AASrc)Sire\SireFlow.cs"                Link="Linked\SireFlow.cs" />
+    <Compile Include="$(AASrc)Sire\SireModels.cs"              Link="Linked\SireModels.cs" />
+    <Compile Include="$(AASrc)Sire\TagExtractor.cs"            Link="Linked\TagExtractor.cs" />
+  </ItemGroup>
+  <ItemGroup Label="The SIRE question bank (W16; copied to the output folder, never modified)">
+    <None Include="$(AASrc)Sire\Data\sire2_question_bank.json" Link="Data\sire2_question_bank.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The version of AA/AA.csproj; HtmlToXamlConverter.cs depends on it. -->
+    <PackageReference Include="HtmlAgilityPack" Version="1.11.61" />
+  </ItemGroup>
+</Project>

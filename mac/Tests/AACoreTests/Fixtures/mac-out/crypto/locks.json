@@ -1,0 +1,30 @@
+[
+  {
+    "name": "ascii",
+    "password": "correct horse",
+    "wrong": "Correct horse",
+    "lockHash": "GtzKWE/WVahYEys\u002BzdctZkvxyfQ\u002BVl8QisYKxP9V\u002BFc=",
+    "lockSalt": "EzbspO3XeMkPYl8gO9OG6w=="
+  },
+  {
+    "name": "greek",
+    "password": "\u03A9\u03BC\u03AD\u03B3\u03B1-\u03BB\u03AD\u03BE\u03B7",
+    "wrong": "\u03A9\u03BC\u03B5\u03B3\u03B1-\u03BB\u03B5\u03BE\u03B7",
+    "lockHash": "IS\u002BaWtvteovYS9FQmPCEWpNBIDoBQeWdsWYwnjBKNIc=",
+    "lockSalt": "zV\u002BfplVjgKq\u002Bs\u002Bwppy2hdA=="
+  },
+  {
+    "name": "four-chars",
+    "password": "abcd",
+    "wrong": "abc",
+    "lockHash": "nSPEpDTiJ23lc4s9wUZ1di1/YXtvqfA/D7pBsXLFwYY=",
+    "lockSalt": "\u002BvzzfVJPpEXhJquxNTpZig=="
+  },
+  {
+    "name": "emoji-free-symbols",
+    "password": "p@ss w0rd!#%",
+    "wrong": "p@ss w0rd!#",
+    "lockHash": "gLT0bQPYSw4gvfOLYaRQ/cGa0U\u002BvhDfrxnMu\u002BAUnh78=",
+    "lockSalt": "oaaJNzstMh6tRmxfcpWKUQ=="
+  }
+]

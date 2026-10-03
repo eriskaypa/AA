@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    WinFixtures: golden-fixture ORACLE for the Mac port (spec 01, Addendum "Golden-fixture plan", GF.3.1, DATA-300).
+    Compiles the Windows app's own WPF-free C# files (LINKED, never copied or modified) into a plain console so
+    the real logic runs on macOS/Linux/Windows and its outputs can be recorded as goldens for the Swift tests.
+    Dev-only: not referenced by mac/Package.swift, never shipped. Build output stays under mac/Tools/WinFixtures/
+    bin|obj (gitignored). See README.md for the exact commands.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>WinFixtures</RootNamespace>
+    <AssemblyName>WinFixtures</AssemblyName>
+    <Version>1.0.0</Version>
+    <!-- NOT invariant: casing and culture data must come from ICU as on a Windows install (.NET on Windows
+         uses ICU too). The culture itself is pinned in code to en-US (GF.3.5). -->
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <!-- The linked app sources carry their own warnings (CA/IDE analyzers off by default); never fail on them. -->
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+    <NoWarn>$(NoWarn);CS0618;CS8600;CS8602;CS8603;CS8604;CS8618;CS8625</NoWarn>
+    <AASrc>$(MSBuildThisFileDirectory)..\..\..\AA\</AASrc>
+  </PropertyGroup>
+
+  <ItemGroup Label="Linked read-only sources (hash-pinned by mac/Docs/original-source-checksums.sha256)">
+    <Compile Include="$(AASrc)Models\Models.cs"                 Link="Linked\Models\Models.cs" />
+    <Compile Include="$(AASrc)Models\CrewMember.cs"             Link="Linked\Models\CrewMember.cs" />
+    <Compile Include="$(AASrc)Sire\SireState.cs"                Link="Linked\Sire\SireState.cs" />
+    <Compile Include="$(AASrc)Sire\SireModels.cs"               Link="Linked\Sire\SireModels.cs" />
+    <Compile Include="$(AASrc)Services\DataStore.cs"            Link="Linked\Services\DataStore.cs" />
+    <Compile Include="$(AASrc)Services\Dpapi.cs"                Link="Linked\Services\Dpapi.cs" />
+    <Compile Include="$(AASrc)Services\PasswordService.cs"      Link="Linked\Services\PasswordService.cs" />
+    <Compile Include="$(AASrc)Services\ItemLockService.cs"      Link="Linked\Services\ItemLockService.cs" />
+    <Compile Include="$(AASrc)Services\AppRepository.cs"        Link="Linked\Services\AppRepository.cs" />
+    <Compile Include="$(AASrc)Services\DataDiff.cs"             Link="Linked\Services\DataDiff.cs" />
+    <Compile Include="$(AASrc)Services\SearchService.cs"        Link="Linked\Services\SearchService.cs" />
+    <Compile Include="$(AASrc)Services\ReminderService.cs"      Link="Linked\Services\ReminderService.cs" />
+    <Compile Include="$(AASrc)Services\WorkRange.cs"            Link="Linked\Services\WorkRange.cs" />
+    <Compile Include="$(AASrc)Services\BatchDone.cs"            Link="Linked\Services\BatchDone.cs" />
+    <Compile Include="$(AASrc)Services\BatchDeadline.cs"        Link="Linked\Services\BatchDeadline.cs" />
+    <Compile Include="$(AASrc)Services\BatchDelete.cs"          Link="Linked\Services\BatchDelete.cs" />
+    <Compile Include="$(AASrc)Services\SavedListOrder.cs"       Link="Linked\Services\SavedListOrder.cs" />
+    <Compile Include="$(AASrc)Services\DateResolver.cs"         Link="Linked\Services\DateResolver.cs" />
+    <Compile Include="$(AASrc)Services\CrewConverter.cs"        Link="Linked\Services\CrewConverter.cs" />
+    <Compile Include="$(AASrc)Services\CrewMapping.cs"          Link="Linked\Services\CrewMapping.cs" />
+    <Compile Include="$(AASrc)Services\CompasReader.cs"         Link="Linked\Services\CompasReader.cs" />
+    <Compile Include="$(AASrc)Services\ChecklistExporter.cs"    Link="Linked\Services\ChecklistExporter.cs" />
+    <Compile Include="$(AASrc)Services\XlsxWriter.cs"           Link="Linked\Services\XlsxWriter.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="Extension families (f) — WPF-free, SHOULD">
+    <Compile Include="$(AASrc)Services\ChecklistTemplateService.cs" Link="Linked\Services\ChecklistTemplateService.cs" />
+    <Compile Include="$(AASrc)Services\ScheduleService.cs"      Link="Linked\Services\ScheduleService.cs" />
+    <Compile Include="$(AASrc)Sire\SireExport.cs"               Link="Linked\Sire\SireExport.cs" />
+    <Compile Include="$(AASrc)Sire\TagExtractor.cs"             Link="Linked\Sire\TagExtractor.cs" />
+    <Compile Include="$(AASrc)Sire\TaskIdentifierService.cs"    Link="Linked\Sire\TaskIdentifierService.cs" />
+  </ItemGroup>
+
+  <ItemGroup Label="The SIRE question bank (read by X05; copied to the output folder, never modified)">
+    <None Include="$(AASrc)Sire\Data\sire2_question_bank.json" Link="Data\sire2_question_bank.json"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Same versions as AA/AA.csproj. PDFsharp-MigraDoc is the cross-platform build of the PDFsharp-MigraDoc-gdi
+         package the app uses; it is needed only so the linked ChecklistExporter.cs compiles (ExportPdf is never
+         executed). -->
+    <PackageReference Include="ClosedXML" Version="0.104.2" />
+    <PackageReference Include="PDFsharp-MigraDoc" Version="6.2.0" />
+  </ItemGroup>
+</Project>

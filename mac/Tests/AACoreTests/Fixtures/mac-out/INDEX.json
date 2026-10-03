@@ -1,0 +1,25 @@
+{
+  "emittedBy": "GoldMacOutEmitter (mac/Tests/AACoreTests/WinFixtures/GoldMacOutEmitter.swift)",
+  "checkedBy": "WinFixtures check-mac (json, settings, crypto, bundles); WinCapture load-check (xaml)",
+  "files": [
+    "crypto/blobs.json",
+    "crypto/locks.json",
+    "json/A02.kitchen-sink.json",
+    "json/A04.defaults.json",
+    "json/A05.legacy-shapes.json",
+    "json/A10.unknown-members.json",
+    "json/mac-created.json",
+    "settings/all-flags.expect.json",
+    "settings/all-flags.json",
+    "settings/dark-mode.expect.json",
+    "settings/dark-mode.json",
+    "settings/folders.expect.json",
+    "settings/folders.json",
+    "settings/password.expect.json",
+    "settings/password.json"
+  ],
+  "skipped": [
+    "bundles/: needs W-PERSIST\u0027s BundleService (ContractStatus.wPersist not flipped)",
+    "xaml/: needs W-RICH\u0027s XamlReader/XamlWriter (ContractStatus.wRich not flipped)"
+  ]
+}

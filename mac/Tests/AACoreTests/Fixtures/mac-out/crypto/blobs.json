@@ -1,0 +1,26 @@
+[
+  {
+    "name": "empty",
+    "password": "correct horse",
+    "passwordHash": "PSCAluJHKKY46OKOP/FK10T9dXehklECLTbW7dtZLUk=",
+    "passwordSalt": "Mh3aAmqTV64kb0rnLQk0Xg==",
+    "blob": "enc:tfohLDTDlEE6Iy7cieAM8wO0VL0KKngD/8fW0jZ1KGeYHvZCR39PhuA7XCRCTq7Esc6HkolhTvnOWs16iLzSLg==",
+    "plaintext": ""
+  },
+  {
+    "name": "section",
+    "password": "correct horse",
+    "passwordHash": "6LcRz9W0OWBVVgmA5naGgmMiTX2LKmF60lUQ8AZqwGM=",
+    "passwordSalt": "nta\u002B127SP3BIbUBdcaXMvg==",
+    "blob": "enc:0fl1fJEBnpoKFmlIOQNEZW6hObcRENblb3P54XX78Yr2vW4uxpVzvYPAlSIlpNR7sh5xwTb8x5yv7ajt7D\u002B4gvgEJN88LUWxN\u002BMOv9LGkdCXZoY7YA73CciiIPNUGht54W5vhuJIS0Nk3OXjcqIG7cvqEaaoga31H/XVdBzF3rVWgMOviEnZTr53SHpcIUVTpqIe5FG9MWwon3lx4K1qU6frHjNVsQaBkeeVkqyDbAyR6nsBDRjYuE7FfljO4kbU",
+    "plaintext": "\u003CSection xmlns=\u0022http://schemas.microsoft.com/winfx/2006/xaml/presentation\u0022\u003E\u003CParagraph\u003E\u003CRun\u003ESecret\u003C/Run\u003E\u003C/Paragraph\u003E\u003C/Section\u003E"
+  },
+  {
+    "name": "greek",
+    "password": "\u03A9\u03BC\u03AD\u03B3\u03B1-\u03BB\u03AD\u03BE\u03B7",
+    "passwordHash": "uLzEnJp52zMd\u002BCYU1ZNwErGOTE9o2hrpqlZSnCwcKo8=",
+    "passwordSalt": "dO7S5V82USjDuVwbyuQk5g==",
+    "blob": "enc:Uz6mR/pM2HS6Uy6I7RHRs8txCO7fU6w5yb/gjyuRIOwxy\u002Bijm8J4Hi7M2Z0GJHLYwrCqGMz8yEf0aQymWU4muWbKIayCICh7Ui1WBgzqR\u002Bxqe3ocVcyZ2G/ADG9halUBnAOnTyoYm3/Ni/23vrrImEJs0nX\u002BTZfksqjxYg3nTpG2XhWniyapq0MqTUFn/YxyXXGgW9/jGyova7BQ8htxUD6okgb\u002BpYa4h\u002BokN/lnCsBWbhi8KcHZsmts3ZIqlgNjNTTBBiuWlXFuME6xriDllVmMfFq0fqHut5QyghkWo60=",
+    "plaintext": "\u003CSection xmlns=\u0022http://schemas.microsoft.com/winfx/2006/xaml/presentation\u0022\u003E\u003CParagraph\u003E\u003CRun\u003E\u039A\u03BB\u03B5\u03B9\u03B4\u03AF \u03C0\u03C5\u03C1\u03BF\u03C3\u03B2\u03B5\u03C3\u03C4\u03B9\u03BA\u03AE\u03C2\u003C/Run\u003E\u003C/Paragraph\u003E\u003C/Section\u003E"
+  }
+]
