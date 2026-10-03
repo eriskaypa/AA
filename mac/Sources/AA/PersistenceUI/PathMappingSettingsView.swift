@@ -89,6 +89,7 @@ struct PathMappingSettingsView: View {
         } primaryAction: { ids in
             if ids.count == 1, let i = ids.first { editing = PersistMappingDraft(mapper.mappings[i]) }
         }
+        .alternatingRowBackgrounds(mapper.mappings.isEmpty ? .disabled : .enabled)
         .overlay {
             if mapper.mappings.isEmpty {
                 AAEmptyState(title: "No mappings", symbol: "externaldrive.connected.to.line.below",
@@ -101,7 +102,10 @@ struct PathMappingSettingsView: View {
     private var tester: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Try a Windows path").font(.system(size: AAType.small, weight: .semibold))
-            TextField("Z:\\Manuals\\Pump.pdf or \\\\server\\share\\file.pdf", text: $probe)
+            // Verbatim texts: a LocalizedStringKey literal would read `\\` as a Markdown escape and show one backslash.
+            TextField(text: $probe, prompt: Text(verbatim: PersistPathText.probePrompt)) {
+                Text(verbatim: "Windows path to try")
+            }
                 .textFieldStyle(.roundedBorder)
                 .font(.aaMono(AAType.small))
             let r = PersistPathText.resolve(probe, mapper: mapper)
@@ -167,17 +171,21 @@ struct PersistMappingEditor: View {
         VStack(alignment: .leading, spacing: AASpacing.m) {
             Text(draft.original == nil ? "Add a mapping" : "Edit mapping").font(.system(size: 14, weight: .bold))
             Form {
-                TextField("Windows path", text: $draft.windowsPrefix, prompt: Text("Z:  or  \\\\server\\share"))
+                TextField(text: $draft.windowsPrefix, prompt: Text(verbatim: PersistPathText.prefixPrompt)) {
+                    Text(verbatim: "Windows path")
+                }
                     .font(.aaMono(AAType.body))
                 HStack {
-                    TextField("Folder on this Mac", text: $draft.macPath, prompt: Text("/Volumes/Share or smb://server/share"))
+                    TextField(text: $draft.macPath, prompt: Text(verbatim: "/Volumes/Share or smb://server/share")) {
+                        Text(verbatim: "Folder on this Mac")
+                    }
                         .font(.aaMono(AAType.body))
                     Button("Choose…") { choose() }
                 }
             }
             .formStyle(.columns)
             if !NetText.isBlank(draft.windowsPrefix), !PathMapper.isValidPrefix(draft.windowsPrefix) {
-                Label("Use a drive (Z: or Z:\\Folder) or a share (\\\\server\\share).", systemImage: "exclamationmark.triangle.fill")
+                Label { Text(verbatim: PersistPathText.invalidPrefix) } icon: { Image(systemName: "exclamationmark.triangle.fill") }
                     .font(.system(size: AAType.small)).foregroundStyle(AAColor.Status.dueSoon)
             } else {
                 AAHelpText("Everything after the Windows path is added to the Mac folder when a file is opened.")
@@ -213,6 +221,10 @@ struct PersistMappingEditor: View {
 /// Texts and resolution summaries of the File Links settings.
 enum PersistPathText {
     static let intro = "Files linked on Windows keep their Windows paths (Z:\\…, \\\\server\\share\\…). When you open one on this Mac, AA replaces the Windows part with the folder you map here. The stored paths never change, and these mappings stay on this Mac."
+
+    static let probePrompt = "Z:\\Manuals\\Pump.pdf or \\\\server\\share\\file.pdf"
+    static let prefixPrompt = "Z:  or  \\\\server\\share"
+    static let invalidPrefix = "Use a drive (Z: or Z:\\Folder) or a share (\\\\server\\share)."
 
     static func reachable(_ macPath: String) -> Bool {
         let t = NetText.trim(macPath)

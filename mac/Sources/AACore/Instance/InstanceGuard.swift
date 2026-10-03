@@ -113,6 +113,37 @@ public struct PersistBlockedInfo: Sendable, Equatable {
         return true
     }
 
+    /// The external-file lock was obtained by a read-only copy's upgrade poll (so "Stay Read-Only" hands it back).
+    private static var externalUpgraded = false
+
+    /// DATA-175 upgrade poll body for a read-only copy: one attempt at every lock this process is missing — the data
+    /// folder's (DATA-172) and, when the launch was refused because of the external active data file, that file's
+    /// (DATA-179). True when this process may now edit.
+    public static func retryEditing() -> Bool {
+        if folderBlocked != nil, !retryFolderLock() { return false }
+        if externalBlocked != nil {
+            guard retryExternalLock() else { return false }
+            externalUpgraded = true
+        }
+        return true
+    }
+
+    /// "Stay Read-Only" for whichever lock the upgrade took (DATA-175).
+    public static func relinquishEditing() {
+        if externalUpgraded, let lock = externalLock, lock.isOwner, let key = externalKey {
+            lock.relinquish()
+            externalUpgraded = false
+            let file = URL(fileURLWithPath: lock.currentRecord()?.dataFile ?? key)
+            externalBlocked = PersistBlockedInfo(target: .externalFile(file), record: nil, holder: .unknown, lease: false)
+            return
+        }
+        relinquishFolderLock()
+    }
+
+    /// True while this process holds every lock it needs to edit (the folder's unless unguarded, and the external
+    /// active file's when one was refused).
+    public static var canEdit: Bool { folderBlocked == nil && externalBlocked == nil }
+
     /// DATA-175 "Stay Read-Only": hands the lock back and keeps polling later.
     public static func relinquishFolderLock() {
         guard let lock = folderLock, lock.isOwner else { return }
@@ -211,6 +242,7 @@ public struct PersistBlockedInfo: Sendable, Equatable {
         externalLock = nil
         externalKey = nil
         externalBlocked = nil
+        externalUpgraded = false
     }
 
     /// DATA-172 retry for the external-file alert.

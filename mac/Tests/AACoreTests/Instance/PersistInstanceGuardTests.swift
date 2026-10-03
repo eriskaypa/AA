@@ -403,6 +403,37 @@ struct PersistInstanceGuardTests {
         third.release()
     }
 
+    @Test("DATA-179 + DATA-175: a copy read-only because of the external file upgrades on THAT lock, and hands it back")
+    func externalUpgrade() throws {
+        let t = TempFolder("persist-ext-ro")
+        let locks = TempFolder("persist-ext-locks")
+        let savedFolder = InstanceGuard.externalLocksFolder
+        InstanceGuard.externalLocksFolder = locks.url
+        defer { InstanceGuard.release(); InstanceGuard.externalLocksFolder = savedFolder }
+        #expect(InstanceGuard.acquire(appFolder: t.url) == .editor)
+        let shared = TempFolder("persist-ext-file")
+        let file = try shared.write("shared.json", "{}")
+        let key = InstanceGuard.externalLockKey(file)
+        let other = PersistInstanceLock(lockURL: locks.file("external-\(key).lock"), env: env(pid: 999_999))
+        #expect(other.acquire() == .owner)
+        #expect(InstanceGuard.acquireExternal(fileURL: file) != .editor)
+        #expect(!InstanceGuard.canEdit)
+        #expect(!InstanceGuard.retryEditing())                            // the folder is ours, the file is not
+        #expect(InstanceGuard.isEditor)
+        other.release()
+        #expect(InstanceGuard.retryEditing())
+        #expect(InstanceGuard.canEdit)
+        // Stay Read-Only gives back the external lock (not the folder's).
+        InstanceGuard.relinquishEditing()
+        #expect(!InstanceGuard.canEdit)
+        #expect(InstanceGuard.externalBlocked != nil)
+        #expect(InstanceGuard.isEditor)
+        let third = PersistInstanceLock(lockURL: locks.file("external-\(key).lock"), env: env(pid: 777_777))
+        #expect(third.acquire() == .owner)
+        third.release()
+        #expect(InstanceGuard.retryEditing())
+    }
+
     @Test("L-1 lease lost while asleep: wake check → onLeaseLost(host); -mine copy only when dirty; read-only gate")
     func leaseLostAfterWake() throws {
         let t = TempFolder("persist-l1")

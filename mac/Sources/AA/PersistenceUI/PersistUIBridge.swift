@@ -40,7 +40,10 @@ import AACore
             if !env.isReadOnlyInstance, !env.isSafeMode { fp.start() }
         }
         InstanceGuard.onLeaseLost = { [weak self] host in self?.leaseLost(host: host) }
-        subscriptions.append(env.store.dataReplaced.subscribe { [weak self] _ in self?.rememberContent() })
+        subscriptions.append(env.store.dataReplaced.subscribe { [weak self] _ in
+            self?.rememberContent()
+            self?.followActiveFile()
+        })
         rememberContent()
         windowsEvidenceAtAttach = PersistWindowsEvidence.detect(appFolder: env.dataStore.appFolder,
                                                                 settings: env.settings.values,
@@ -50,6 +53,14 @@ import AACore
                                                              default: false)
         if env.isReadOnlyInstance { startReadOnly() }
         refreshConflictCopies()
+    }
+
+    /// DATA-180 step 3 after every reload: the data-file watcher runs for an editor that is not in safe mode, on the
+    /// folder of the CURRENT active file (Import from file can move it; leaving safe mode starts it).
+    private func followActiveFile() {
+        guard let env, let fp = env.dataFileGuard, !env.isReadOnlyInstance, !env.dataStore.lastLoadFailed,
+              fp.state.mode == .normal else { return }
+        fp.start()
     }
 
     /// DATA-180 "Stop Editing Here" applies the DATA-174 list (§MP.3.5): the shared-save sync and the 5-minute autosave
@@ -105,7 +116,7 @@ import AACore
         guard let env, readOnlySession == nil else { readOnlySession?.start(); return }
         let session = PersistReadOnlySession(
             dataFile: { [weak env] in env?.dataStore.currentDataFile ?? URL(fileURLWithPath: "/") },
-            tryUpgrade: { InstanceGuard.retryFolderLock() },
+            tryUpgrade: { InstanceGuard.retryEditing() },
             onSaveSeen: { [weak self] in self?.liveReload() })
         readOnlySession = session
         session.start()
@@ -132,7 +143,7 @@ import AACore
     }
 
     func stayReadOnly() {
-        InstanceGuard.relinquishFolderLock()
+        InstanceGuard.relinquishEditing()
         withAnimation(.snappy) { readOnlySession?.stayReadOnly() }
     }
 
@@ -145,7 +156,7 @@ import AACore
                                                    confirm: PersistReadOnlyText.discardAndEdit, destructive: true)
             guard ok else { return }
         }
-        guard InstanceGuard.isEditor || InstanceGuard.retryFolderLock() else { return }
+        guard InstanceGuard.canEdit || InstanceGuard.retryEditing() else { return }
         readOnlySession?.stop()
         readOnlySession = nil
         withAnimation(.snappy) { env.isReadOnlyInstance = false }

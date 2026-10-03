@@ -32,6 +32,27 @@ extension SnapshotRegistry {
                 .frame(width: 640, height: 470)
                 .aaSheet(.closeType))
         }
+        register("w-persist.path-mappings-empty") { _ in
+            AnyView(PathMappingSettingsView(mapper: PathMapper(), probe: "")
+                .frame(width: 640, height: 470)
+                .aaSheet(.closeType))
+        }
+        register("w-persist.path-mappings-unc") { _ in
+            AnyView(PathMappingSettingsView(mapper: PathMapper(), probe: "\\\\engine-pc\\drawings\\P&ID.pdf")
+                .frame(width: 640, height: 470)
+                .aaSheet(.closeType))
+        }
+        register("w-persist.path-mapping-editor") { _ in
+            let draft = PersistMappingDraft(PathMapping(windowsPrefix: "\\\\bridge-nas\\manuals",
+                                                        macPath: "/Volumes/manuals"))
+            return AnyView(PersistMappingEditor(draft: draft) { _ in })
+        }
+        register("w-persist.path-mapping-invalid") { _ in
+            var draft = PersistMappingDraft()
+            draft.windowsPrefix = "manuals"
+            draft.macPath = "/Volumes/Ship"
+            return AnyView(PersistMappingEditor(draft: draft) { _ in })
+        }
         register("w-persist.banners") { _ in
             AnyView(PersistBannerGallery().aaSheet(.closeType))
         }
