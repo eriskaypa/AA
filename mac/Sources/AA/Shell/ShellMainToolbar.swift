@@ -15,6 +15,9 @@ struct ShellMainToolbar: CustomizableToolbarContent {
         ToolbarItem(id: "status", placement: .automatic, showsByDefault: true) {
             ShellStatusHistoryButton()
         }
+        ToolbarItem(id: "drive", placement: .automatic, showsByDefault: true) {
+            ShellDriveSyncIndicator()
+        }
         ToolbarItem(id: "due", placement: .primaryAction) {
             Button { env.router.perform(.dueDates) } label: { Label("Due", systemImage: "pin") }
                 .help(ShortcutRegistry.toolbarHelp(.dueDates, base: "Show a small floating window of tasks and procedures due today and tomorrow. (Ship work-order notifications live in each vessel's Work Orders tab.)"))
@@ -109,6 +112,31 @@ struct ShellSharedSavePopover: View {
         }
         .padding(AASpacing.m)
         .frame(width: 360)
+    }
+}
+
+/// 14 §6.5 Mac addition (REQ-W-DRIVE-01): the small Google Drive sync indicator, shown while Sync on Save is on or a
+/// push is running / has a result; the tooltip is the last Drive status; a click checks Drive for a newer save.
+struct ShellDriveSyncIndicator: View {
+    @Environment(AppEnvironment.self) private var env
+
+    var body: some View {
+        let state = env.driveSync.indicator
+        if env.settings.values.syncOnSave || state != .idle {
+            Button { env.router.perform(.driveCheckNewer) } label: {
+                Label("Drive sync", systemImage: state.symbol)
+                    .symbolEffect(.rotate, isActive: state == .pushing)
+                    .foregroundStyle(Self.tint(state))
+            }
+            .disabled(!env.router.decision(.driveCheckNewer).enabled)
+            .help(env.driveSync.lastStatus ?? "Google Drive sync")
+            .transition(.opacity.combined(with: .scale(scale: 0.9)))
+        }
+    }
+
+    private static func tint(_ s: DriveIndicatorState) -> Color {
+        if case .failed = s { return AAColor.Status.danger }
+        return AAColor.muted
     }
 }
 
