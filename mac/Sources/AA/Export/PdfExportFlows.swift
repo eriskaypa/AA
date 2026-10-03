@@ -181,7 +181,8 @@ enum SavedListsExportScope { case list(UUID), group(ofList: UUID), all }
     private static func runBusy(_ dialogs: DialogPresenter, text: String,
                                 _ work: @escaping @Sendable () throws -> Void) async -> Result<Void, Error> {
         let state = PdfBusyState()
-        let indicator = Task { @MainActor in
+        Task { @MainActor in
+            defer { state.indicatorClosed = true }
             try? await Task.sleep(for: .milliseconds(300))
             guard !state.finished else { return }
             await dialogs.presentSheet(.decision) { dismiss in PdfBusySheet(text: text, state: state, dismiss: dismiss) }
@@ -190,7 +191,8 @@ enum SavedListsExportScope { case list(UUID), group(ofList: UUID), all }
             do { try work(); return .success(()) } catch { return .failure(error) }
         }.value
         state.finished = true
-        await indicator.value
+        // Let the busy sheet close before the result alert attaches (bounded, so a vanished window never hangs).
+        for _ in 0..<60 where !state.indicatorClosed { try? await Task.sleep(for: .milliseconds(50)) }
         return result
     }
 }
@@ -198,6 +200,8 @@ enum SavedListsExportScope { case list(UUID), group(ofList: UUID), all }
 /// Completion flag the busy sheet observes.
 @MainActor @Observable final class PdfBusyState {
     var finished = false
+    /// The indicator task has ended (never shown, or shown and dismissed).
+    var indicatorClosed = false
 }
 
 /// The indeterminate progress sheet of a running export.
