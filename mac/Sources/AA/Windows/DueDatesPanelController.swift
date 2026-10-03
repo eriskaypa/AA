@@ -67,7 +67,7 @@ import AACore
         p.contentView = host
         panel = p
         subscribe(env)
-        refresh()
+        refresh(animated: false)
         let frame = initialFrame(env: env)
         applyingFrame = true
         p.setFrame(frame, display: false)
@@ -76,10 +76,11 @@ import AACore
         applyingFrame = false
     }
 
-    /// QUICK-007: rebuild the lists ("today" evaluated now).
-    func refresh() {
+    /// QUICK-007: rebuild the lists ("today" evaluated now). The first fill of a new panel is not animated (rows
+    /// never open half-faded); later changes animate only while the list is small (V2-SCALE).
+    func refresh(animated: Bool = true) {
         guard let env else { return }
-        model.update(DueListBuilder.build(store: env.store, today: env.clock.today()))
+        model.update(DueListBuilder.build(store: env.store, today: env.clock.today()), animated: animated)
     }
 
     /// QUICK-023: ✕ / ⌘W closes; the panel is recreated (and placed bottom-right again) on the next show.
@@ -162,10 +163,19 @@ final class DuePanel: NSPanel {
 @MainActor @Observable
 final class DueModel {
     private(set) var list = DueList()
+    private(set) var animatesRows = false
 
-    func update(_ l: DueList) {
+    func update(_ l: DueList, animated: Bool = true) {
         guard l != list else { return }
-        withAnimation(.snappy(duration: 0.25)) { list = l }
+        let animate = animated && DueList.animatesChange(from: list.rowCount, to: l.rowCount)
+        animatesRows = animate
+        if animate {
+            withAnimation(.snappy(duration: 0.25)) { list = l }
+        } else {
+            var t = Transaction()
+            t.disablesAnimations = true
+            withTransaction(t) { list = l }
+        }
     }
 }
 
@@ -181,9 +191,22 @@ struct DueDatesView: View {
         VStack(spacing: 0) {
             header
             ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
+                // Lazy (V2-SCALE): rows are direct children of the LazyVStack, so only the visible ones are built —
+                // a 7,000-row backlog opens at once instead of laying out every card.
+                LazyVStack(alignment: .leading, spacing: 5) {
                     ForEach(Array(model.list.sections.enumerated()), id: \.element.id) { k, s in
-                        DueSectionView(section: s, isFirst: k == 0, onTick: tick, onOpen: open)
+                        DueSectionHeader(section: s, isFirst: k == 0)
+                        if s.rows.isEmpty {
+                            DueNothingLine()
+                        } else {
+                            ForEach(s.rows) { row in
+                                DueRowView(row: row, onTick: tick, onOpen: open)
+                                    .transition(model.animatesRows
+                                        ? .asymmetric(insertion: .opacity,
+                                                      removal: .opacity.combined(with: .move(edge: .leading)))
+                                        : .identity)
+                            }
+                        }
                     }
                     if model.list.isEverythingEmpty {
                         VStack(spacing: 8) {
@@ -227,13 +250,12 @@ struct DueDatesView: View {
                     Text(DueList.headerTitle).font(.aaMono(AAType.title, weight: .bold))
                 }
                 .foregroundStyle(.white)
-                Text(model.list.headerSubtitle)
+                DueHeaderSubtitle(list: model.list)
                     .font(.aaMono(AAType.caption))
                     .monospacedDigit()
                     .foregroundStyle(AAColor.Status.floatingTint)
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .contentTransition(.numericText())
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(model.list.headerSubtitle)
             }
             Spacer(minLength: 4)
             DueHeaderButton(symbol: "arrow.clockwise", help: DueList.refreshHelp, action: onRefresh)
@@ -290,34 +312,58 @@ struct DueHeaderButton: View {
     }
 }
 
-/// QUICK-008: `{LABEL}   ({count})`, then the rows or `— nothing —`.
-struct DueSectionView: View {
-    let section: DueSection
-    let isFirst: Bool
-    let onTick: (DueRow, Bool) -> Void
-    let onOpen: (DueRow) -> Void
+/// QUICK-011 header subtitle (V2-J2): the parts (`{n} overdue`, `Today …`, `Tomorrow …`) break only between parts,
+/// and a `·` separator sits only between two parts on the same line — never dangling at a line end. The widest
+/// grouping that fits wins (one line, then two lines with as much as fits on the first, then one part per line).
+struct DueHeaderSubtitle: View {
+    let list: DueList
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(section.header)
-                .font(.aaMono(AAType.small, weight: .bold))
-                .monospacedDigit()
-                .foregroundStyle(section.isOverdue ? AAColor.Status.floatingOverdue : AAColor.muted)
-                .padding(.leading, 2)
-                .padding(.bottom, 1)
-            if section.rows.isEmpty {
-                Text(DueList.nothingLine)
-                    .font(.aaMono(AAType.caption))
-                    .foregroundStyle(AAColor.muted)
-                    .padding(.leading, 6)
-            } else {
-                ForEach(section.rows) { row in
-                    DueRowView(row: row, onTick: onTick, onOpen: onOpen)
-                        .transition(.asymmetric(insertion: .opacity, removal: .opacity.combined(with: .move(edge: .leading))))
+        ViewThatFits(in: .horizontal) {
+            ForEach(Array(DueList.headerLineGroupings(list.headerParts.count).enumerated()), id: \.offset) { _, lines in
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(Array(lines.enumerated()), id: \.offset) { _, range in
+                        Text(list.headerLine(range))
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
+                            .contentTransition(.numericText())
+                    }
+                }
+            }
+            // Narrower than any part (never at the 260-pt minimum): wrap, still without separators at line ends.
+            VStack(alignment: .leading, spacing: 1) {
+                ForEach(Array(list.headerParts.enumerated()), id: \.offset) { _, p in
+                    Text(p).fixedSize(horizontal: false, vertical: true)
                 }
             }
         }
-        .padding(.top, isFirst ? 0 : 14)
+    }
+}
+
+/// QUICK-008: `{LABEL}   ({count})`.
+struct DueSectionHeader: View {
+    let section: DueSection
+    let isFirst: Bool
+
+    var body: some View {
+        Text(section.header)
+            .font(.aaMono(AAType.small, weight: .bold))
+            .monospacedDigit()
+            .foregroundStyle(section.isOverdue ? AAColor.Status.floatingOverdue : AAColor.muted)
+            .padding(.leading, 2)
+            .padding(.bottom, 1)
+            .padding(.top, isFirst ? 0 : 9)
+            .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// QUICK-008: `— nothing —` under an empty TODAY / TOMORROW.
+struct DueNothingLine: View {
+    var body: some View {
+        Text(DueList.nothingLine)
+            .font(.aaMono(AAType.caption))
+            .foregroundStyle(AAColor.muted)
+            .padding(.leading, 6)
     }
 }
 

@@ -15,6 +15,10 @@ public enum SearchWindowText {
     public static let whereColumn = "Where"
     public static let matchColumn = "Match"
 
+    /// Rule 17 (V2-DESIGN): the status bar under the results shows only while a search runs or there are hits. Before
+    /// the first search it would be an empty strip, and with no hits the empty state already carries the status.
+    public static func showsStatusBar(isRunning: Bool, hitCount: Int) -> Bool { isRunning || hitCount > 0 }
+
     /// `No results for "{query}".` / `{n} result for "{query}".` / `{n} results for "{query}".` (query trimmed).
     public static func status(count: Int, query: String) -> String {
         count == 0 ? "No results for \"\(query)\"." : "\(count) result\(count == 1 ? "" : "s") for \"\(query)\"."

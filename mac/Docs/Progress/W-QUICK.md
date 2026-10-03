@@ -7,7 +7,8 @@
   - 01 DATA-100, DATA-113; 02 REPO-044, 078, 092, 100, 114; 03 SHELL-672, 673, 675; 06 BUILD-102;
     07 VIEW-153, VIEW-213 (+ VIEW-212 caller rows 2–3); 09 CREW-090 (14)
 - Placeholders: `Scripts/check-placeholders.sh W-QUICK` empty; `WindowsContractStatus.wQuickImplemented = true`.
-- Tests: 55 (suites `DueListTests` 19, `QuickWorkTests` 16, `WindowsSearchTrashReviewTests` 13, `ActivityLogTests` 7).
+- Tests: 76 (suites `DueListTests` 18, `QuickWorkTests` 17, `QuickWorkPickerVectorTests` 13,
+  `WindowsSearchTrashReviewTests` 13, `WindowsRound2FixTests` 8, `ActivityLogTests` 7).
 - Swift: 18 files / ~4.9k lines (AACore models 4, AA views 10, tests 4).
 - Gate: `swift build -j 3 -Xswiftc -warnings-as-errors` and `swift test -j 3 -Xswiftc -warnings-as-errors` green
   (454 tests, 72 suites, clean build); `Scripts/check-ownership.sh` reports exactly one failure — this file's path
@@ -76,3 +77,23 @@ Findings: **9 / 9 fixed**, 0 remaining.
   Search, `AASelBg/AASelFg` selection in the switcher, dynamic overdue red (`overdueMeta`) in the quick-work list.
 - Snapshots (light + dark): `scratchpad/snapshots/fix1-W-QUICK/` — quick-work (+ task selected), due, switcher,
   activity-log, search window, sheets trash and search.
+
+## Round-2 verification fixes (FIX2-W-QUICK, 2026-10-03)
+Findings: **6 / 6 fixed**, 0 rejected, 0 remaining. Regression tests: 8 (new suite `WindowsRound2FixTests`).
+- V2-SCALE (major) due panel: rows are direct children of a `LazyVStack` (`DueSectionHeader`, `DueNothingLine`,
+  `DueRowView`), so only visible rows are built; updates and row transitions animate only at ≤ 200 rows
+  (`DueList.animatesChange`), and the first fill of a new panel is not animated (no half-faded rows). On the V2-SCALE
+  data (7,299 rows, 4,653 overdue) `--snapshot due` takes 8.9 s light / 9.0 s dark (8–9 s is the data load every
+  scene pays) instead of 97 s / 14 s, and both appearances render the full list.
+- V2-SCALE (minor) `DueListBuilder.build`: `dayText` uses the cached `CalDateText` formatter; the eight days are
+  collected in one walk (`collectDays`, per-day order and dedupe identical to `Collect(day)`); `JobNav` uses a
+  per-build owner index (`JobNavIndex`) instead of a linear search per job, which was quadratic. Debug build of a
+  6,000-task mixed graph: 1.31 s → 0.15 s (test bound 1 s).
+- V2-J2 due header: `DueList.headerParts` + `headerLineGroupings`; `DueHeaderSubtitle` picks the widest grouping
+  that fits (`ViewThatFits`), so no line ends in `·` (checked at 380 pt and at 270 pt).
+- V2-J7 / V2-DESIGN Activity log: widths moved to `ActivityLogText.columnWidths` (158 / 130 / 62 / 96 / 160 / 130,
+  Detail flexible); ideal total + 88-pt table chrome + 15-pt legacy scroller = 854 ≤ 860. Kind holds
+  `Equipment/Area` and `Ports import` on one line; nothing reaches the window edge (table ends at 832 pt).
+- V2-DESIGN rule 17 Search: the status bar shows only while running or with hits (`SearchWindowText.showsStatusBar`).
+- Snapshots (light + dark): `scratchpad/snapshots/fix2-W-QUICK/` — `activity-log`, `due`, `due-big` (V2-SCALE data),
+  `due-narrow` (270 pt), `search` (empty), `sheet-search` (results with the status bar).

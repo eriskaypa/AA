@@ -34,6 +34,32 @@ public enum ActivityLogText {
     /// Column titles (08 QUICK-152).
     public static let columns = ["Time (UTC)", "Local time", "Action", "Kind", "Name", "Detail"]
 
+    /// QUICK-150 default window width (points; F3's scene `defaultSize`).
+    public static let windowWidth = 860.0
+    /// What the inset `Table` adds around its columns: leading / trailing inset plus the intercell gaps (measured 88 pt
+    /// for six columns on macOS 26: column edges at 0 / 181 / 329 / 408 / 521 / 688 / 832 for ideals summing to
+    /// 744), and a legacy (always-shown) vertical scroller when a mouse is attached.
+    public static let tableChromeWidth = 88.0, legacyScrollerWidth = 15.0
+
+    /// Column widths in points, in `columns` order (V2-J7 / V2-DESIGN). The WPF widths (170 / 150 / 80 / 130 / 200 /
+    /// 200 = 930) overflow its own 860-px window; on the Mac every column fits: the two times and the Action capsule
+    /// are sized to their fixed formats in 11-pt brand mono, Kind holds `Equipment/Area` on one line, Name and Detail
+    /// share the rest and wrap (Detail also takes any extra width).
+    public static let columnWidths: [(min: Double, ideal: Double)] = [
+        (158, 158),   // `yyyy-MM-dd HH:mm:ss UTC` (23 × 6.8 pt)
+        (130, 130),   // `yyyy-MM-dd HH:mm:ss` (19 × 6.6 pt)
+        (62, 62),     // `Removed` capsule (7 × 6.6 + 12)
+        (96, 96),     // `Equipment/Area` (14 × 6.6 pt)
+        (120, 160),   // Name (wraps)
+        (96, 130),    // Detail (wraps, flexible)
+    ]
+
+    /// The width the table needs at its ideal column widths (with a legacy scroller showing); never more than
+    /// `windowWidth`, so no column runs past the window edge (V-DESIGN rule 5).
+    public static var idealTableWidth: Double {
+        columnWidths.reduce(0) { $0 + $1.ideal } + tableChromeWidth + legacyScrollerWidth
+    }
+
     /// `"Clear all {n} activity-log entries? This can't be undone."`
     public static func clearMessage(_ n: Int) -> String { "Clear all \(n) activity-log entries? This can't be undone." }
 
