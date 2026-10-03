@@ -55,7 +55,6 @@ struct DataFileConflictBanner: View {
             }
         }
         .animation(.snappy, value: stopped)
-        .animation(.snappy, value: bridge.showsWindowsWarning)
         .onAppear { bridge.attach(env) }
     }
 }
@@ -138,14 +137,14 @@ struct PersistBannerFrame<Actions: View>: View {
                 .font(.system(size: AAType.small, weight: .medium))
                 .foregroundStyle(AAColor.fg)
                 .fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: AASpacing.s)
             HStack(spacing: AASpacing.s) { actions() }
                 .controlSize(.small)
                 .fixedSize()
         }
         .padding(.horizontal, AASpacing.m)
         .padding(.vertical, AASpacing.s)
-        .background(.bar)
+        .background(AAColor.panel)
         .background(tint.opacity(0.10))
         .overlay(alignment: .leading) { Rectangle().fill(tint).frame(width: 3) }
         .overlay(alignment: .bottom) { Rectangle().fill(AAColor.border).frame(height: 1) }

@@ -80,7 +80,7 @@ struct ConflictCopiesSheet: View {
             }
             .width(70)
             TableColumn("Last saved") { e in
-                Text(e.lastModified.map { $0.toLocalTime().format(.isoSecond) } ?? "—")
+                Text(e.lastModified == nil ? "—" : PersistConflictText.display(e.lastModified))
                     .font(.aaMono(AAType.small)).monospacedDigit()
                     .foregroundStyle(e.lastModified == nil ? AAColor.muted : AAColor.fg)
             }

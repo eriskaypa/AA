@@ -143,6 +143,12 @@ public enum PersistConflictText {
     public static let keepMine = "Keep Mine", useTheirs = "Use Theirs", review = "Review Changes…",
                       stopEditing = "Stop Editing Here", resumeEditing = "Resume Editing", conflictCopies = "Conflict Copies…"
     public static let noSaveDate = "(no save date)"
+
+    /// A stamp as local `yyyy-MM-dd HH:mm:ss`: UTC values are converted, Local/Unspecified are shown as written.
+    public static func display(_ v: NetDateTime?, zone: TimeZone = .current) -> String {
+        guard let v else { return noSaveDate }
+        return (v.kind == .utc ? v.toLocalTime(zone: zone) : v).format(.isoSecond, zone: zone)
+    }
     public static let stoppedBanner = "Read-only — this data folder is being changed outside this copy of AA. Changes here are not saved."
 
     public static func message(_ c: DataFileConflict) -> String {
@@ -297,15 +303,13 @@ public enum PersistConflictText {
     }
 
     func makeConflict(_ url: URL, _ verdict: PersistFingerprintVerdict) -> DataFileConflict {
-        let ours = store.data.lastModified.map { $0.toLocalTime(zone: ds.clock.timeZone).format(.isoSecond) }
-            ?? PersistConflictText.noSaveDate
+        let ours = PersistConflictText.display(store.data.lastModified, zone: ds.clock.timeZone)
         switch verdict {
         case .foreignDeleted, .ok:
             return DataFileConflict(kind: .deleted, fileName: url.lastPathComponent, ourTime: ours,
                                     theirTime: PersistConflictText.noSaveDate, theirBytes: nil)
         case .foreignChanged(let bytes):
-            let theirs = PersistConflictReading.lastModified(bytes, ds: ds)
-                .map { $0.toLocalTime(zone: ds.clock.timeZone).format(.isoSecond) } ?? PersistConflictText.noSaveDate
+            let theirs = PersistConflictText.display(PersistConflictReading.lastModified(bytes, ds: ds), zone: ds.clock.timeZone)
             if let why = PersistConflictReading.unreadableReason(bytes, ds: ds) {
                 return DataFileConflict(kind: .unreadable(reason: why), fileName: url.lastPathComponent, ourTime: ours,
                                         theirTime: theirs, theirBytes: bytes)

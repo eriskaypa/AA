@@ -121,10 +121,12 @@ public struct PathMapping: Codable, Sendable, Hashable {
         var winRest = uncParts(windowsPath)?.rest ?? components(String(windowsPath.dropFirst(2)))
         var macParts = chosen.standardizedFileURL.pathComponents
         if macParts.first == "/" { macParts.removeFirst() }
-        // Drop the shared tail (case-insensitive).
+        // Drop the shared tail (case-insensitive); with nothing in common, map the parent folders.
+        var dropped = false
         while let w = winRest.last, let m = macParts.last, NetText.equalsIgnoreCase(w, m) {
-            winRest.removeLast(); macParts.removeLast()
+            winRest.removeLast(); macParts.removeLast(); dropped = true
         }
+        if !dropped, !winRest.isEmpty, !macParts.isEmpty { winRest.removeLast(); macParts.removeLast() }
         if winRest.isEmpty && macParts.isEmpty { return nil }
         let prefix = ([root] + winRest).joined(separator: "\\")
         let mac = "/" + macParts.joined(separator: "/")

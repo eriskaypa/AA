@@ -51,21 +51,26 @@ struct DataFileConflictSheet: View {
                     Task { await dialogs.presentSheet(.closeType) { _ in ConflictCopiesSheet() } }
                 }
                 .help("Versions kept in the data folder's “conflicts” folder")
-                Spacer(minLength: AASpacing.l)
+                .fixedSize()
+                Spacer(minLength: AASpacing.s)
                 Button(PersistConflictText.stopEditing) { complete(.stopEditingHere) }
                     .help("Stop saving in this window; it keeps showing the data")
+                    .fixedSize()
                 if isChanged {
                     Button(PersistConflictText.review) { review() }
                         .disabled(reviewing)
+                        .fixedSize()
                     Button(PersistConflictText.useTheirs) { complete(.useTheirs) }
+                        .fixedSize()
                 }
                 Button(PersistConflictText.keepMine) { complete(.keepMine) }
                     .keyboardShortcut(.defaultAction)
                     .aaProminent()
+                    .fixedSize()
             }
         }
         .padding(AASpacing.l)
-        .frame(width: 600)
+        .frame(width: 680)
         .fixedSize(horizontal: false, vertical: true)
         .aaSheet(.decision)
     }
@@ -119,7 +124,9 @@ struct PersistConflictFacts: View {
     private var theirText: String {
         switch conflict.kind {
         case .deleted: return "deleted"
-        case .unreadable(let reason): return "\(conflict.theirTime) — can't be opened (\(reason))"
+        case .unreadable(let reason):
+            return conflict.theirTime == PersistConflictText.noSaveDate
+                ? "can't be opened (\(reason))" : "\(conflict.theirTime) — can't be opened (\(reason))"
         case .changed: return conflict.theirTime
         }
     }
