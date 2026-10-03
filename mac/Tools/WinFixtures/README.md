@@ -82,6 +82,9 @@ Each platform run owns only its own part of the tree: the unix run owns `json/ s
 services/ ext/` and the `any`/`unix` records; the windows run owns `windows/` and the `platform: windows` records
 (ids with a `w` suffix, e.g. `A25xw`). `inputs/` keeps the authored inputs (`A05.input.json`, `A10.input.json`,
 `E11.rows.json`); `xlsx/` and `xlsx-inputs/` belong to XlsxGolden and the Swift emitter and are never touched.
+`windows/bundles/R20.explorer.bundle.zip` (W21, made by hand with Explorer — `mac/Tools/WinCapture/README.md` §5) is
+an authored Windows artefact: every run carries it over, and while it is committed the bundle family adds the matrix
+rows `M.R20.*` and `P.R20` (a case whose `RequiresFile` is absent is skipped without a record).
 
 ## Files
 

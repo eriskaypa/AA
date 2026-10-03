@@ -247,7 +247,8 @@ struct GoldBundleReproducerTests {
     @Test("every bundle case group of the C# catalogue has a reproducer")
     func covered() {
         for id in ["B01", "B02", "B03", "B04", "B05a", "B05b", "B06a", "B06b", "B07", "B08.1", "B08.3", "R01", "R17",
-                   "M.R05.smart.L1", "M.B01.shared.L0", "M.R14.smart.L1w", "P.R16", "P.B05a", "T", "C01", "C01w"] {
+                   "M.R05.smart.L1", "M.B01.shared.L0", "M.R14.smart.L1w", "M.R20.smart.L0", "M.R20.shared.L1w", "P.R16",
+                   "P.B05a", "P.R20", "P.R20w", "T", "C01", "C01w"] {
             let c = GoldFixtureCase(id: id, family: "bundles", title: "", platform: .any, tz: nil, normative: .must, compare: .bytes,
                                     dependsOnToday: false, today: nil, inputs: JSONObject(), outputs: [], macExpectation: .same, settles: [])
             #expect(GoldBundleFamily.table.reproducer(for: c) != nil, "no reproducer for \(id)")

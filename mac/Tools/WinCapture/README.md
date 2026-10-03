@@ -113,7 +113,28 @@ $dir = 'C:\src\AA\mac\Tests\AACoreTests\Fixtures\xaml\wpf-capture\manual'; New-I
 foreach ($t in $d.Tasks) {
   [IO.File]::WriteAllText("$dir\$($t.Name).xaml", $t.Container.RichTextXaml, [Text.UTF8Encoding]::new($false)) }
 Copy-Item 'C:\aa-capture\data.json' "$dir\M-capture.data-json.golden.json"    # synthetic content only (DATA-314)
+# The zone AA.exe wrote its Local stamps in: the Mac re-saves M-capture byte-identically only in that zone.
+$iana = $null; [TimeZoneInfo]::TryConvertWindowsIdToIanaId([TimeZoneInfo]::Local.Id, [ref]$iana) | Out-Null
+[IO.File]::WriteAllText("$dir\M-capture.timezone.txt", $iana, [Text.UTF8Encoding]::new($false))
 ```
+
+What the Mac checks (`GoldManualCaptureTests` in `Tests/AACoreTests/WinFixtures/GoldManualCaptures.swift`, enabled
+as soon as `manual\` exists):
+
+| Capture | Compared with | Rule |
+|---|---|---|
+| M-01 | W01b-S1-typed | root `<Section …>` start tag byte-for-byte (05 §4.3.4 S-1, GF.6.10); whole body recorded |
+| M-02 | W02a-2x2-after-para | root start tag; the 2×2 `Table` element canonically equal (`Table.Columns`, `BorderThickness` form, S-4) |
+| M-03 | W03a-empty-selection | root start tag; the `Hyperlink` attribute set (S-5) |
+| M-04 | W04a-subscript | root start tag; the `Typography.Variants` values (S-9) |
+| M-05 | W05a-typed-then-deleted | the whole empty document canonically equal (S-10, 05 §9 Q6) |
+| M-06 | — | the Greek and Latin text survive; the `xml:lang` values are recorded (W24) |
+| M-07 | E13.X1 (WinFixtures) | same part sequence; `[Content_Types].xml`, `_rels/.rels`, `xl/_rels/workbook.xml.rels`, `xl/styles.xml` equal modulo newline (`text-lf`, W20); the rest recorded |
+| M-09 | W06-gestures.json | must exist when W06 recorded no key binding |
+| M-capture | the Mac codec | loads and re-saves byte-identically in the zone of `M-capture.timezone.txt` (01 §7.14-1); every `M-xx.xaml` equals its task's `RichTextXaml` |
+
+`xml:lang` attributes are ignored in the M ↔ W comparisons: AA.exe stamps typed runs with the input language, the
+programmatic typing of WinCapture does not (W24).
 
 ## 5. Windows run of WinFixtures and other Windows-only artefacts (GF.6.8, W19–W22)
 
@@ -126,7 +147,10 @@ dotnet run --project WinFixtures -c Release -- generate --platform windows --out
 * W20 is M-07.
 * W21 Explorer ZIP: in a scratch folder put a copy of `winfixtures\json\A02.appdata.golden.json` renamed `data.json`
   and `files\Wärtsilä manual.pdf` (5 bytes); select **both** items (not the folder) → right-click → Send to →
-  Compressed (zipped) folder; commit it as `winfixtures\windows\bundles\R20.explorer.bundle.zip`.
+  Compressed (zipped) folder; commit it as `winfixtures\windows\bundles\R20.explorer.bundle.zip`. The next
+  `generate` (either platform) adds the matrix rows `M.R20.{smart,shared}.{L0,L1}` and `P.R20` (record-only on unix,
+  `should` on windows); later windows runs carry the file over instead of deleting it with the regenerated
+  `windows\bundles\` folder.
 
 ## 6. Reverse check (GF.6.9, W23, DATA-325)
 

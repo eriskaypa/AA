@@ -37,6 +37,10 @@ internal sealed class CaseDef
     public bool NonDeterministic { get; init; }
     /// <summary>Settings and bundle-matrix cases mutate statics LoadSettings does not reset: one process per case.</summary>
     public bool OwnProcess { get; init; }
+    /// <summary>A fixture-root-relative file the case reads that only a person on Windows can produce (the W21
+    /// Explorer ZIP, GF.6.8). While it is absent the case is skipped entirely — no record, no output — so the
+    /// manifest never lists a case without goldens; it appears on the first generate after the file is committed.</summary>
+    public string? RequiresFile { get; init; }
     public required Action<CaseRun> Run { get; init; }
 
     public bool RunsOn(RunPlatform p) => Runs switch

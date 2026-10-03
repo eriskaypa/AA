@@ -37,6 +37,7 @@ what any golden asserts about Windows; they are naming, layout and plan refineme
 | GOLD-C6 | GF.5.f X01 | X01 split into X01.rel, X01.purge (T-REL-9 is the sanctioned Mac divergence of DECISIONS 02 Q-3 — divergent record-only), X01.rec, X01.recToday (dated by `DateTime.Today`, record-only), X01.tr, X01.log. |
 | GOLD-C7 | GF.5.b | Settings: the Mac reproduces reading (`state.load`, `reload`, `verify`); the Windows file bytes and post-call state are `mac: false` — the Mac writes settings by key-level merge (01 DATA-182) and keeps the Gemini key in the Keychain (DECISIONS 12 Q-6). |
 | GOLD-C8 | GF.5.c | B06b (sibling folder `<datadir>2`) and the R14/R15/R17 matrix rows are record-only/divergent where 01 D-13 or file-system semantics make the Mac differ by design. |
+| GOLD-C9 | GF.6.8 W21, GF.5.c | The Explorer ZIP joins the matrices as `M.R20.{smart,shared}.{L0,L1}` and `P.R20` (`Runs.Both`: record-only on unix, `should` on windows — the shell's name encoding is platform-dependent, 01 §6.7). The archive is an authored Windows artefact at `windows/bundles/R20.explorer.bundle.zip`: `CaseDef.RequiresFile` skips the rows (no record) until it is committed, and `Driver.PrepareStaging` carries it over so a windows run never deletes it with the regenerated `windows/bundles/`. |
 
 ## Reverse direction and inputs
 
@@ -46,6 +47,9 @@ what any golden asserts about Windows; they are naming, layout and plan refineme
 | GOLD-R2 | GF.8.5 | `bundles/` and `xaml/` are emitted only once W-PERSIST / W-RICH have flipped their ContractStatus (the stubs cannot produce them); the always-on `GoldMacOutTests` asserts the skip is reported. Mac-created XAML documents are built from AppKit attributes (lists via `NSTextList`, tables via `NSTextTable`, links, super/subscript, lock run attributes) and written by W-RICH's `XamlWriter`. |
 | GOLD-R3 | GF.8.5 | `mac-out/settings/*.json` avoid Mac paths (they do not exist on Windows); the `.expect.json` keys are those of `FamilyB.Dump`. |
 | GOLD-R4 | 10 §X.8 | Re-emitting `xlsx-inputs/` changes only ZIP timestamps (F2's test-book writer stamps the current time); the workbook content is identical. Regenerate the XlsxGolden goldens after a re-emission. |
+| GOLD-R6 | GF.6.7, GF.6.10 | The manual confirmations are consumed by `GoldManualCaptureTests` (enabled once `xaml/wpf-capture/manual/` exists): M-01…M-05 against their W twins on the claim each pair settles (root start tag S-1, Table S-4, Hyperlink S-5, Typography.Variants S-9, whole empty document S-10), `xml:lang` ignored (AA.exe stamps typed runs, WinCapture does not); M-06 text survival; M-07 = W20 against the E13.X1 oracle (part sequence + the four content-independent parts `text-lf`, sheet/workbook recorded); M-09 required iff W06 is empty; M-capture re-saved byte-identically in the capture zone and checked against the extracted notes. The plan names no Swift consumer for these; without one the captures would settle nothing. |
+| GOLD-R7 | GF.6.7 | The extraction script also writes `manual/M-capture.timezone.txt` (the capture machine's IANA zone) and WinCapture's MANIFEST run records `ianaTimeZone`: AA.exe writes Local stamps with the machine's offset, so the Mac reproduces M-capture byte-for-byte only in that zone (A14 shows a re-save elsewhere rewrites offsets). |
+| GOLD-R8 | GF.9, DATA-326 | `GoldAcceptanceGateTests` checks GF.9 items 1 (provenance = the pinned commit and hashes; a longer `git %h` abbreviation of the same commit is accepted), 3 (the GF.1.1 ledger, encoded row by row, resolves against the committed manifests), 6 (under `AA_REQUIRE_FIXTURES=1` every fixture source — manual, W23, XlsxGolden, clipboard inputs — must exist) and 9 (the read-only Windows sources still hash to `original-source-checksums.sha256`, always on). The new test `GoldW01bRootTagTests` asserts GF.6.10 (a new Mac document's root start tag = W01b's) once W-RICH has flipped. |
 | GOLD-R5 | 10 §X.7.6 | `portsDate` / `portsTime` (the Ports reader's `NormDate` / `NormTime`) are recorded by XlsxGolden but not compared yet — W-VESSEL's private code (REQ-W-GOLD-04). |
 
 ## Tooling
@@ -69,12 +73,14 @@ Branch `wave/W-GOLD`. Format of each row: ID · status · where.
 | | Count |
 |---|---|
 | Feature IDs | 27 (DATA-300…326) |
-| Implemented in this worktree (code + tests/docs) | 25 |
-| Not done here — needs a person on Windows (tooling and procedure complete) | 2 (DATA-322, DATA-323) |
+| Complete in this worktree (code + tests/docs) | 23 |
+| Complete here, Swift reproducers of some must-cases pending another owner's API (Requests) | 2 (DATA-319: E09, E11, E13, E15b; DATA-320: X04, X05, X06) |
+| Not done here — needs a person on Windows (tooling, procedure and the Swift consumer complete) | 2 (DATA-322, DATA-323) |
 | Placeholders / ContractStatus owned | 0 (`Scripts/check-placeholders.sh W-GOLD` prints nothing) |
 | Goldens committed | 0 Windows goldens (no .NET SDK here; see "Remaining") · 16 mac-out artefacts · 6 synthetic XLSX inputs |
-| Swift | 19 files under `Tests/AACoreTests/WinFixtures/`, 5 283 lines, 67 `@Test` functions (several parameterised over the manifest) |
-| C# | 3 oracle projects under `Tools/`, ~7 000 lines, compiled by inspection only |
+| Swift | 21 files under `Tests/AACoreTests/WinFixtures/`, 6 235 lines, 90 `@Test` functions (several parameterised over the manifest) |
+| C# | 3 oracle projects under `Tools/`, ~7 060 lines, compiled by inspection only |
+| Gate | `swift build`/`swift test -warnings-as-errors` green (489 tests in 97 suites), `check-ownership` OK, `check-placeholders W-GOLD` empty |
 
 ### Feature IDs
 
@@ -99,14 +105,14 @@ Branch `wave/W-GOLD`. Format of each row: ID · status · where.
 | DATA-316 family (b) | done | C# `FamilyB.cs` (S01–S12, one process each); Swift `GoldSettingsGoldenTests.swift` |
 | DATA-317 family (c) | done | C# `FamilyC.cs` (B01–B08, R01–R17, M, P, T, C01); Swift `GoldBundleGoldenTests.swift` (writer/import/peek gated on W-PERSIST; B07/B08 run now) |
 | DATA-318 family (d) | done | C# `FamilyD.cs` (K01–K10); Swift `GoldCryptoGoldenTests.swift` (K03/K08 literal tests pass) |
-| DATA-319 family (e) | done (4 cases pending other owners) | C# `FamilyE.cs` (E01–E16); Swift `GoldServiceGoldenTests.swift`; E09, E11, E15b → REQ-W-GOLD-01, E13 → REQ-W-GOLD-02 |
-| DATA-320 family (f) | done (3 cases pending other owners) | C# `FamilyF.cs` (X01.rel/purge/rec/recToday/tr/log, X02–X06); Swift `GoldExtGoldenTests.swift`; X04/X05 → REQ-W-GOLD-03, X06 → REQ-W-GOLD-01 |
+| DATA-319 family (e) | partial — C# complete; Swift reproducers for E09, E11, E13, E15b pending other owners | C# `FamilyE.cs` (E01–E16); Swift `GoldServiceGoldenTests.swift`; E09, E11, E15b → REQ-W-GOLD-01, E13 → REQ-W-GOLD-02 |
+| DATA-320 family (f) | partial — C# complete; Swift reproducers for X04, X05, X06 pending other owners | C# `FamilyF.cs` (X01.rel/purge/rec/recToday/tr/log, X02–X06); Swift `GoldExtGoldenTests.swift`; X04/X05 → REQ-W-GOLD-03, X06 → REQ-W-GOLD-01 |
 | DATA-321 WinCapture W01–W18 | done | `Tools/WinCapture/` (Program.cs W01–W06, Cases/Recipes.cs W07–W18, culture invariance); Swift `GoldXamlCaptureTests.swift` (gated on W-RICH) |
 | DATA-322 clipboard input capture | **not done** — needs Word/Excel/Outlook/Edge on Windows | tool `WinCapture dump-clipboard` and the R-1…R-11 / H-1…H-7 recipe table are complete (`Tools/WinCapture/README.md` §2) |
-| DATA-323 manual confirmations M-01…M-09 | **not done** — needs a person driving AA.exe on Windows | procedure + extraction script complete (`Tools/WinCapture/README.md` §4) |
-| DATA-324 Windows-only non-WPF artefacts | done (tooling) | W19 in FamilyA (`Runs.Windows`), windows run + neutrality cross-check in `Driver`, W21 Explorer-ZIP procedure; W20 = M-07 |
+| DATA-323 manual confirmations M-01…M-09 | **not done** — needs a person driving AA.exe on Windows | procedure + extraction script complete (`Tools/WinCapture/README.md` §4); Swift consumer `GoldManualCaptures.swift` (M ↔ W claims, M-06, M-09, M-capture round trip) with synthetic self-tests (GOLD-R6/R7) |
+| DATA-324 Windows-only non-WPF artefacts | done (tooling) | W19 in FamilyA (`Runs.Windows`), windows run + neutrality cross-check in `Driver`; W21 Explorer ZIP joins the M/P matrices as R20 and survives windows runs (GOLD-C9); W20 = M-07, compared with E13.X1 by `GoldManualCaptureTests` |
 | DATA-325 WPF load-check of Mac XAML (W23) | done | `WinCapture load-check`; Swift `GoldMacRoundtripTests` (load-check rows, sentinel count, canonical differences recorded, text check gated on W-RICH) |
-| DATA-326 acceptance gate | done (harness side) | `GoldFixturePresenceTests` (absence fails under `AA_REQUIRE_FIXTURES=1`; open spec conflicts / platform divergences fail); `fixtures.sh ci` |
+| DATA-326 acceptance gate | done (harness side) | `GoldFixturePresenceTests` (absence fails under `AA_REQUIRE_FIXTURES=1`; open spec conflicts / platform divergences fail); `GoldAcceptanceGate.swift` (GF.9 items 1, 3, 6, 9 — GOLD-R8); `fixtures.sh ci` |
 
 10 §X.7.6 XlsxGolden (not a DATA id): `Tools/XlsxGolden/` + `GoldXlsxGoldenTests.swift` + synthetic X.8 inputs
 `Fixtures/winfixtures/xlsx-inputs/` (emitter `GoldXlsxInputEmitter`).
@@ -119,5 +125,24 @@ Branch `wave/W-GOLD`. Format of each row: ID · status · where.
 2. Windows capture machine: `WinCapture all`, DATA-322 clipboard inputs, DATA-323 manual steps, the windows run of
    WinFixtures (`generate --platform windows`, W19/W22), W21 Explorer ZIP, `check-mac --platform windows`,
    `load-check` (W23) over `mac-out/xaml` once W-RICH has emitted it.
-3. Post-merge: re-run `Scripts/fixtures.sh emit-mac-out` once W-PERSIST and W-RICH have flipped (adds `bundles/`,
+3. Windows capture machine, W21: the Explorer ZIP `windows/bundles/R20.explorer.bundle.zip`, then a `generate` to add
+   its M/P rows.
+4. Post-merge: re-run `Scripts/fixtures.sh emit-mac-out` once W-PERSIST and W-RICH have flipped (adds `bundles/`,
    `xaml/`); write the pending reproducers when REQ-W-GOLD-01…04 are answered; `Scripts/fixtures.sh require`.
+
+### Independent audit (2026-10-02)
+
+Gate re-run from a clean `.build`: green. Every DATA-300…326 row re-read against the spec and the code. Found and
+fixed:
+
+| Gap | Fix |
+|---|---|
+| W21 (GF.6.8): "the M matrix gains row R20 on the next generate" was not implemented, and a `generate --platform windows` would have deleted a committed `windows/bundles/R20.explorer.bundle.zip` (the windows run rebuilds `windows/bundles/` from scratch) | `FamilyC` R20 rows, `CaseDef.RequiresFile`, `Driver.AuthoredWindowsArtefacts` carried into staging (GOLD-C9); coverage ids in `GoldBundleReproducerTests` |
+| DATA-323 / W20 / W24: nothing on the Swift side read `wpf-capture/manual/` — the manual confirmations, the shipped-exe XLSX and the AA.exe-written data.json would have settled nothing | `GoldManualCaptures.swift` + synthetic self-tests; README §4 table and the timezone file (GOLD-R6, GOLD-R7) |
+| GF.9 items 1, 3, 6, 9 had no check (ledger coverage, provenance, release-gate presence of manual/W23/XlsxGolden/clipboard sources, source pins) | `GoldAcceptanceGate.swift` (GOLD-R8) |
+| GF.6.10: the W01b root start tag was never compared with the Mac writer's new-document root | `GoldW01bRootTagTests` (runs once W-RICH flips and W01b is committed) |
+| DATA-319/320 were counted done although seven must/should reproducers are pending other owners | counted as partial above |
+
+Not fixable here: the .NET 10 SDK is not installed (runtime 10.0.12 only), so the C# oracles are still unbuilt; the
+audit re-checked their calls against the linked AA sources by inspection (DataStore, AppRepository, PasswordService,
+ItemLockService, DataDiff, Models, ZIP inspection) and found no mismatch.

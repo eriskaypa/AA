@@ -17,6 +17,11 @@ internal static class Driver
     /// <summary>Authored inputs: committed by hand, read by both the generator and the Swift tests, never rewritten.</summary>
     public static readonly string[] AuthoredInputs = { "A05.input.json", "A10.input.json", "E11.rows.json" };
 
+    /// <summary>Windows artefacts made by hand (GF.6.8 W21: the Explorer "Send to → Compressed folder" ZIP). They live
+    /// inside a family folder the windows run regenerates, so the staging root must carry them over explicitly or a
+    /// `generate --platform windows` would silently delete them.</summary>
+    public static readonly string[] AuthoredWindowsArtefacts = { "windows/bundles/" + FamilyC.ExplorerBundle };
+
     /// <summary>Folders of the fixture root that WinFixtures never touches (XlsxGolden's output, the Swift emitter's
     /// synthetic workbooks).</summary>
     private static readonly string[] ForeignFolders = { "xlsx", "xlsx-inputs" };
@@ -171,6 +176,14 @@ internal static class Driver
         foreach (var a in AuthoredInputs)
             if (!File.Exists(Path.Combine(staging, "inputs", a)) && File.Exists(Path.Combine(root, "inputs", a)))
                 File.Copy(Path.Combine(root, "inputs", a), Path.Combine(staging, "inputs", a), true);
+        foreach (var rel in AuthoredWindowsArtefacts)
+        {
+            var src = Path.Combine(root, rel.Replace('/', Path.DirectorySeparatorChar));
+            var dst = Path.Combine(staging, rel.Replace('/', Path.DirectorySeparatorChar));
+            if (!File.Exists(src) || File.Exists(dst)) continue;
+            Directory.CreateDirectory(Path.GetDirectoryName(dst)!);
+            File.Copy(src, dst, true);
+        }
     }
 
     private static void CopyTree(string src, string dst)
@@ -413,6 +426,11 @@ internal static class Driver
         {
             var commits = def.Commits(platform);
             if (!commits && neutral == null) continue;
+            if (def.RequiresFile != null && !File.Exists(Path.Combine(staging, def.RequiresFile.Replace('/', Path.DirectorySeparatorChar))))
+            {
+                Console.WriteLine($"  {def.Id,-14} skipped: {def.RequiresFile} is not committed yet");
+                continue;
+            }
             World.Reset();
             var run = new CaseRun(def, commits ? staging : neutral!, dataDir, platform, runId, today);
             try { def.Run(run); }

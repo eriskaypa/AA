@@ -64,6 +64,15 @@ internal static class FamilyC
         "R13.bundle.zip", "R14.bundle.zip", "R15.bundle.zip", "R16.bundle.aaz", "R17a.bundle.zip", "R17b.bundle.zip",
     };
 
+    /// <summary>W21 (GF.6.8): the Explorer "Send to → Compressed (zipped) folder" bundle, made by hand on Windows and
+    /// committed as windows/bundles/R20.explorer.bundle.zip. The M and P matrices gain its rows on the first generate
+    /// after it is committed (CaseDef.RequiresFile); until then they are skipped.</summary>
+    internal const string ExplorerBundle = "R20.explorer.bundle.zip";
+    private const string ExplorerBundleRel = "windows/bundles/" + ExplorerBundle;
+
+    /// <summary>The fixture-root-relative path of a matrix bundle (recorded as the cell's `bundle` input).</summary>
+    private static string BundleRel(string bundle) => bundle == ExplorerBundle ? ExplorerBundleRel : "bundles/" + bundle;
+
     private static bool PlatformSensitive(string bundle) =>
         bundle.StartsWith("R14", StringComparison.Ordinal) || bundle.StartsWith("R15", StringComparison.Ordinal) ||
         bundle.StartsWith("R17", StringComparison.Ordinal);
@@ -252,6 +261,20 @@ internal static class FamilyC
                     };
                 }
 
+        // W21: the Explorer ZIP. Its entry names are encoded by the Windows shell (OEM code page or UTF-8, depending on
+        // the build) and it carries no source.json, so the unix run is a record (the Mac's own CP437 rule is 01 §6.7)
+        // and the windows run — AA.exe on its own platform's archive — is the reference the Mac should meet.
+        foreach (var op in new[] { "smart", "shared" })
+            foreach (var state in new[] { "L0", "L1" })
+                yield return new CaseDef
+                {
+                    Id = $"M.R20.{op}.{state}", Family = F, OwnProcess = true, Compare = "json-semantic",
+                    Runs = Runs.Both, Normative = "record-only", NormativeWindows = "should", RequiresFile = ExplorerBundleRel,
+                    Title = $"{(op == "smart" ? "ImportBundleSmart" : "ImportSharedBundle")}(W21 Explorer ZIP) with local {state}",
+                    Settles = new[] { "01 §7.7", "01 §6.7", "GF.6.8 W21" },
+                    Run = r => MatrixCell(r, ExplorerBundle, op, state),
+                };
+
         // ---- peek matrix P ------------------------------------------------------------------------------------------
         foreach (var bundle in MatrixBundles)
         {
@@ -261,22 +284,16 @@ internal static class FamilyC
                 Id = $"P.{stem}", Family = F, Compare = "json-semantic", Title = $"peeks of {bundle}",
                 Normative = PlatformSensitive(bundle) ? "record-only" : "must",
                 Settles = new[] { "01 §3.9", "01 §3.10" },
-                Run = r =>
-                {
-                    var path = StagedBundle(r, bundle);
-                    var src = DataStore.PeekBundleSource(path);
-                    var data = DataStore.PeekZipData(path);
-                    r.Input("bundle", "bundles/" + bundle);
-                    r.Json("result", "peek", new JsonObject
-                    {
-                        ["lastModified"] = Shapes.DateOrNull(DataStore.PeekZipLastModified(path)),
-                        ["source"] = src == null ? null : JsonNode.Parse(JsonSerializer.Serialize(src, Opts)),
-                        ["identity"] = DataStore.PeekBundleIdentity(path),
-                        ["data"] = data == null ? null : JsonNode.Parse(JsonSerializer.Serialize(data, Opts)),
-                    });
-                },
+                Run = r => PeekCell(r, bundle),
             };
         }
+        yield return new CaseDef
+        {
+            Id = "P.R20", Family = F, Compare = "json-semantic", Title = "peeks of the W21 Explorer ZIP",
+            Runs = Runs.Both, Normative = "record-only", NormativeWindows = "should", RequiresFile = ExplorerBundleRel,
+            Settles = new[] { "01 §3.9", "01 §3.10", "GF.6.8 W21" },
+            Run = r => PeekCell(r, ExplorerBundle),
+        };
 
         // ---- truth tables T -------------------------------------------------------------------------------------------
         yield return new CaseDef
@@ -409,11 +426,13 @@ internal static class FamilyC
     {
         // This run's own archive first (the windows run writes `any` cases under <neutral>/windows/bundles), then the
         // committed unix archive the staging tree was seeded with (bundles/).
-        var candidates = new[]
-        {
-            Path.Combine(r.Root, r.Rel(bundle).Replace('/', Path.DirectorySeparatorChar)),
-            Path.Combine(r.Root, "bundles", bundle),
-        };
+        var candidates = bundle == ExplorerBundle
+            ? new[] { Path.Combine(r.Root, ExplorerBundleRel.Replace('/', Path.DirectorySeparatorChar)) }   // committed by hand (W21)
+            : new[]
+            {
+                Path.Combine(r.Root, r.Rel(bundle).Replace('/', Path.DirectorySeparatorChar)),
+                Path.Combine(r.Root, "bundles", bundle),
+            };
         var src = candidates.FirstOrDefault(File.Exists)
                   ?? throw new FileNotFoundException("bundle archive not generated yet", candidates[0]);
         var dst = Path.Combine(Scratch(r), bundle);
@@ -421,12 +440,27 @@ internal static class FamilyC
         return dst;
     }
 
+    private static void PeekCell(CaseRun r, string bundle)
+    {
+        var path = StagedBundle(r, bundle);
+        var src = DataStore.PeekBundleSource(path);
+        var data = DataStore.PeekZipData(path);
+        r.Input("bundle", BundleRel(bundle));
+        r.Json("result", "peek", new JsonObject
+        {
+            ["lastModified"] = Shapes.DateOrNull(DataStore.PeekZipLastModified(path)),
+            ["source"] = src == null ? null : JsonNode.Parse(JsonSerializer.Serialize(src, Opts)),
+            ["identity"] = DataStore.PeekBundleIdentity(path),
+            ["data"] = data == null ? null : JsonNode.Parse(JsonSerializer.Serialize(data, Opts)),
+        });
+    }
+
     private static void MatrixCell(CaseRun r, string bundle, string op, string state)
     {
         LocalData();
         LocalState(state);
         var path = StagedBundle(r, bundle);
-        r.Input("bundle", "bundles/" + bundle);
+        r.Input("bundle", BundleRel(bundle));
         r.Input("operation", op == "smart" ? "ImportBundleSmart" : "ImportSharedBundle");
         r.Input("localState", state);
         var before = File.ReadAllBytes(DataStore.DefaultDataFile);

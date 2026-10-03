@@ -109,7 +109,10 @@ internal static partial class Program
             ["environment"] = JsonSerializer.SerializeToNode(Env()),
             ["generatedAtUtc"] = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture),
             ["today"] = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            ["runs"] = new JsonArray(new JsonObject { ["platform"] = "windows", ["timeZone"] = TimeZoneInfo.Local.Id, ["culture"] = "en-US" }),
+            ["runs"] = new JsonArray(new JsonObject
+            {
+                ["platform"] = "windows", ["timeZone"] = TimeZoneInfo.Local.Id, ["ianaTimeZone"] = IanaZone(), ["culture"] = "en-US",
+            }),
             ["cases"] = new JsonArray(Cases.OrderBy(c => (string?)c["id"], StringComparer.Ordinal).Select(c => (JsonNode?)c).ToArray()),
             ["specConflicts"] = new JsonArray(),
             ["platformDivergences"] = new JsonArray(),
@@ -117,6 +120,15 @@ internal static partial class Program
         File.WriteAllText(Path.Combine(outDir, "MANIFEST.json"), manifest.ToJsonString(Meta) + "\n");
         Console.WriteLine($"WinCapture: {Cases.Count} capture(s) in {outDir}");
         return 0;
+    }
+
+    /// <summary>The capture machine's zone as an IANA id (the Mac's TimeZone cannot read Windows ids); the manual
+    /// M-capture round trip falls back to it when manual\M-capture.timezone.txt is absent.</summary>
+    private static string? IanaZone()
+    {
+        var local = TimeZoneInfo.Local;
+        if (local.HasIanaId) return local.Id;
+        return TimeZoneInfo.TryConvertWindowsIdToIanaId(local.Id, out var iana) ? iana : null;
     }
 
     /// <summary>SHA-256 of the linked files (DATA-301 provenance; a mismatch is reported, not fatal, so a capture
