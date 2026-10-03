@@ -1,0 +1,23 @@
+# W-FILES — deviations and P2 fixes (ARCHITECTURE.md §12.2)
+
+P2 fixes and sanctioned deviations applied by the file bank, the read-only viewer, Quick Look and the backlinks
+section. Stored data keeps the Windows shape in every row (no new keys, same `Path` forms, same `Kind` integers).
+
+| ID | Spec ref | Change (one line) |
+|---|---|---|
+| D-5 | 05 CONT-087, §8 D-5, DECISIONS 05 | Cut + Paste is a true move: the same entry (same Id) is appended to the target and removed from the source container; a second paste of the same clipboard makes copies (Windows cut mode switches off after one paste). Duplicate FileItem Ids in data are tolerated (rows are identified by object identity). |
+| K-8 | 05 CONT-083, §8 K-8 | Add Folder / plain folder drops skip `.DS_Store`, `._*` and `Icon\r`; other hidden files are imported. Files are listed in ordinal name order per folder (Windows: file-system order). |
+| K-9 | 05 CONT-082, §8 K-9 | A failed copy is never stored as an absolute path labelled Copy: the alert "Import failed" lists the files and offers "Link in Place Instead" (the entries then have `LinkInPlace = true`). |
+| K-10 | 05 CONT-091, §8 K-10 | Show in Finder (= "Open containing folder") reveals in-place folder entries too. |
+| K-11 | 05 CONT-093, §8 K-11, 07 VIEW-210 | The Link to Items picker (F3's shared picker) keeps selections hidden by the search filter; OK still applies VIEW-215 replace-and-normalise + MarkDirty. |
+| K-17 | 05 CONT-080, §8 K-17 | The Added column uses the user's locale (short date + time), not en-US. |
+| DECISIONS 05 | 05 CONT-093, CONT-095 | Additive UI for data Windows never shows: a "Linked to" column on every tab, `FileBacklinksSection` (item backlinks, with Show Owner / Link to Items… / Unlink from This Item), a "Shared" view listing the files of every container whose `SharedWithContainerIds` names this one, and a Sharing menu (Share With… picker, Show Owner, Stop Sharing). Ids that name no loaded container are kept untouched. |
+| Locks | 04 HIER-057 analogue, PDF Q6 | Files of a password-gated owner are never listed in the Shared view or in backlinks: one "(locked item — unlock it to see its files)" line per owner, counted but not named. |
+| §6.9 superset | 05 §6.9, CONT-096 | Multi-selection in every tab; list and icon views (per-Mac preference `aa.filebank.viewMode`); QuickLook thumbnails; drag rows out to Finder/Mail (file URLs, links as URLs); per-tab counts; empty states; Quick Look (Space / ⌘Y), ⌘↓ / ↩ / double-click open; context-menu additions Quick Look, Open With ▸, Copy Path, Cut / Copy / Paste. |
+| Open | 05 CONT-089 | Open (button, menu, ↩, ⌘↓) opens every selected entry, Finder-style (Windows: the first selected); Rename… and Link to Items… act on the first selected entry, as on Windows. |
+| Clipboard | 05 §6.9 | The file-bank clipboard is app-wide (works across windows) and is mirrored to the system pasteboard as file URLs (⌘C in AA, ⌘V in Finder/Mail works). When the system pasteboard changed since (e.g. ⌘C in Finder), Paste imports its files as copies and its web URLs as links. |
+| Drops | 05 CONT-085, §6.9, SHELL-679 | Modifier ⇧ or ⌥⌘ links in place (Finder's make-alias gesture; SwiftUI has no link drop operation, so the cursor shows copy and the drop overlay names the mode). Dropped web URLs become web links (CONT-086 shape). Files already in this bank are skipped; a file from AA's own `files/` folder (dragged from another bank) is referenced, not re-copied. |
+| Packages | DECISIONS 05 | A package dropped/added as a copy is one zipped `files/` entry (W-PERSIST's `AttachmentStore.importFile`); its display name gets `.zip` so it is not mistaken for the original package. |
+| Link in place | 05 §6.9 | New in-place links store a Windows-openable form when one exists: the per-Mac path-mapping table in reverse (`/Volumes/Ops/a.pdf` → `Z:\a.pdf`), else the UNC form of a mounted SMB share (`\\server\share\…`), else the POSIX path. Existing paths are never rewritten (CONT-097). The Link in Place panel accepts files and folders (Windows: files only, folders via Shift-drop). |
+| Windows paths | ARCH §9.4, DECISIONS 10 Q4 | Opening an unmapped drive-letter path shows "This file is on a Windows drive (Z:). …" with "File Links Settings…"; an unmapped UNC path offers "Connect to Server…" (Finder mounts `smb://server/share`, the open is retried for 15 s) and "File Links Settings…". |
+| Viewer | 04 HIER-136, HIER-M06, §6.8 | The read-only viewer is a sheet (820×620): ⎋ / ⌘W / ↩ close it; its file list adds Quick Look (Space / ⌘Y), ⌘↓ / ↩ open, drag out, Show in Finder and Copy Path; the text view supports the find bar (⌘F routed via `AARichTextResponder`, kind `.viewer`). |
