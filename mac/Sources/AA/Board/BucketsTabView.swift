@@ -137,9 +137,11 @@ struct BucketsTabView: View {
             if bucket == nil {
                 AAEmptyState(title: "No bucket selected", symbol: "tray.2",
                              message: "Choose a bucket on the left to see its members.")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if members.isEmpty {
                 AAEmptyState(title: "This bucket is empty", symbol: "tray",
                              message: "Sort tasks, procedures and checklist steps into it in the \u{2318}N quick-work window.")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(selection: $selectedMember) {
                     ForEach(members) { m in
