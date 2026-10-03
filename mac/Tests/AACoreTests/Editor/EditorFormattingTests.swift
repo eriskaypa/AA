@@ -470,6 +470,21 @@ import Testing
         #expect(clean.attribute(.foregroundColor, at: 7, effectiveRange: nil) as? NSColor == EditorFormatting.editorInk)
     }
 
+    // TV: 05 §6.4 — pasted TextKit 1 list markers are tagged, never stored as text
+    @Test func pastedListMarkersAreTagged() {
+        let p = NSMutableParagraphStyle()
+        p.textLists = [NSTextList(markerFormat: .disc, options: 0)]
+        let s = NSMutableAttributedString(string: "\t•\tOne\n\t•\tTwo\nplain\ttab\n",
+                                          attributes: [.font: NSFont.systemFont(ofSize: 12)])
+        s.addAttribute(.paragraphStyle, value: p, range: NSRange(location: 0, length: 14))
+        let (clean, _) = EditorRichSanitiser.sanitise(s, base: EditorFormatting.defaultTypingAttributes())
+        #expect(clean.attribute(.aaListMarker, at: 0, effectiveRange: nil) as? Bool == true)
+        #expect(clean.attribute(.aaListMarker, at: 2, effectiveRange: nil) as? Bool == true)
+        #expect(clean.attribute(.aaListMarker, at: 3, effectiveRange: nil) == nil)
+        #expect(clean.attribute(.aaListMarker, at: 7, effectiveRange: nil) as? Bool == true)
+        #expect(clean.attribute(.aaListMarker, at: 19, effectiveRange: nil) == nil)          // ordinary tab
+    }
+
     @Test func pastedImageName() {
         var c = DateComponents()
         c.year = 2026; c.month = 10; c.day = 2; c.hour = 14; c.minute = 5; c.second = 9

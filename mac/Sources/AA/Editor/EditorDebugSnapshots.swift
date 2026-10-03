@@ -49,6 +49,7 @@ extension SnapshotRegistry {
         register("w-cont.insert-link-invalid") { _ in
             AnyView(EditorInsertLinkSheet(initial: "https://") { _ in })
         }
+        register("w-cont.selftest") { _ in AnyView(EditorSelfTestView()) }
         register("w-cont.palettes") { _ in
             AnyView(HStack(alignment: .top, spacing: 16) {
                 EditorColorPalette(kind: .text) { _ in }.background(AAColor.panel).border(AAColor.border)
@@ -148,6 +149,107 @@ struct EditorPreviewHost: View {
         }
         out.append(t)
         add("Typed after the table. Boundaries of locked text stay editable.\n")
+        return out
+    }
+}
+
+/// Drives a live controller through the AppKit paths unit tests cannot reach (lock gate in `shouldChangeText`,
+/// undo of attribute edits, table/link insertion through `apply`, alignment, Tab) and shows ✓ / ✗ per step.
+struct EditorSelfTestView: View {
+    @State private var controller = EditorController()
+    @State private var results: [(String, Bool)] = []
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            EditorPane(controller: controller, title: "Self-test")
+                .frame(width: 560, height: 520)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Editor self-test").font(.system(size: AAType.body, weight: .bold))
+                ForEach(Array(results.enumerated()), id: \.offset) { _, r in
+                    Label(r.0, systemImage: r.1 ? "checkmark.circle.fill" : "xmark.octagon.fill")
+                        .foregroundStyle(r.1 ? AAColor.Status.ok : AAColor.Status.danger)
+                        .font(.system(size: AAType.small))
+                }
+                Spacer()
+            }
+            .frame(width: 330, height: 520, alignment: .topLeading)
+        }
+        .padding(12)
+        .onAppear { results = Self.run(controller) }
+    }
+
+    @MainActor static func run(_ c: EditorController) -> [(String, Bool)] {
+        var out: [(String, Bool)] = []
+        func check(_ name: String, _ ok: Bool) { out.append((name, ok)) }
+        let base = EditorFormatting.defaultTypingAttributes(paragraphStyle: EditorController.defaultParagraphStyle())
+        let doc = NSMutableAttributedString(string: "abcDEFghi\nsecond line\n", attributes: base)
+        EditorLocking.lock(doc, range: NSRange(location: 3, length: 3))
+        c.showPreview(doc, selection: NSRange(location: 0, length: 0))
+        let tv = c.textView
+        let storage = tv.textStorage!
+
+        tv.setSelectedRange(NSRange(location: 4, length: 0))
+        tv.insertText("X", replacementRange: tv.selectedRange())
+        check("typing inside a lock is blocked", storage.string.hasPrefix("abcDEFghi"))
+        tv.setSelectedRange(NSRange(location: 3, length: 0))
+        tv.insertText("Y", replacementRange: tv.selectedRange())
+        check("typing at a lock boundary works", storage.string.hasPrefix("abcYDEFghi"))
+        check("new text at the boundary is not locked", !EditorLocking.isLocked(storage, at: 3))
+        tv.setSelectedRange(NSRange(location: 6, length: 0))
+        tv.deleteBackward(nil)
+        check("Backspace into a lock is blocked", storage.string.hasPrefix("abcYDEFghi"))
+
+        tv.setSelectedRange(NSRange(location: 0, length: 3))
+        c.perform(.bold)
+        check("Bold applies to the selection", EditorFormatting.isBold(storage.attribute(.font, at: 1, effectiveRange: nil) as? NSFont))
+        check("format bar reflects Bold", c.summary.bold)
+        c.undo()
+        check("Undo removes Bold", !EditorFormatting.isBold(storage.attribute(.font, at: 1, effectiveRange: nil) as? NSFont))
+        c.redo()
+        check("Redo re-applies Bold", EditorFormatting.isBold(storage.attribute(.font, at: 1, effectiveRange: nil) as? NSFont))
+
+        tv.setSelectedRange(NSRange(location: 3, length: 4))
+        c.perform(.highlight(ARGB(r: 0xC5, g: 0xE1, b: 0xA5)))
+        check("Highlight keeps the lock (D-4)", EditorLocking.isLocked(storage, at: 5))
+        c.perform(.clearFormatting)
+        check("Clear formatting keeps the lock (D-4)", EditorLocking.isLocked(storage, at: 5))
+
+        tv.setSelectedRange(NSRange(location: 12, length: 0))
+        c.perform(.alignRight)
+        let align = (storage.attribute(.paragraphStyle, at: 12, effectiveRange: nil) as? NSParagraphStyle)?.alignment
+        check("Align right on the caret paragraph", align == .right)
+        check("format bar reflects alignment", c.summary.alignment == .right)
+
+        let lenBefore = storage.length
+        c.insertTable(rows: 2, columns: 3)
+        let tableParas = (0..<storage.length).filter {
+            (storage.attribute(.paragraphStyle, at: $0, effectiveRange: nil) as? NSParagraphStyle)?.textBlocks.isEmpty == false
+        }.count
+        check("Insert table adds 2×3 cells", tableParas == 6 && storage.length > lenBefore)
+        check("caret lands in the first cell", EditorBlocks.isTableParagraph(storage, at: tv.selectedRange().location))
+        tv.insertText("Part", replacementRange: tv.selectedRange())
+        check("typing in the header cell is bold",
+              EditorFormatting.isBold(storage.attribute(.font, at: tv.selectedRange().location - 1, effectiveRange: nil) as? NSFont))
+        c.undo()
+        c.undo()
+        check("Undo removes the table", (0..<storage.length).allSatisfy {
+            (storage.attribute(.paragraphStyle, at: $0, effectiveRange: nil) as? NSParagraphStyle)?.textBlocks.isEmpty != false
+        })
+
+        tv.setSelectedRange(NSRange(location: storage.length, length: 0))
+        let edit = EditorLinkRules.insertion(url: "https://www.imo.org/", in: storage, selection: tv.selectedRange(),
+                                             typing: tv.typingAttributes, linkColor: EditorLinkRules.editorLinkColor)
+        c.apply(edit, actionName: "Insert Link")
+        check("link inserted at the caret", storage.string.hasSuffix("https://www.imo.org/"))
+        check("link carries .link", storage.attribute(.link, at: storage.length - 2, effectiveRange: nil) != nil)
+
+        tv.setSelectedRange(NSRange(location: 10, length: 0))
+        tv.insertTab(nil)
+        check("Tab outside a list inserts a tab", (storage.string as NSString).character(at: 10) == 0x09)
+
+        tv.setSelectedRange(NSRange(location: 0, length: 0))
+        c.perform(.bigger)
+        check("Bigger steps the typing size by 0.75", ((tv.typingAttributes[.font] as? NSFont)?.pointSize ?? 0) == 14.75)
         return out
     }
 }

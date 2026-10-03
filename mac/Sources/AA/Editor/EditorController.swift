@@ -61,7 +61,16 @@ final class EditorController: NSObject {
     /// The text storage is the root of the TextKit 1 object graph; keep it alive explicitly.
     @ObservationIgnored private var _textStorage: NSTextStorage?
 
+    @ObservationIgnored private weak var flushCenter: EditorFlushCenter?
+
     override init() { super.init() }
+
+    /// A destroyed editor gives up its container (the next editor of it un-parks) and its flush registration.
+    isolated deinit {
+        if let c = container { EditorBindingRegistry.release(self, container: c) }
+        if let token = flushToken { flushCenter?.unregister(token) }
+        for o in undoObservers { NotificationCenter.default.removeObserver(o) }
+    }
 
     // MARK: Views (created lazily — SwiftUI may construct controllers it never uses)
 
@@ -209,6 +218,7 @@ final class EditorController: NSObject {
             env.flush.rebind(token, to: container)
         } else {
             flushToken = env.flush.register(container: container, host: hostDescription) { [weak self] in self?.flush() }
+            flushCenter = env.flush
         }
         observeContainerText()
     }
@@ -231,6 +241,12 @@ final class EditorController: NSObject {
         observationGeneration += 1
         dataReplacedSubscription = nil
         noticeTask?.cancel()
+    }
+
+    /// The view left the screen (tab switch, window closing): persist now, keep the binding (and undo) so coming
+    /// back is instant; `deinit` releases everything when the view is destroyed.
+    func viewDisappeared() {
+        flush()
     }
 
     /// CONT-005: persist now if an edit is pending (hosts, ⌘S, quit, sync, export).

@@ -49,7 +49,7 @@ struct ContainerEditorView: View {
             }
         }
         .onAppear { bind() }
-        .onDisappear { controller.unbind() }
+        .onDisappear { controller.viewDisappeared() }
         .onChange(of: ObjectIdentifier(container)) { _, _ in bind() }
         .onChange(of: context.isEnabled) { _, enabled in controller.setHostEnabled(enabled) }
         .onChange(of: context.host) { _, _ in bind() }

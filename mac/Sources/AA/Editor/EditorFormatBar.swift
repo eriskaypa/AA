@@ -21,7 +21,7 @@ struct EditorFormatBar: View {
                     .equatable()
                     .help("Font")
                 EditorFontSizeCombo(controller: controller, size: s.size)
-                    .frame(width: 58)
+                    .frame(width: 66)
                     .help("Font size (⌘+ / ⌘− step it)")
             }
             .disabled(!editable)

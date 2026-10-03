@@ -120,7 +120,26 @@ public struct EditorExtractedImage {
             if let lang = base[.aaXmlLang] { a[.aaXmlLang] = lang }
             out.append(NSAttributedString(string: chunk, attributes: a))
         }
+        tagListMarkers(out)
         return (out, images)
+    }
+
+    /// TextKit 1 list paragraphs carry their marker as literal `\t{marker}\t` text; mark it `.aaListMarker` so the
+    /// writer never stores it as content (05 §6.4, §4.3.7 rule 6).
+    public static func tagListMarkers(_ s: NSMutableAttributedString) {
+        let text = s.string as NSString
+        var i = 0
+        while i < text.length {
+            let pr = text.paragraphRange(for: NSRange(location: i, length: 0))
+            defer { i = max(NSMaxRange(pr), i + 1) }
+            guard let st = s.attribute(.paragraphStyle, at: pr.location, effectiveRange: nil) as? NSParagraphStyle,
+                  !st.textLists.isEmpty, pr.length > 1, text.character(at: pr.location) == 0x09 else { continue }
+            let limit = min(NSMaxRange(pr), pr.location + 16)
+            var j = pr.location + 1
+            while j < limit, text.character(at: j) != 0x09, text.character(at: j) != 0x0A { j += 1 }
+            guard j < limit, text.character(at: j) == 0x09 else { continue }
+            s.addAttribute(.aaListMarker, value: true, range: NSRange(location: pr.location, length: j + 1 - pr.location))
+        }
     }
 
     static func extract(_ att: NSTextAttachment, index: Int, now: Date) -> EditorExtractedImage? {
