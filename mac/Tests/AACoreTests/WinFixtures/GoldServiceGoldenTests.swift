@@ -440,13 +440,13 @@ enum GoldServiceFamily {
         "E01": diffCase, "E01.7": GoldReproducer { _ in [:] },
         "E02": search, "E03": plainText, "E04": reminders, "E05": workRange, "E06": batchDone, "E07": batchDeadline,
         "E08": batchDelete,
-        "E09": .pending(.wCrew, "DateResolver is W-CREW's private AACore code (ARCH §6.8); REQ-W-GOLD-01"),
+        "E09": .pending(.wCrew, "reproducer not written yet: entry point CrewDateResolver (public, AACore/Crew); REQ-W-GOLD-01 deferred to Stage V"),
         "E10": parseDate,
-        "E11": .pending(.wCrew, "CrewConverter is W-CREW's private AACore code (ARCH §6.8); REQ-W-GOLD-01"),
+        "E11": .pending(.wCrew, "reproducer not written yet: entry point CrewConverter(sourceFile:now:today:zone:use1904:); REQ-W-GOLD-01 deferred to Stage V"),
         "E12": savedListOrder,
-        "E13": .pending(.wPdf, "the checklist XLSX exporter is W-PDF's private AACore code (ARCH §6.8); REQ-W-GOLD-02"),
+        "E13": .pending(.wPdf, "reproducer not written yet: entry point PdfChecklistXlsx (public, AACore/Export); REQ-W-GOLD-02 deferred to Stage V"),
         "E14": xlsxWriter, "E15": casing,
-        "E15b": .pending(.wCrew, "the COMPAS code mapping runs inside W-CREW's CrewConverter; REQ-W-GOLD-01"),
+        "E15b": .pending(.wCrew, "reproducer not written yet: COMPAS code mapping via CrewConverter; REQ-W-GOLD-01 deferred to Stage V"),
         "E16": computed,
     ])
 }

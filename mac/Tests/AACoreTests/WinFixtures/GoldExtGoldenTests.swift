@@ -297,9 +297,9 @@ enum GoldExtFamily {
         "X01.rel": relations, "X01.purge": GoldReproducer { _ in [:] },  // DECISIONS 02 Q-3 divergence (F2's tests)
         "X01.rec": recurrence, "X01.recToday": GoldReproducer { _ in [:] }, "X01.tr": trash,
         "X01.log": logGroups, "X02": templates, "X03": schedule,
-        "X04": .pending(.wSire, "SireExport is W-SIRE's private AACore code (ARCH §6.8); REQ-W-GOLD-03"),
-        "X05": .pending(.wSire, "TaskIdentifier / TagExtractor are W-SIRE's private AACore code; REQ-W-GOLD-03"),
-        "X06": .pending(.wCrew, "CompasReader is W-CREW's private AACore code (ARCH §6.8); REQ-W-GOLD-01"),
+        "X04": .pending(.wSire, "reproducer not written yet: entry point SireExport.modes / build(mode:all:session:…); REQ-W-GOLD-03 deferred to Stage V"),
+        "X05": .pending(.wSire, "reproducer not written yet: entry points SireTaskIdentifier.identifyAllTasks / SireTagExtractor; REQ-W-GOLD-03 deferred to Stage V"),
+        "X06": .pending(.wCrew, "reproducer not written yet: entry point CrewCompasReader.read(url:) + CrewCompasRow.get; REQ-W-GOLD-01 deferred to Stage V"),
     ])
 }
 
