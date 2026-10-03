@@ -75,12 +75,10 @@ struct CalendarTabView: View {
     @State private var selection = Set<String>()
 
     var body: some View {
-        HSplitView {
+        CalSplitView(minLeading: 240, idealLeading: 264, maxLeading: 420, minTrailing: 560) {
             CalSidebar(model: model)
-                .frame(minWidth: 260, idealWidth: 320, maxWidth: 420)
+        } trailing: {
             detail
-                .frame(minWidth: 520, maxWidth: .infinity, maxHeight: .infinity)
-                .layoutPriority(1)
         }
         .background(AAColor.bg)
         .onAppear { model.attach(env.store) }
@@ -278,15 +276,15 @@ private struct CalScheduleTable: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .help(CalendarRowBuilder.whenHelp)
             }
-            .width(min: 120, ideal: 210, max: 300)
+            .width(min: 120, ideal: 216, max: 300)
             TableColumn("Status") { row in
                 CalStatusCell(row: row, size: size)
             }
-            .width(min: 80, ideal: 120, max: 170)
+            .width(min: 80, ideal: 112, max: 170)
             TableColumn("Task") { row in
                 CalNameCell(row: row, size: size)
             }
-            .width(min: 180, ideal: 420)
+            .width(min: 180, ideal: 340)
             TableColumn("Recurrence") { row in
                 Text(row.recurrence)
                     .font(.aaMono(size))

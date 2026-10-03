@@ -12,6 +12,8 @@ struct BucketsTabView: View {
     @Environment(\.dialogs) private var dialogs
     @State private var selectedBucket: UUID?
     @State private var selectedMember: String?
+    /// VIEW-147: the new bucket is selected and scrolled into view.
+    @State private var scrollTarget: UUID?
 
     var body: some View {
         let data = env.store.data
@@ -19,12 +21,10 @@ struct BucketsTabView: View {
         let groups = BucketsModel.groups(data, rows: memberRows)
         let bucket = selectedBucket.flatMap { id in data.quickBuckets.first { $0.id == id } }
         let members = bucket.map { BucketsModel.members(of: $0.id, in: memberRows) } ?? []
-        HSplitView {
+        CalSplitView(minLeading: 280, idealLeading: 340, maxLeading: 460, minTrailing: 380) {
             sidebar(groups: groups, count: data.quickBuckets.count)
-                .frame(minWidth: 280, idealWidth: 340, maxWidth: 460)
+        } trailing: {
             membersPane(bucket: bucket, members: members)
-                .frame(minWidth: 380, maxWidth: .infinity, maxHeight: .infinity)
-                .layoutPriority(1)
         }
         .background(AAColor.bg)
         .onChange(of: env.store.generation) { _, _ in
@@ -62,34 +62,41 @@ struct BucketsTabView: View {
             .controlSize(.small)
             .padding(.horizontal, AASpacing.m)
             .padding(.bottom, AASpacing.s)
-            List(selection: $selectedBucket) {
-                ForEach(groups) { g in
-                    Section {
-                        ForEach(g.rows) { row in
-                            BucketListRow(row: row).tag(row.id)
-                        }
-                    } header: {
-                        HStack(spacing: 0) {
-                            Text(g.label).font(.aaMono(AAType.small, weight: .bold)).foregroundStyle(AAColor.accent)
-                            Text(g.countText).font(.aaMono(AAType.small)).foregroundStyle(AAColor.muted)
+            ScrollViewReader { proxy in
+                List(selection: $selectedBucket) {
+                    ForEach(groups) { g in
+                        Section {
+                            ForEach(g.rows) { row in
+                                BucketListRow(row: row).tag(row.id).id(row.id)
+                            }
+                        } header: {
+                            HStack(spacing: 0) {
+                                Text(g.label).font(.aaMono(AAType.small, weight: .bold)).foregroundStyle(AAColor.accent)
+                                Text(g.countText).font(.aaMono(AAType.small)).foregroundStyle(AAColor.muted)
+                            }
                         }
                     }
                 }
-            }
-            .listStyle(.inset)
-            .tint(AAColor.tint)
-            .scrollContentBackground(.hidden)
-            .contextMenu(forSelectionType: UUID.self) { ids in
-                if let id = ids.first, ids.count == 1 {
-                    Button(BucketsModel.renameTitle) { selectedBucket = id; rename() }
-                    Button(BucketsModel.setCategoryTitle) { selectedBucket = id; setCategory() }
-                    Divider()
-                    Button(BucketsModel.deleteTitle, role: .destructive) { selectedBucket = id; delete() }
+                .listStyle(.inset)
+                .tint(AAColor.tint)
+                .scrollContentBackground(.hidden)
+                .contextMenu(forSelectionType: UUID.self) { ids in
+                    if let id = ids.first, ids.count == 1 {
+                        Button(BucketsModel.renameTitle) { selectedBucket = id; rename() }
+                        Button(BucketsModel.setCategoryTitle) { selectedBucket = id; setCategory() }
+                        Divider()
+                        Button(BucketsModel.deleteTitle, role: .destructive) { selectedBucket = id; delete() }
+                    }
+                }
+                .aaListCommands(ListCommands(role: .buckets, selectionCount: selectedBucket == nil ? 0 : 1,
+                                             deleteTitle: "Delete Bucket",
+                                             delete: selectedBucket == nil ? nil : { delete() }))
+                .onChange(of: scrollTarget) { _, id in
+                    guard let id else { return }
+                    withAnimation(.snappy) { proxy.scrollTo(id) }
+                    scrollTarget = nil
                 }
             }
-            .aaListCommands(ListCommands(role: .buckets, selectionCount: selectedBucket == nil ? 0 : 1,
-                                         deleteTitle: "Delete Bucket",
-                                         delete: selectedBucket == nil ? nil : { delete() }))
             Divider()
             Text(BucketsModel.statusLine(bucketCount: count))
                 .font(.aaMono(AAType.caption))
@@ -189,6 +196,7 @@ struct BucketsTabView: View {
             guard let b = BucketsModel.create(name: name, category: category, store: env.store) else { return }
             save()
             withAnimation(.snappy) { selectedBucket = b.id }
+            scrollTarget = b.id
         }
     }
 

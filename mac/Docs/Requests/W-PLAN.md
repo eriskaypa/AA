@@ -21,3 +21,19 @@ jobs...", Map Inspect search) and binds an outer `.focused(_:)` on `AASearchFiel
 the `NSSearchField` first responder.
 Workaround in place: as described; no change to F3 code is needed unless the outer binding proves unreliable in
 Stage V (then: an `AASearchField(text:prompt:onSubmit:focus:)` overload taking a `FocusState<Bool>.Binding`).
+
+## REQ-W-PLAN-03: snapshot hook artefacts with ZStack-hosted sections and nested split views (informational)
+Target: `Sources/AA/Debug/SnapshotHook.swift` (owner F3) — ARCHITECTURE.md §9.6
+Need: (1) in the default layer-rendering mode the hook re-draws every "narrower split-view item" with `cacheDisplay`
+as if it were the floating sidebar; that also catches split views *inside* a section (and, through them, section roots
+that are kept alive at opacity 0 by `SectionContentHost`), so a hidden Calendar table was painted over the Board and
+Planner and pane fills covered the toolbar. Restricting the re-draw to the window's own `NavigationSplitView`
+sidebar item (and skipping views whose effective alpha is 0) would fix it. (2) The data folder's
+`Ui.SelectedMainTabIndex` decides which section is visited first, so `--snapshot TabBoard` on a fixture saved on the
+Calendar renders two sections.
+Workaround in place: W-PLAN's verification renders with `AA_SNAPSHOT_CACHE_DISPLAY=1` and sets
+`Ui.SelectedMainTabIndex` in the scratch copy to the section being rendered. W-PLAN's pages no longer use
+`HSplitView` (see Deviations, audit), which also removes the artefact for them.
+Also observed (not W-PLAN-specific, left for F3): AppKit logs "Application performed a reentrant operation in its
+NSTableView delegate" once when the Calendar `Table` first appears; nothing in W-PLAN's cells mutates state, the
+likely source is a list/command registration written during the table's first layout.

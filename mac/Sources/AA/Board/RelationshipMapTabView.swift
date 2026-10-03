@@ -45,12 +45,10 @@ struct RelationshipMapTabView: View {
 
     var body: some View {
         let rows = MapLayout.filter(MapLayout.inspectRows(store: env.store), query: model.query)
-        HSplitView {
+        CalSplitView(minLeading: 220, idealLeading: 260, maxLeading: 380, minTrailing: 420) {
             inspectPane(rows)
-                .frame(minWidth: 220, idealWidth: 260, maxWidth: 380)
+        } trailing: {
             MapCanvasPane(model: model)
-                .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
-                .layoutPriority(1)
         }
         .background(AAColor.bg)
         .onAppear {

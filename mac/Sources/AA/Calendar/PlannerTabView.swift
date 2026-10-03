@@ -90,9 +90,9 @@ struct PlannerTabView: View {
                           symbol: "calendar.day.timeline.left") {
                 navigation
             }
-            HSplitView {
+            CalSplitView(minLeading: 200, idealLeading: 230, maxLeading: 400, minTrailing: 420) {
                 PlannerPoolPane(model: model, actions: actions, searchFocused: $searchFocused)
-                    .frame(minWidth: 240, idealWidth: 260, maxWidth: 400)
+            } trailing: {
                 Group {
                     if model.mode == .month {
                         PlannerMonthGrid(model: model, actions: actions)
@@ -100,8 +100,6 @@ struct PlannerTabView: View {
                         PlannerTimeGrid(model: model, actions: actions)
                     }
                 }
-                .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
-                .layoutPriority(1)
             }
         }
         .background(AAColor.bg)
@@ -267,12 +265,20 @@ private struct PlannerPoolPane: View {
                         RoundedRectangle(cornerRadius: 2)
                             .fill(row.isDone ? AAColor.Status.plannerMuted : AAColor.Status.plannerBlock)
                             .frame(width: 4, height: 16)
-                        Text(row.text)
-                            .font(.aaMono(AAType.small))
-                            .strikethrough(row.isDone)
-                            .foregroundStyle(row.isDone ? AAColor.muted : AAColor.fg)
-                            .lineLimit(1)
-                            .truncationMode(.tail)
+                        // VIEW-084 text "{JobName}   ·   {dur}" on one line; a long name truncates, the duration
+                        // stays readable.
+                        HStack(spacing: 0) {
+                            Text(row.job.jobName)
+                                .lineLimit(1)
+                                .truncationMode(.tail)
+                                .strikethrough(row.isDone)
+                            Text(String(row.text.dropFirst(row.job.jobName.count)))
+                                .lineLimit(1)
+                                .fixedSize()
+                                .foregroundStyle(AAColor.muted)
+                        }
+                        .font(.aaMono(AAType.small))
+                        .foregroundStyle(row.isDone ? AAColor.muted : AAColor.fg)
                         Spacer(minLength: 0)
                     }
                     .contentShape(Rectangle())
@@ -327,6 +333,7 @@ private struct PlannerPoolDropDelegate: DropDelegate {
 private struct PlannerTimeGrid: View {
     @Bindable var model: PlannerPageModel
     let actions: PlannerActions
+    @State private var position = ScrollPosition(edge: .top)
 
     var body: some View {
         GeometryReader { geo in
@@ -334,24 +341,40 @@ private struct PlannerTimeGrid: View {
             let dayWidth = Self.dayWidth(mode: model.mode, available: geo.size.width, count: days.count)
             let total = PlannerGeometry.gutterWidth + dayWidth * Double(days.count)
             ScrollView(.horizontal) {
-                VStack(spacing: 0) {
-                    PlannerDayHeaderRow(model: model, days: days, dayWidth: dayWidth)
-                        .fixedSize(horizontal: false, vertical: true)
-                    PlannerDueStrip(model: model, days: days, dayWidth: dayWidth, actions: actions)
-                        .fixedSize(horizontal: false, vertical: true)
-                    ScrollViewReader { proxy in
-                        ScrollView(.vertical) {
+                // One vertical scroll view whose pinned section header holds the day names and the due strip: the
+                // header, strip and hour body share one content width, so the day columns stay aligned in every
+                // scroller style (W-05 / VIEW-094), and the header stays visible while the hours scroll.
+                ScrollView(.vertical) {
+                    LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                        Section {
                             HStack(alignment: .top, spacing: 0) {
                                 PlannerHourGutter()
                                 ForEach(days, id: \.self) { day in
                                     PlannerDayCanvas(model: model, day: day, dayWidth: dayWidth, actions: actions)
                                 }
                             }
-                            .frame(height: PlannerGeometry.gridHeight + 8, alignment: .top)
+                            .frame(width: total, height: PlannerGeometry.gridHeight + 8, alignment: .topLeading)
+                        } header: {
+                            VStack(spacing: 0) {
+                                PlannerDayHeaderRow(model: model, days: days, dayWidth: dayWidth)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                PlannerDueStrip(model: model, days: days, dayWidth: dayWidth, actions: actions)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            .frame(width: total, alignment: .leading)
+                            .background(AAColor.panelAlt)
                         }
-                        .frame(maxHeight: .infinity)
-                        .onAppear { scrollToMorning(proxy) }
-                        .onChange(of: model.rebuildToken) { _, _ in scrollToMorning(proxy) }
+                    }
+                }
+                .scrollPosition($position)
+                .task(id: model.rebuildToken) {
+                    // VIEW-094: once the hour body has laid out, bring 07:00 to the top (just under the pinned header;
+                    // 12 pt above the line so its straddling label stays readable).
+                    let y = PlannerGeometry.initialScrollY - 12
+                    for delay in [0, 120, 300] {
+                        try? await Task.sleep(for: .milliseconds(delay))
+                        if Task.isCancelled { return }
+                        position.scrollTo(y: y)
                     }
                 }
                 .frame(width: total, height: geo.size.height)
@@ -359,11 +382,6 @@ private struct PlannerTimeGrid: View {
             .scrollIndicators(.automatic)
         }
         .background(AAColor.bg)
-    }
-
-    /// VIEW-094: start at 07:00.
-    private func scrollToMorning(_ proxy: ScrollViewProxy) {
-        DispatchQueue.main.async { proxy.scrollTo("planner-hour-\(PlannerGeometry.initialScrollHour)", anchor: .top) }
     }
 
     /// 700 / 132 (VIEW-087) — widened to fill a larger pane (Mac grace; the block math uses the actual width).
@@ -453,8 +471,6 @@ private struct PlannerHourGutter: View {
                 Color.clear
                     .frame(width: PlannerGeometry.gutterWidth, height: PlannerGeometry.hourHeight)
                     .overlay(alignment: .topLeading) { label(h).offset(y: h == 0 ? 0 : -7) }
-                    // The scroll target sits 12 pt above the hour line so its straddling label stays visible.
-                    .overlay(alignment: .bottom) { Color.clear.frame(height: 12).id("planner-hour-\(h + 1)") }
             }
             Color.clear
                 .frame(width: PlannerGeometry.gutterWidth, height: 8)

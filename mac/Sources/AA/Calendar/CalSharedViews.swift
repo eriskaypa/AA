@@ -94,6 +94,79 @@ extension CalPaneTitle where Trailing == EmptyView {
     }
 }
 
+// MARK: Resizable two-pane split (WPF GridSplitter, 6 wide; width not persisted)
+
+/// A leading pane of adjustable width, a 6-pt splitter (1-pt hairline, resize cursor, drag to resize) and a trailing
+/// pane that fills. Pure SwiftUI on purpose: an `HSplitView` (NSSplitView) ignores the main window's bottom
+/// `safeAreaInset` (the shortcut strip, SHELL-024), so its panes ran underneath the strip.
+struct CalSplitView<Leading: View, Trailing: View>: View {
+    let minLeading: CGFloat
+    let idealLeading: CGFloat
+    let maxLeading: CGFloat
+    var minTrailing: CGFloat = 360
+    @ViewBuilder var leading: () -> Leading
+    @ViewBuilder var trailing: () -> Trailing
+    @State private var width: CGFloat?
+    @State private var dragBase: CGFloat?
+    @State private var hovering = false
+
+    static var splitterWidth: CGFloat { 6 }
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = clamped(width ?? idealLeading, total: geo.size.width)
+            HStack(spacing: 0) {
+                leading()
+                    .frame(width: w)
+                    .frame(maxHeight: .infinity)
+                    .clipped()
+                splitter(current: w, total: geo.size.width)
+                trailing()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipped()
+            }
+        }
+    }
+
+    private func clamped(_ v: CGFloat, total: CGFloat) -> CGFloat {
+        let upper = max(minLeading, min(maxLeading, total - Self.splitterWidth - minTrailing))
+        return min(max(v, minLeading), upper)
+    }
+
+    private func splitter(current: CGFloat, total: CGFloat) -> some View {
+        Rectangle()
+            .fill(Color.clear)
+            .frame(width: Self.splitterWidth)
+            .overlay {
+                Rectangle()
+                    .fill(hovering || dragBase != nil ? AAColor.tint.opacity(0.6) : AAColor.border)
+                    .frame(width: hovering || dragBase != nil ? 2 : 1)
+            }
+            .contentShape(Rectangle())
+            .onHover { inside in
+                hovering = inside
+                if inside { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { v in
+                        let base = dragBase ?? current
+                        if dragBase == nil { dragBase = base }
+                        width = clamped(base + v.translation.width, total: total)
+                    }
+                    .onEnded { _ in dragBase = nil }
+            )
+            .onTapGesture(count: 2) { withAnimation(.snappy) { width = idealLeading } }
+            .accessibilityElement()
+            .accessibilityLabel("Splitter")
+            .accessibilityValue("\(Int(current)) points")
+            .accessibilityAdjustableAction { dir in
+                let step: CGFloat = dir == .increment ? 20 : -20
+                width = clamped(current + step, total: total)
+            }
+    }
+}
+
 // MARK: Persistence and shared flows
 
 @MainActor

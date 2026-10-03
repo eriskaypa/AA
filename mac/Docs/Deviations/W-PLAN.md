@@ -24,8 +24,25 @@ K7 is W-QUICK's picker, VIEW-213), §8.5 M1–M7, A.7 R6 (map positions), SL1 / 
 DECISIONS Q-6), 06 BUILD-101 display vector, 03 T-KB-06 (title/strings), T-KB-23 (navigation arithmetic),
 T-KB-26 / T-KB-27 (font steps). §8.6 S1–S8 are F2's services (already tested there).
 
-Snapshots checked (light and dark, `Fixtures/ui/w-plan/sample-data.json`): Calendar Agenda / Week, Board, Planner
-Day / Week / Month, Buckets (selected / none), Relationship Map, saved-list picker and bucket-category sheets.
+Snapshots checked (light and dark, `Fixtures/ui/w-plan/sample-data.json`, with `Ui.SelectedMainTabIndex` set to the
+section rendered and `AA_SNAPSHOT_CACHE_DISPLAY=1` — see REQ-W-PLAN-03): Calendar Day / Week / Month / All Upcoming /
+Agenda, Board, Planner Day / Week / Month, Buckets (selected / none), Relationship Map, saved-list picker and
+bucket-category sheets (28 PNGs).
+
+Independent audit (2026-10-02): gate re-run from a clean `.build` (green, 462 tests); all 103 IDs re-checked against
+spec 07 (incl. the A.1 erratum / VIEW-208…216 rows that name W-PLAN), 02 REPO-031, 05 CONT-050, 06 BUILD-101 /
+BUILD-145 B3·B4, 09 CREW-091 and the C# sources. Fixed in the audit:
+* the four split pages (Calendar, Planner, Buckets, Map) used `HSplitView`, whose NSSplitView ignores the main
+  window's bottom `safeAreaInset`: the panes ran under the shortcut strip (Buckets' status line and the strip text
+  overlapped). They now use `CalSplitView` (pure SwiftUI: 6-pt splitter with hairline, resize cursor, drag, double-click
+  resets, VoiceOver adjustable; panes clipped to their bounds);
+* Planner Day/Week: day header and due strip moved into the pinned section header of the hour body's vertical scroll
+  view, so the columns stay aligned when legacy (always-visible) scrollers take width (they were offset by half a
+  scroller); the initial 07:00 scroll is retried until the body has laid out (it sometimes stayed at 00:00);
+* Planner pool rows: the name truncates and the `   ·   {dur}` part stays visible (it was cut off at the default width);
+* Calendar: default sidebar 264 pt and column ideals 56 / 216 / 112 / 340 / 110 so all five columns fit a 1440-pt
+  window (Recurrence was scrolled off);
+* Buckets: a new bucket is scrolled into view as well as selected (VIEW-147).
 
 Post-merge (Stage V): editor sheets opened from Calendar / Planner / Board / Buckets (W-BUILD's
 `TaskItemEditorSheet`, `ChecklistStepEditorSheet`), the batch context-menu items (W-HIER's
@@ -81,4 +98,6 @@ interactive drag and drop (not exercisable by the snapshot hook).
 | VIEW-141 | Buckets list context menu (Rename / Set category... / Delete) and empty states for the members pane; members show kind glyphs. |
 | VIEW-170 | Map: dot-grid canvas, zoom (buttons, pinch, 35–250 %), Fit, Center, drag-to-pan, hover highlight of a node's edges, double-click / context menu "Show in {Section}", "Open in New Window", "Focus Here"; animated recentre (nodes glide, edges interpolate); a colour key. |
 | ⌥⌘F | Board Find, Planner Search jobs..., Map Inspect search are published through `SectionCommands.focusSearchField` (REQ-W-PLAN-02). |
+| VIEW-001 / 083 / 140 / 170 | The 6-wide GridSplitter is `CalSplitView` (resizable, width not persisted, double-click restores the default). Default leading widths: Calendar 264 (Windows 320; the graphical month picker needs ~160, and the five columns then fit a 1440-pt window), Planner 230, Buckets 340, Map 260. |
+| VIEW-084 | Pool row: the `{JobName}` part truncates, the `   ·   {DurFmt}` part never does (same string, tooltip shows it whole). |
 | ⌘+ / ⌘− | Calendar text size through `SectionCommands.calendarFontScale` / `setCalendarFontScale` (SHELL-605/606, T-KB-26/27); ⌘← / ⇧⌘T / ⌘→ through the planner closures (SHELL-632…634). |
