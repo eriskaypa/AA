@@ -8,15 +8,22 @@ protocol ZipByteSource: AnyObject {
     func read(at offset: UInt64, count: Int) throws(ZipError) -> [UInt8]
 }
 
+extension ZipByteSource {
+    /// True when `count` bytes at `offset` lie inside the source. Subtraction form: every offset and size in an
+    /// archive comes from the file itself, so `offset + count` may not be computed (it can trap on overflow).
+    func contains(offset: UInt64, count: Int) -> Bool {
+        count >= 0 && offset <= size && UInt64(count) <= size - offset
+    }
+}
+
 final class ZipMemorySource: ZipByteSource {
     let data: [UInt8]
     init(_ d: Data) { data = [UInt8](d) }
     var size: UInt64 { UInt64(data.count) }
     func read(at offset: UInt64, count: Int) throws(ZipError) -> [UInt8] {
-        guard offset <= UInt64(data.count), count >= 0, Int(offset) + count <= data.count else {
-            throw .corrupt("read past the end of the archive")
-        }
-        return Array(data[Int(offset)..<(Int(offset) + count)])
+        guard contains(offset: offset, count: count) else { throw .corrupt("read past the end of the archive") }
+        let start = Int(offset)
+        return Array(data[start..<(start + count)])
     }
 }
 
@@ -33,7 +40,7 @@ final class ZipFileSource: ZipByteSource {
     }
     deinit { try? handle.close() }
     func read(at offset: UInt64, count: Int) throws(ZipError) -> [UInt8] {
-        guard offset + UInt64(max(count, 0)) <= size else { throw .corrupt("read past the end of the archive") }
+        guard contains(offset: offset, count: count) else { throw .corrupt("read past the end of the archive") }
         do {
             try handle.seek(toOffset: offset)
             let d = try handle.read(upToCount: count) ?? Data()
@@ -113,7 +120,7 @@ public final class ZipReader {
                 }
             }
         }
-        guard cdOffset + cdSize <= size, cdSize <= UInt64(Int.max) else { throw .corrupt("bad central directory") }
+        guard cdOffset <= size, cdSize <= size - cdOffset else { throw .corrupt("bad central directory") }
         let cd = try src.read(at: cdOffset, count: Int(cdSize))
         var cur = ZipReadCursor(cd)
         var list: [ZipEntryInfo] = []
@@ -170,7 +177,23 @@ public final class ZipReader {
         guard try h.u32() == ZipFormat.localSig else { throw .corrupt("bad local header for \(entry.name)") }
         h.i = 26
         let nameLen = UInt64(try h.u16()), extraLen = UInt64(try h.u16())
-        return entry.localHeaderOffset + 30 + nameLen + extraLen
+        // The 30-byte read above succeeded, so the offset is at most size - 30 and this sum cannot overflow.
+        let (start, overflow) = entry.localHeaderOffset.addingReportingOverflow(30 + nameLen + extraLen)
+        guard !overflow, start <= source.size else { throw .corrupt("bad local header for \(entry.name)") }
+        return start
+    }
+
+    /// Sizes from the central directory are checked against the archive before anything is allocated: the
+    /// compressed bytes must fit in the file, a Stored entry is as long as its data, and Deflate cannot expand
+    /// by more than 1032:1 — so a hostile header can neither trap nor reserve gigabytes.
+    private func checkSizes(_ entry: ZipEntryInfo) throws(ZipError) {
+        guard entry.compressedSize <= source.size else { throw .corrupt("\(entry.name) is larger than the archive") }
+        if entry.method == 0, entry.compressedSize != entry.uncompressedSize {
+            throw .corrupt("\(entry.name) has inconsistent sizes")
+        }
+        if entry.method == 8, entry.uncompressedSize / 1032 > entry.compressedSize {
+            throw .corrupt("\(entry.name) has an impossible size")
+        }
     }
 
     private func checkSupported(_ entry: ZipEntryInfo) throws(ZipError) {
@@ -185,6 +208,7 @@ public final class ZipReader {
         guard entry.compressedSize <= UInt64(Int.max), entry.uncompressedSize <= UInt64(Int.max) else {
             throw .unsupported("entry too large for memory")
         }
+        try checkSizes(entry)
         let start = try dataStart(of: entry)
         let raw = try source.read(at: start, count: Int(entry.compressedSize))
         let out: [UInt8]
@@ -202,6 +226,7 @@ public final class ZipReader {
     /// Streams the entry to `url` (created/overwritten), CRC- and size-checked; a damaged entry leaves no file.
     public func extract(_ entry: ZipEntryInfo, to url: URL) throws(ZipError) {
         try checkSupported(entry)
+        try checkSizes(entry)
         let fm = FileManager.default
         do {
             try fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -256,11 +281,16 @@ public final class ZipReader {
         let root = folder.standardizedFileURL
         let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
         var plan: [(ZipEntryInfo, URL)] = []
+        var seen = Set<String>()
         for e in entries {
             if skip(e.name) { continue }
             guard let rel = ZipFormat.safeRelativePath(e.name) else { throw .unsafePath(e.name) }
             let dest = root.appending(path: rel).standardizedFileURL
             guard (dest.path + (e.isDirectory ? "/" : "")).hasPrefix(rootPath) else { throw .unsafePath(e.name) }
+            // Two file entries for one path: the peeks read the first (`entry(named:)`), extraction would leave
+            // the last, so a review could preview other content than gets applied. Windows' ExtractToDirectory
+            // (no overwrite) throws on the duplicate; so does this, before anything is written.
+            if !e.isDirectory, !seen.insert(ZipReader.collisionKey(rel)).inserted { throw ZipReader.duplicate(e.name) }
             plan.append((e, dest))
         }
         for (e, dest) in plan {
@@ -272,6 +302,15 @@ public final class ZipReader {
                 try extract(e, to: dest)
             }
         }
+    }
+
+    /// The error for a second entry with the same path (kept within the frozen `ZipError` contract, ARCH §6.4).
+    static func duplicate(_ name: String) -> ZipError { .corrupt("duplicate entry \(name)") }
+
+    /// The name two entries share on disk when they land on the same file: separators already normalised by
+    /// `safeRelativePath`, Unicode NFC (APFS ignores normalisation) and case-folded (NTFS and default APFS ignore case).
+    static func collisionKey(_ relativePath: String) -> String {
+        relativePath.precomposedStringWithCanonicalMapping.folding(options: [.caseInsensitive], locale: nil)
     }
 
     /// `.DS_Store`, `._*`, `__MACOSX/`, `Icon\r` — never bundled, extracted, counted or swept.

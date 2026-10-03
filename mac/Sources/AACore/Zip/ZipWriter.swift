@@ -141,8 +141,13 @@ public final class ZipWriter {
 
     // MARK: Internals
 
+    /// Entry names are written in Unicode NFC. Names read back from the Mac file system are decomposed (NFD,
+    /// via `fileSystemRepresentation`) while data.json stores the NFC leaf and NTFS compares names byte for byte,
+    /// so an NFD entry would not match its data.json path on Windows (01 §6.6, DATA-041/045).
+    static func entryName(_ name: String) -> String { name.precomposedStringWithCanonicalMapping }
+
     private func encodedName(_ name: String) -> ([UInt8], UInt16) {
-        let bytes = Array(name.utf8)
+        let bytes = Array(ZipWriter.entryName(name).utf8)
         return (bytes, bytes.allSatisfy { $0 < 0x80 } ? 0 : ZipFormat.flagUTF8)
     }
 
