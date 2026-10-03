@@ -137,8 +137,8 @@ dotnet run --project WinCapture -c Release -- load-check ..\Tests\AACoreTests\Fi
 ```
 
 Every file must load (`load-check.json` all `ok: true`, exit 0). The `*.wpf-resaved.xaml` files are compared on the
-Mac with `xml-canonical` against the Mac input; differences are recorded, not failures, except lost text or a lost
-lock sentinel, which fail (`GoldXamlCaptureTests.macRoundTrip`).
+Mac with `xml-canonical` against the Mac input; differences are recorded (test attachments), not failures, except a
+lost lock sentinel or lost text, which fail (`GoldMacRoundtripTests` in `GoldXamlCaptureTests.swift`).
 
 ## 7. Commit (GF.6.10)
 

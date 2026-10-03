@@ -112,6 +112,11 @@ enum GoldMacRoundtrip {
         return out
     }
 
+    /// Occurrences of the lock-sentinel colour (05 §4.4), case-insensitive.
+    static func sentinelCount(_ xaml: Data) -> Int {
+        String(decoding: xaml, as: UTF8.self).uppercased().components(separatedBy: "#FFFFE699").count - 1
+    }
+
     static var macNames: [String] {
         let dir = GoldPaths.macOut.appending(path: "xaml")
         return ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [])
@@ -126,6 +131,21 @@ struct GoldMacRoundtripTests {
     func loadCheck() throws {
         let rows = try GoldMacRoundtrip.rows(try Data(contentsOf: GoldMacRoundtrip.loadCheck))
         for p in GoldMacRoundtrip.problems(rows: rows, macNames: GoldMacRoundtrip.macNames) { Issue.record(Comment(rawValue: p)) }
+    }
+
+    @Test("WPF's re-save keeps every lock sentinel (#FFFFE699); other canonical differences are recorded")
+    func sentinelsKept() throws {
+        let dir = GoldPaths.macOut.appending(path: "xaml")
+        for name in GoldMacRoundtrip.macNames {
+            let resaved = GoldPaths.macRoundtrip.appending(path: name + ".wpf-resaved.xaml")
+            guard FileManager.default.fileExists(atPath: resaved.path) else { continue }
+            let mac = try Data(contentsOf: dir.appending(path: name + ".xaml")), wpf = try Data(contentsOf: resaved)
+            #expect(GoldMacRoundtrip.sentinelCount(mac) == GoldMacRoundtrip.sentinelCount(wpf),
+                    "\(name): WPF's re-save changed the number of lock sentinels")
+            if let diff = GoldXMLCanonicalizer.difference(golden: mac, actual: wpf) {
+                Attachment.record(Data("\(diff)".utf8), named: "\(name).roundtrip-difference.txt")
+            }
+        }
     }
 
     @MainActor
@@ -175,6 +195,7 @@ struct GoldXamlHarnessTests {
         #expect(p.contains { $0.hasPrefix("tables: WPF refused") })
         #expect(p.contains { $0.hasPrefix("empty: not load-checked") })
         #expect(GoldMacRoundtrip.problems(rows: [], macNames: []) == ["load-check.json lists no file"])
+        #expect(GoldMacRoundtrip.sentinelCount(Data("<Run Background=\"#ffffe699\">a</Run><Run Background=\"#FFFFE699\">b</Run>".utf8)) == 2)
     }
 
     @Test("culture-invariance rows that differ or threw are reported")
