@@ -285,6 +285,34 @@ private let athensClock = FixedClock(local: "2026-09-29T14:05:00", zone: TZ.athe
         #expect(!ds.isUnderAppFolder(URL(fileURLWithPath: "/U/AA/../B/data.json")))
     }
 
+    // 03 SHELL-193 / BD.3.2 (V-03): symlinks stay unresolved — a `/private/var/…` AppFolder (an existing path, which
+    // `standardizedFileURL` would fold onto `/var/…`) keeps its spelling in appFolder, currentDataFile and the
+    // persisted CurrentDataFile; the two spellings still compare as one folder.
+    @Test func pathsKeepTheSpellingTheUserGave() throws {
+        let folder = TempFolder()
+        let plain = folder.url.path
+        try #require(plain.hasPrefix("/var/") || plain.hasPrefix("/tmp/"))     // TMPDIR is a /private firmlink
+        let given = URL(fileURLWithPath: "/private" + plain, isDirectory: true)
+        try #require(FileManager.default.fileExists(atPath: given.path))
+        let ds = DataStore(appFolder: given, secrets: InMemorySecretStore())
+        ds.loadSettings()
+        #expect(ds.appFolder.path == "/private" + plain)
+        #expect(ds.currentDataFile.path == "/private" + plain + "/data.json")
+        _ = try ds.adoptExternalDataFile(try folder.write("x/../ext.json", "{}"), copyIntoAppFolder: false)
+        #expect(ds.currentDataFile.path == plain + "/ext.json")                 // `..` removed, spelling kept
+        ds.setCurrentDataFile(given.appending(path: "data.json"))
+        #expect(ds.currentDataFile.path == "/private" + plain + "/data.json")
+        #expect(ds.settings.values.currentDataFile == "/private" + plain + "/data.json")
+        #expect(ds.isUnderAppFolder(folder.url.appending(path: "data.json")))   // /var spelling
+        #expect(ds.isUnderAppFolder(given.appending(path: "files/a.pdf")))      // /private/var spelling
+        #expect(!ds.isUnderAppFolder(given))
+        let other = DataStore(appFolder: folder.url, secrets: InMemorySecretStore())
+        #expect(other.isUnderAppFolder(given.appending(path: "data.json")))
+        #expect(DataStore.comparablePath(URL(fileURLWithPath: "/private/tmp/a/./b/../c")) == "/tmp/a/c")
+        #expect(DataStore.comparablePath(URL(fileURLWithPath: "/private/tmpx/a")) == "/private/tmpx/a")
+        #expect(DataStore.lexical(URL(fileURLWithPath: "/private/tmp/a/../b")).path == "/private/tmp/b")
+    }
+
     // TV: 01 App. A17 / DATA-022–023 — migration v0 → v1 and the newer-schema flag
     @Test func schemaMigration() throws {
         let legacy = #"{"Tasks":[{"Recurrence":3,"IsComplete":true,"Subtasks":[{"Recurrence":3,"IsComplete":true},{"Recurrence":3}]},{"Recurrence":0,"IsComplete":true}],"Procedures":[{"Recurrence":2,"Status":3},{"Recurrence":2,"Status":1}]}"#

@@ -275,10 +275,8 @@ import CryptoKit
     }
 
     @Test func macPreferences() {
-        let suite = "aa-tests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-        let p = MacPreferences(defaults: defaults)
+        let temp = TempDefaults()
+        let p = temp.preferences
         let k = MacPreferences.Key("aa.tests.flag")
         #expect(p.bool(k, default: true))
         p.set(false, k)
@@ -290,5 +288,19 @@ import CryptoKit
         let c = MacPreferences.Key("aa.tests.codable")
         p.setCodable(M(a: 3), c)
         #expect(p.codable(c, as: M.self) == M(a: 3))
+        temp.remove()                                       // nothing left in ~/Library/Preferences
+        #expect(!FileManager.default.fileExists(atPath: temp.plistURL.path))
+    }
+
+    // V-E2E: TempDefaults removes the domain and the plist cfprefsd keeps after removePersistentDomain
+    @Test func tempDefaultsLeavesNoPlist() {
+        let temp = TempDefaults("aa-tests")
+        temp.defaults.set(true, forKey: "aa.tests.flag")
+        CFPreferencesAppSynchronize(temp.suite as CFString)
+        #expect(FileManager.default.fileExists(atPath: temp.plistURL.path))
+        temp.remove()
+        temp.remove()                                       // idempotent
+        #expect(!FileManager.default.fileExists(atPath: temp.plistURL.path))
+        #expect(UserDefaults(suiteName: temp.suite)?.object(forKey: "aa.tests.flag") == nil)
     }
 }

@@ -55,7 +55,7 @@ public final class DataStore {
     public private(set) var localKeyError: String?
 
     public init(appFolder: URL, secrets: SecretStore = KeychainSecretStore(), clock: AppClock = SystemClock()) {
-        self.appFolder = appFolder.standardizedFileURL
+        self.appFolder = DataStore.lexical(appFolder)
         self.secrets = secrets
         self.clock = clock
         settings = SettingsStore(fileURL: self.appFolder.appending(path: "settings.json"), secrets: secrets)
@@ -216,12 +216,32 @@ public final class DataStore {
         return k
     }
 
+    // MARK: Paths (03 SHELL-193 / BD.3.2)
+
+    /// Absolute, `.` / `..` removed, symlinks NOT resolved: `/private/tmp/x` stays `/private/tmp/x` and `/tmp/x` stays
+    /// `/tmp/x`, so status texts and Settings show the path the user gave (`standardizedFileURL` would strip an
+    /// existing path's `/private` prefix).
+    public nonisolated static func lexical(_ url: URL) -> URL { url.absoluteURL.standardized }
+
+    /// Comparison form: `lexical`, then the macOS `/private/{tmp,var,etc}` firmlinks folded onto `/tmp`, `/var`,
+    /// `/etc` — the same file whichever spelling (or `standardizedFileURL`, which strips the prefix only when the
+    /// path exists) produced the URL.
+    public nonisolated static func comparablePath(_ url: URL) -> String {
+        let p = lexical(url).path
+        for root in ["/private/tmp", "/private/var", "/private/etc"]
+        where p == root || p.hasPrefix(root + "/") {
+            return String(p.dropFirst("/private".count))
+        }
+        return p
+    }
+
     // MARK: Encryption policy (01 DATA-071, §6.5)
 
-    /// `/U/AA/x` is under `/U/AA`, case-insensitively; the folder itself is not.
+    /// `/U/AA/x` is under `/U/AA`, case-insensitively; the folder itself is not. `/private/tmp/…` and `/tmp/…`
+    /// spellings compare equal (`comparablePath`).
     public func isUnderAppFolder(_ url: URL) -> Bool {
-        let full = url.standardizedFileURL.path
-        var root = appFolder.path
+        let full = DataStore.comparablePath(url)
+        var root = DataStore.comparablePath(appFolder)
         while root.hasSuffix("/") && root.count > 1 { root.removeLast() }
         root += "/"
         guard full.utf16.count >= root.utf16.count else { return false }
@@ -295,7 +315,7 @@ public final class DataStore {
 
     /// Persists `CurrentDataFile`.
     public func setCurrentDataFile(_ url: URL) {
-        currentDataFile = url.standardizedFileURL
+        currentDataFile = DataStore.lexical(url)
         settings.setCurrentDataFile(currentDataFile.path)
     }
 
@@ -307,7 +327,7 @@ public final class DataStore {
     /// Throws (nothing changed) when the source cannot be loaded.
     public func adoptExternalDataFile(_ source: URL, copyIntoAppFolder: Bool) throws -> URL {
         let data = try loadFrom(source)
-        let target = copyIntoAppFolder ? defaultDataFile : source.standardizedFileURL
+        let target = copyIntoAppFolder ? defaultDataFile : DataStore.lexical(source)
         let bytes = try serializeForSave(data)
         try writeLocalDataFile(bytes, to: target)
         setCurrentDataFile(target)
