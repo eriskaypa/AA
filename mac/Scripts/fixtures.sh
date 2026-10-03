@@ -13,6 +13,8 @@
 #   Scripts/fixtures.sh require                   the same with AA_REQUIRE_FIXTURES=1 (absence = failure; release gate)
 #   Scripts/fixtures.sh emit-mac-out              AA_EMIT_MAC_OUT=1: the Swift emitter rewrites Fixtures/mac-out
 #   Scripts/fixtures.sh emit-xlsx-inputs          AA_EMIT_XLSX_INPUTS=1: rewrites Fixtures/winfixtures/xlsx-inputs
+#   Scripts/fixtures.sh real-data <path>          DATA-314: local-only round trip of a REAL data.json (reports
+#                                                 pass/fail and byte offsets only; the file is never written)
 #   Scripts/fixtures.sh ci                        verify-sources + verify-generated + require (GF.8.6 macOS job)
 #   Scripts/fixtures.sh status                    what is present: manifests, case counts, mac-out, captures
 #
@@ -77,6 +79,10 @@ case "$cmd" in
         AA_EMIT_MAC_OUT=1 swift_test --filter GoldMacOutEmitter "$@" ;;
     emit-xlsx-inputs)
         AA_EMIT_XLSX_INPUTS=1 swift_test --filter GoldXlsxInputEmitter "$@" ;;
+    real-data)
+        [ $# -ge 1 ] || { echo "fixtures.sh: real-data needs the path of a data.json" >&2; exit 2; }
+        f="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"; shift
+        AA_REAL_DATA_JSON="$f" swift_test --filter GoldRealDataRoundTrip "$@" ;;
     ci)
         winfixtures verify-sources
         winfixtures generate --out "$WINFIX" --verify-only
@@ -98,7 +104,7 @@ case "$cmd" in
             fi
         done ;;
     ""|-h|--help|help)
-        sed -n '2,25p' "$0" ;;
+        sed -n '2,/^$/p' "$0" ;;
     *)
         echo "fixtures.sh: unknown command '$cmd' (see --help)" >&2
         exit 2 ;;
