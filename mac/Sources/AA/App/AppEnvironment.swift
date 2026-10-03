@@ -75,6 +75,11 @@ final class AppEnvironment: SharedSaveHost, DataFileConflictHost {
         driveSync.attach(self)
         subscriptions.append(store.saved.subscribe { [weak self] in self?.storeDidSave() })
         subscriptions.append(store.trashChanged.subscribe { [weak self] in self?.refreshAfterTrashChange() })
+        // SHELL-638: the View ▸ Dark Mode ✓ follows macOS switching light/dark while Appearance = System.
+        let router = self.router
+        ShellAppearance.observeEffectiveAppearance { [weak router] in
+            router?.darkModeChecked = ShellAppearance.isEffectivelyDark
+        }
     }
 
     // MARK: Editors and UI state
@@ -238,6 +243,7 @@ final class AppEnvironment: SharedSaveHost, DataFileConflictHost {
     /// menu toggles re-applied, status.
     func loadDataAndInitUI(reason: DataReplaceReason, status statusText: String?) {
         let initial = reason == .initialLoad
+        let wasSafeMode = safeMode
         if !initial { captureUiState() }
         let oldUi = store.data.ui
         dataStore.loadSettings()                                    // also forgets the app-password session (DATA-081)
@@ -260,6 +266,20 @@ final class AppEnvironment: SharedSaveHost, DataFileConflictHost {
         let path = dataStore.currentDataFile.path
         status.post(statusText ?? (safeMode ? ShellStatusText.safeModeStatus(cause: dataStore.lastLoadError)
                                                        : ShellStatusText.loaded(path)))
+        if ShellLoadPlan.startsSkippedServices(initial: initial, wasSafeMode: wasSafeMode, isSafeMode: safeMode,
+                                               readOnlyInstance: isReadOnlyInstance) {
+            startServicesSkippedInSafeMode()
+        }
+    }
+
+    /// Leaving safe mode by Import / Reload: the housekeeping and reminder centre the safe-mode launch skipped
+    /// (LaunchCoordinator.afterMainShown step 18). The DATA-180 watcher follows the active file on its own
+    /// (W-PERSIST `PersistUIBridge.followActiveFile`).
+    private func startServicesSkippedInSafeMode() {
+        _ = store.pruneTrash()
+        _ = store.reconcileRecurrences()
+        refreshAfterTrashChange()
+        if !LaunchCoordinator.shared.snapshotMode { ReminderCenter.shared.start(env: self) }
     }
 
     // MARK: Import review gate (SHELL-120, DATA-104, QUICK-190)

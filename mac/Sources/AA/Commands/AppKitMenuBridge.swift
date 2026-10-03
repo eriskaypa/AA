@@ -45,7 +45,6 @@ final class AppKitMenuBridge: NSObject, NSMenuItemValidation {
             guard let menu = top.submenu else { continue }
             decorate(menu, path: [top.title == ProcessInfo.processInfo.processName ? "AA" : top.title])
         }
-        if let view = main.items.first(where: { $0.title == "View" })?.submenu { orderViewMenu(view) }
         insertions(main)
         // §6.5.1.13: SwiftUI rebuilds a menu's items in `menuNeedsUpdate` (on open and while matching key
         // equivalents), which drops every inserted item. Each SwiftUI-driven menu (Edit, Format ▸ Font, Tools, View, …)
@@ -61,6 +60,8 @@ final class AppKitMenuBridge: NSObject, NSMenuItemValidation {
         insertTextSubmenus(main)
         insertFullScreen(main)
         collapseSeparators(main.items.first(where: { $0.title == "Window" })?.submenu)
+        if let view = main.items.first(where: { $0.title == "View" })?.submenu { orderViewMenu(view) }
+        if let file = main.items.first(where: { $0.title == "File" })?.submenu { reorder(file, ShellMenuOrder.fileMenu) }
         updateCrewBadge(main)
     }
 
@@ -82,7 +83,6 @@ final class AppKitMenuBridge: NSObject, NSMenuItemValidation {
         let wasApplying = applying
         applying = true
         defer { applying = wasApplying }
-        if menu.title == "View" || menu === main.items.first(where: { $0.title == "View" })?.submenu { orderViewMenu(menu) }
         insertions(main)
         installProxies(menu)
     }
@@ -95,8 +95,7 @@ final class AppKitMenuBridge: NSObject, NSMenuItemValidation {
         let item = NSMenuItem(title: "Enter Full Screen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
         item.keyEquivalentModifierMask = [.control, .command]          // NSWindow retitles it "Exit Full Screen"
         item.identifier = NSUserInterfaceItemIdentifier("aa.cmd.toggleFullScreen")
-        let at = view.items.firstIndex(where: { $0.title == "Shortcut Bar" }) ?? view.items.count
-        view.insertItem(item, at: at)
+        view.addItem(item)                                              // `orderViewMenu` puts it last, after a separator
     }
 
     /// Removes doubled, leading and trailing separators.
@@ -143,30 +142,27 @@ final class AppKitMenuBridge: NSObject, NSMenuItemValidation {
         }
     }
 
-    // MARK: View menu order (§6.5.1.6: sections, Previous/Next Section, Planner, then sidebar / toolbar / toggles)
+    // MARK: Menu order (§6.5.1.6: View = sections, Previous/Next Section, Planner, sidebar / toolbar / toggles, then
+    //       Enter Full Screen last after a separator; File = Export as PDF… and Print… in one group)
 
     private func orderViewMenu(_ view: NSMenu) {
-        guard let anchor = view.items.firstIndex(where: { $0.title == "Shortcut Bar" }) else { return }
-        let standard = view.items.enumerated().filter { _, item in
-            ["Show Toolbar", "Hide Toolbar", "Customize Toolbar…", "Show Sidebar", "Hide Sidebar"].contains(item.title)
-                || item.action == #selector(NSWindow.toggleFullScreen(_:))
+        reorder(view, ShellMenuOrder.viewMenu)
+    }
+
+    /// Applies a pure `ShellMenuOrder` permutation (`nil` = a new separator); untouched when already in order, so a
+    /// rebuild that is already right never churns the menu.
+    private func reorder(_ menu: NSMenu, _ order: ([ShellMenuOrder.Entry]) -> [Int?]) {
+        let items = menu.items
+        let entries: [ShellMenuOrder.Entry] = items.map { item in
+            if item.isSeparatorItem { return .separator }
+            if item.action == #selector(NSWindow.toggleFullScreen(_:)) { return .fullScreen }
+            return .item(item.title)
         }
-        guard let firstStandard = standard.first?.offset, firstStandard < anchor - standard.count else { return }
-        // Keep sidebar before toolbar (Show/Hide Sidebar, Hide/Show Toolbar, Customize Toolbar…).
-        let ordered = standard.map(\.element).sorted { a, b in
-            func rank(_ i: NSMenuItem) -> Int {
-                if i.action == #selector(NSWindow.toggleFullScreen(_:)) { return 3 }
-                return i.title.contains("Sidebar") ? 0 : (i.title.contains("Customize") ? 2 : 1)
-            }
-            return rank(a) < rank(b)
-        }
-        for item in ordered { view.removeItem(item) }
-        guard var at = view.items.firstIndex(where: { $0.title == "Shortcut Bar" }) else { return }
-        for item in ordered {
-            view.insertItem(item, at: at)
-            at += 1
-        }
-        collapseSeparators(view)
+        let wanted = order(entries)
+        guard wanted != items.indices.map({ Optional($0) }) else { return }
+        let rebuilt = wanted.map { $0.map { items[$0] } ?? NSMenuItem.separator() }
+        menu.removeAllItems()
+        for item in rebuilt { menu.addItem(item) }
     }
 
     // MARK: Paste and Match Style (SHELL-578; SwiftUI's pasteboard group omits it)

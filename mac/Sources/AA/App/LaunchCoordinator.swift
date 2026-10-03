@@ -35,6 +35,9 @@ final class LaunchCoordinator {
     @ObservationIgnored private var draining = false
     @ObservationIgnored private var housekeepingDone = false
     @ObservationIgnored weak var mainWindow: NSWindow?
+    /// SHELL-032 / §6.3: the stored geometry is applied once, at launch, when BOTH the first load finished and the
+    /// main window is registered — `.onAppear` runs before `SceneOpener.register`, so either side may come first.
+    @ObservationIgnored private var geometryRestored = false
     @ObservationIgnored private var mainWindowDelegate: ShellWindowDelegateProxy?
 
     static let splashDuration: Duration = .milliseconds(2400)
@@ -123,13 +126,26 @@ final class LaunchCoordinator {
         guard mainWindow !== w else { return }
         mainWindow = w
         w.tabbingMode = .disallowed
-        w.minSize = NSSize(width: 860, height: 560)
+        w.minSize = NSSize(width: ShellWindowGeometry.macMinimumSize.width, height: ShellWindowGeometry.macMinimumSize.height)
         // SHELL-513: closing the main window (red button, ⌘W) runs the quit pipeline; the window stays until then.
         mainWindowDelegate = ShellWindowDelegateProxy(window: w) { _ in
             NSApp.terminate(nil)
             return false
         }
         ShellUndoShim.install(on: w)
+        restoreGeometryIfReady()
+    }
+
+    /// Applies the stored main-window geometry once both the first load and the window registration happened.
+    /// Deferred one run-loop turn: registration runs inside SwiftUI's layout pass, and SwiftUI applies the scene's
+    /// default size before that turn ends.
+    private func restoreGeometryIfReady() {
+        guard !geometryRestored, let env, env.mainLoaded, mainWindow != nil else { return }
+        geometryRestored = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let w = self.mainWindow, let env = self.env else { return }
+            env.restoreWindowGeometry(w)
+        }
     }
 
     /// The main window appeared: first load, geometry restore and the OnLoaded pipeline (03 §1.3 steps 11–19).
@@ -139,7 +155,7 @@ final class LaunchCoordinator {
         // DATA-180 / DATA-174 (REQ-W-PERSIST-01): W-PERSIST's guard hooks (status, reload, mode change), the data-file
         // watcher for an editor outside safe mode, and the read-only session — once, after the first load.
         PersistUIBridge.shared.attach(env)
-        if let w = mainWindow { env.restoreWindowGeometry(w) }
+        restoreGeometryIfReady()
         // DATA-174: a read-only copy starts no 5-minute autosave (and so no Drive newer-save check); "Edit Here"
         // starts it (PersistUIBridge.editHere).
         if !env.isReadOnlyInstance { env.startAutosaveTimer() }

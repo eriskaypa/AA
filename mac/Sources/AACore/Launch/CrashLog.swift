@@ -117,6 +117,43 @@ public enum CrashLog {
         }
         return out
     }
+
+    // MARK: Next-launch scan (SHELL-197), one offset per data folder
+
+    /// The pre-fix single key; read once as the starting offset of a folder that has no key of its own yet, then
+    /// removed (a second folder must never inherit it).
+    public static let legacyScanOffsetKey = MacPreferences.Key("aa.shell.crashLogScanOffset")
+
+    /// `aa.shell.crashLogScanOffset.<sha-256 of the canonical folder path, 16 hex>` — crash.log lives in the data
+    /// folder, so the default folder and a portable / `--data-dir` folder each keep their own offset.
+    public static func scanOffsetKey(appFolder: URL) -> MacPreferences.Key {
+        let hex = PersistHost.sha256Hex(Data(PersistHost.canonicalPath(appFolder).utf8))
+        return MacPreferences.Key(legacyScanOffsetKey.rawValue + "." + hex.prefix(16))
+    }
+
+    /// Scans the bytes written since `storedOffset` (a stored offset past the end means the log was replaced or
+    /// truncated → from byte 0). Returns the offset to store and the last marker's signal, if any.
+    public static func scan(_ data: Data, storedOffset: Int?) -> (newOffset: Int, signal: Int32?) {
+        let stored = max(storedOffset ?? 0, 0)
+        let start = stored <= data.count ? stored : 0
+        let fresh = String(decoding: data[(data.startIndex + start)...], as: UTF8.self)
+        return (data.count, markers(in: fresh).last)
+    }
+
+    /// Reads `<appFolder>/crash.log`, scans it from this folder's stored offset and stores the new offset.
+    public static func scanForPreviousCrash(appFolder: URL, prefs: MacPreferences) -> (log: URL, signal: Int32)? {
+        let log = appFolder.appending(path: fileName)
+        guard let data = try? Data(contentsOf: log) else { return nil }
+        let key = scanOffsetKey(appFolder: appFolder)
+        var stored = prefs.string(key).flatMap { Int($0) }
+        if stored == nil, let legacy = prefs.string(legacyScanOffsetKey).flatMap({ Int($0) }) {
+            stored = legacy
+            prefs.set(nil as String?, legacyScanOffsetKey)
+        }
+        let r = scan(data, storedOffset: stored)
+        prefs.set(String(r.newOffset), key)
+        return r.signal.map { (log, $0) }
+    }
 }
 
 /// Pre-built marker buffers indexed by signal number and the log path; only `open`/`write` run inside the handler.

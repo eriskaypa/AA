@@ -13,28 +13,20 @@ enum ShellCrashReporter {
     /// A crash recorded by the previous session, shown once the main window exists.
     static var pendingNextLaunchReport: (message: String, path: URL)?
 
-    static let scanOffsetKey = MacPreferences.Key("aa.shell.crashLogScanOffset")
-
     static func install(appFolder folder: URL?) {
         appFolder = folder
         CrashLog.installSignalMarker(appFolder: folder)
         NSSetUncaughtExceptionHandler(shellUncaughtExceptionHandler)
-        scanForPreviousCrash(folder: folder)
+        // Snapshot runs (DEBUG verification on scratch folders) never show the dialog and must not touch the scan
+        // offsets kept in the app's preference domain.
+        if !LaunchCoordinator.shared.snapshotMode { scanForPreviousCrash(folder: folder) }
     }
 
-    /// Next launch: markers written since the last scan → the crash dialog after the main window appears.
+    /// Next launch: markers written since this folder's last scan → the crash dialog after the main window appears.
+    /// The offset is kept per data folder (`CrashLog.scanOffsetKey(appFolder:)`).
     private static func scanForPreviousCrash(folder: URL?) {
-        guard let folder else { return }
-        let log = folder.appending(path: CrashLog.fileName)
-        guard let data = try? Data(contentsOf: log) else { return }
-        let prefs = MacPreferences.shared
-        let stored = Int(prefs.string(scanOffsetKey) ?? "") ?? 0
-        let start = stored <= data.count ? stored : 0
-        let fresh = String(decoding: data[start...], as: UTF8.self)
-        prefs.set(String(data.count), scanOffsetKey)
-        if let sig = CrashLog.markers(in: fresh).last {
-            pendingNextLaunchReport = ("AA quit unexpectedly the last time it ran (signal \(sig)).", log)
-        }
+        guard let folder, let r = CrashLog.scanForPreviousCrash(appFolder: folder, prefs: .shared) else { return }
+        pendingNextLaunchReport = ("AA quit unexpectedly the last time it ran (signal \(r.signal)).", r.log)
     }
 
     static func startMetricKit() {

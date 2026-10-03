@@ -6,11 +6,13 @@ import AACore
 
 // MARK: Buttons
 
-/// WPF `AccentButton` → `.borderedProminent` + bold.
+/// WPF `AccentButton` → `.borderedProminent` + bold. The brand tint is applied here, on the one prominent action,
+/// not window-wide (design rule 15: secondary push buttons stay neutral).
 struct AAProminentButtonStyle: PrimitiveButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button(role: configuration.role, action: configuration.trigger) { configuration.label }
             .buttonStyle(.borderedProminent)
+            .tint(AAColor.tint)
             .fontWeight(.semibold)
     }
 }
@@ -28,6 +30,11 @@ struct AAToolbarButtonStyle: PrimitiveButtonStyle {
 
 extension View {
     func aaProminent() -> some View { buttonStyle(AAProminentButtonStyle()) }
+
+    /// DECISIONS "Stage V rulings" / design rule 14: a numeric (field or stepper) date picker shows ISO `yyyy-MM-dd`.
+    /// Apply to the `DatePicker` only — the locale must not leak into surrounding chrome. Stored values and the
+    /// Gregorian calendar are unchanged.
+    func aaISODatePicker() -> some View { environment(\.locale, ShellDateDisplay.pickerLocale) }
     func aaToolbarButton() -> some View { buttonStyle(AAToolbarButtonStyle()) }
 
     /// Floating chrome only (shared-save capsule, shortcut strip, switcher, due header, planner/board controls).
@@ -39,9 +46,16 @@ extension View {
 
 // MARK: Surfaces
 
-/// Side panes (filter / inspect panes) use the regular material (§8.4).
+/// Side panes (list / filter / inspect panes) use the regular material (§8.4) — the one list-pane surface (design rule
+/// 17). The material stops at the pane's safe area (the toolbar); the band under the unified toolbar is filled with
+/// the window colour, like the detail pane beside it. Without that band a pane hosted in an `HSplitView` showed the
+/// window's grey background under the toolbar next to the white detail pane — a grey/white seam at the split (Crew,
+/// Saved Lists). The material sits on the same `AAColor.bg` in every section, so all list panes read alike.
 struct AAPaneBackground: View {
-    var body: some View { Rectangle().fill(.regularMaterial) }
+    var body: some View {
+        Rectangle().fill(.regularMaterial)
+            .background(AAColor.bg)                      // a ShapeStyle background also fills the toolbar band
+    }
 }
 
 /// Panel background, control radius, 1-pt border.

@@ -48,6 +48,9 @@ struct AlertSpec {
     var style: NSAlert.Style = .informational
     var buttons: [AlertButton]
     var suppressionKey: MacPreferences.Key? = nil
+    /// The button Return answers when it is not the first `.default` button — e.g. a `.cancel` button that is also the
+    /// default (09 CREW-033: Return and ⎋ both cancel). Nil = the first `.default` button, else button 0.
+    var defaultIndex: Int? = nil
 }
 
 enum PasswordSheetMode { case unlock(prompt: String), setNew, changeExisting }

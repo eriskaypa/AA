@@ -1,6 +1,7 @@
 // Spec: 03 SHELL-002 (appearance before any window), SHELL-110/151/152 (live switching), §6.6.2, W-11 (re-apply after
 //       every reload), DECISIONS 03 Q-2 (System / Light / Dark per device; Light/Dark write DarkMode; System leaves it),
-//       "Appearance defaults to System on first launch unless settings.json says DarkMode: true"; ARCHITECTURE.md §8.1.
+//       "Appearance defaults to System on first launch unless settings.json says DarkMode: true", SHELL-638 (the ✓
+//       follows a macOS light/dark switch while Appearance = System); ARCHITECTURE.md §8.1.
 import AppKit
 import AACore
 
@@ -69,6 +70,20 @@ enum ShellAppearance {
     /// True when the app currently renders dark.
     static var isEffectivelyDark: Bool {
         (NSApp.appearance ?? NSApp.effectiveAppearance).bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+    }
+
+    nonisolated(unsafe) private static var effectiveObservation: NSKeyValueObservation?
+
+    /// SHELL-638 / W-11: with Appearance = System, macOS can switch light/dark under a running app (Auto appearance at
+    /// sunset); the View ▸ Dark Mode ✓ and anything else derived from `isEffectivelyDark` follow it through `onChange`.
+    static func observeEffectiveAppearance(_ onChange: @escaping @MainActor () -> Void) {
+        effectiveObservation = NSApp.observe(\.effectiveAppearance, options: [.new]) { _, _ in
+            if Thread.isMainThread {
+                MainActor.assumeIsolated { onChange() }
+            } else {
+                DispatchQueue.main.async { onChange() }
+            }
+        }
     }
 
     /// View ▸ Dark Mode ✓ toggles Light ⇄ Dark (SHELL-110/638); returns the status text.

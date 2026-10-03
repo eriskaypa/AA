@@ -19,6 +19,8 @@ public enum ShellWindowStateName: String, Sendable { case normal = "Normal", max
 public enum ShellWindowGeometry {
     public static let minimumRestoredSize = 200.0
     public static let defaultSize = (width: 1280.0, height: 820.0)
+    /// The main window's `minSize` (`NSWindow.setFrame` does not enforce it, so the restore applies it).
+    public static let macMinimumSize = (width: 860.0, height: 560.0)
 
     /// `WindowLeft = frame.minX`, `WindowTop = primary.maxY − frame.maxY` (WPF's top-left origin on the primary
     /// screen), `WindowWidth/Height = frame size` (outer frame).
@@ -58,8 +60,12 @@ public enum ShellWindowGeometry {
         return clamp(frame, into: visibleFrames)
     }
 
-    /// Keeps the window on a visible screen: if the frame's title-bar strip does not intersect any visible frame, it is
-    /// moved into the visible frame it overlaps most (or the first one) and shrunk to fit.
+    /// Keeps the window on a visible screen (03 §6.3 "clamp to the union of NSScreen.visibleFrames"):
+    /// * the target screen is the one the 28-pt title strip overlaps most (the frame's best overlap, else the first);
+    /// * the size is raised to `macMinimumSize` and then shrunk to fit the target's visible frame (a Windows PC's
+    ///   1920×1040 bounds on a 1470×919 MacBook);
+    /// * a frame whose title strip is (sufficiently) visible keeps its position unless it had to shrink — it may span
+    ///   two screens; otherwise it is moved inside the target.
     public static func clamp(_ f: ShellRect, into screens: [ShellRect]) -> ShellRect {
         guard !screens.isEmpty else { return f }
         func overlap(_ a: ShellRect, _ b: ShellRect) -> Double {
@@ -68,12 +74,19 @@ public enum ShellWindowGeometry {
             return w > 0 && h > 0 ? w * h : 0
         }
         let titleStrip = ShellRect(x: f.x, y: f.maxY - 28, width: f.width, height: 28)
-        if screens.contains(where: { overlap(titleStrip, $0) >= min(titleStrip.width, 80) * 10 }) { return f }
-        let target = screens.max(by: { overlap(f, $0) < overlap(f, $1) }).flatMap { overlap(f, $0) > 0 ? $0 : nil }
-            ?? screens[0]
-        let w = min(f.width, target.width), h = min(f.height, target.height)
+        let stripVisible = screens.contains(where: { overlap(titleStrip, $0) >= min(titleStrip.width, 80) * 10 })
+        let byStrip = screens.max(by: { overlap(titleStrip, $0) < overlap(titleStrip, $1) }).flatMap {
+            overlap(titleStrip, $0) > 0 ? $0 : nil
+        }
+        let byFrame = screens.max(by: { overlap(f, $0) < overlap(f, $1) }).flatMap { overlap(f, $0) > 0 ? $0 : nil }
+        let target = (stripVisible ? byStrip : nil) ?? byFrame ?? screens[0]
+        let w = min(max(f.width, macMinimumSize.width), target.width)
+        let h = min(max(f.height, macMinimumSize.height), target.height)
+        if stripVisible, w == f.width, h == f.height { return f }
+        // Keep the top-left corner where it was (WPF anchors Left/Top), then pull the frame inside the target.
+        let top = f.maxY
         let x = min(max(f.x, target.x), target.maxX - w)
-        let y = min(max(f.y, target.y), target.maxY - h)
+        let y = min(max(top - h, target.y), target.maxY - h)
         return ShellRect(x: x, y: y, width: w, height: h)
     }
 }
