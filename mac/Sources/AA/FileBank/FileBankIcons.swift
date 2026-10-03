@@ -170,8 +170,8 @@ struct FileBankSourceLabel: View {
     }
 
     private var help: String {
-        if file.isLink { return "A web link." }
-        if file.linkInPlace { return "Linked in place — opening it edits the original file." }
-        return "A copy stored in AA's data folder."
+        if file.isLink { return FileBankText.sourceWebLinkHelp }
+        if file.linkInPlace { return FileBankText.sourceLiveHelp }
+        return FileBankText.sourceCopyHelp
     }
 }

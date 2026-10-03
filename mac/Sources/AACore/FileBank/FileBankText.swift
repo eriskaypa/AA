@@ -72,6 +72,8 @@ public enum FileBankText {
     public static let fileLinksSettings = "File Links Settings…"
     public static let connectToServer = "Connect to Server…"
     public static let openAnyway = "Yes"
+    public static let yes = "Yes"
+    public static let no = "No"
     public static let cancel = "Cancel"
     public static let ok = "OK"
 
@@ -91,10 +93,22 @@ public enum FileBankText {
     public static let missingBadgeHelp = "The file is missing at its stored location."
     public static let unmappedBadgeHelp = "A Windows path — map it in Settings ▸ File Links to open it on this Mac."
 
-    // MARK: View modes
+    // MARK: View modes, footer, drop feedback, source help (Mac additions, 05 §6.9)
 
     public static let viewAsList = "as List"
     public static let viewAsIcons = "as Icons"
+    public static let viewModeHelp = "View the files as a list or as icons"
+    /// Footer: `1 item` / `{n} items`, prefixed by `{k} of ` and suffixed by ` selected` when rows are selected.
+    public static func footerCount(shown: Int, selected: Int) -> String {
+        let items = shown == 1 ? "1 item" : "\(shown) items"
+        return selected > 0 ? "\(selected) of \(items) selected" : items
+    }
+    public static func lockedSharersCount(_ n: Int) -> String { "\(n) locked" }
+    public static let dropToLinkInPlace = "Drop to link in place (originals are referenced)"
+    public static let dropToImportCopy = "Drop to import a copy"
+    public static let sourceWebLinkHelp = "A web link."
+    public static let sourceLiveHelp = "Linked in place — opening it edits the original file."
+    public static let sourceCopyHelp = "A copy stored in AA's data folder."
 
     // MARK: Shared containers (DECISIONS 05 — Container.SharedWithContainerIds)
 
@@ -155,6 +169,8 @@ public enum FileBankText {
         "Could not open:\n\n\(target)\n\n\(error)"
     }
     public static let viewerPathColumn = "Path / URL"
+    public static let viewerNoLinkHandler = "No application is set to open this link."
+    public static let viewerNotesAccessibility = "Notes (read-only)"
 
     // MARK: Column titles (CONT-080)
 

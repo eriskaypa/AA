@@ -153,9 +153,17 @@ struct FileBankViewerContent: View {
                                       onOpen: { [sel = selection] in open(rows.filter { sel.contains($0.id) }.map(\.file)) }))
         .onAppear { keys.install() }
         .onDisappear { keys.remove() }
-        .aaListCommands(ListCommands(role: .viewerFiles, selectionCount: selection.count,
-                                     quickLook: { [sel = selection] in quickLook(rows, sel, toggle: false) },
-                                     primary: { [sel = selection] in open(rows.filter { sel.contains($0.id) }.map(\.file)) }))
+        .aaListCommands(viewerListCommands(rows))
+    }
+
+    /// SHELL-543 / SHELL-669: Open and Quick Look only; Quick Look while the selection holds a local file.
+    private func viewerListCommands(_ rows: [FileBankRow]) -> ListCommands {
+        let sel = selection
+        let hasLocal = rows.contains { sel.contains($0.id) && $0.visual.localURL != nil }
+        return ListCommands(role: .viewerFiles, selectionCount: sel.count,
+                            quickLook: FileBankListPolicy.quickLookAvailable(selectionHasLocalFile: hasLocal)
+                                ? { quickLook(rows, sel, toggle: false) } : nil,
+                            primary: { open(rows.filter { sel.contains($0.id) }.map(\.file)) })
     }
 
     private func footer(_ rows: [FileBankRow]) -> some View {
@@ -211,8 +219,8 @@ struct FileBankViewerContent: View {
         if FileBankDisplay.openAllNeedsConfirmation(files.count) {
             let yes = await dialogs.alert(AlertSpec(title: FileBankText.viewerOpenAllFilesTitle,
                                                     message: FileBankText.viewerOpenAllPrompt(files.count),
-                                                    buttons: [AlertButton(title: "Yes", role: .default),
-                                                              AlertButton(title: "No", role: .cancel)])) == 0
+                                                    buttons: [AlertButton(title: FileBankText.yes, role: .default),
+                                                              AlertButton(title: FileBankText.no, role: .cancel)])) == 0
             guard yes else { return }
         }
         for f in files { await FileBankOpening.open(f, env: env, dialogs: dialogs, style: .viewer) }
@@ -224,7 +232,7 @@ struct FileBankViewerContent: View {
         let url = AttachmentOpener.normalizeWebLink(target) ?? URL(string: target)
         guard let url, NSWorkspace.shared.open(url) else {
             await dialogs.warning(FileBankText.viewerOpenTitle,
-                                  FileBankText.viewerCouldNotOpen(target, "No application is set to open this link."))
+                                  FileBankText.viewerCouldNotOpen(target, FileBankText.viewerNoLinkHandler))
             return
         }
     }
@@ -265,7 +273,7 @@ struct FileBankViewerTextArea: NSViewRepresentable {
         tv.linkTextAttributes = [.foregroundColor: NSColor.linkColor, .underlineStyle: NSUnderlineStyle.single.rawValue,
                                  .cursor: NSCursor.pointingHand]
         tv.delegate = context.coordinator
-        tv.setAccessibilityLabel("Notes (read-only)")
+        tv.setAccessibilityLabel(FileBankText.viewerNotesAccessibility)
         scroll.documentView = tv
         apply(content, to: tv)
         context.coordinator.shown = content.identity

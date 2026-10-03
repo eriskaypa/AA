@@ -63,9 +63,16 @@ struct FileBacklinksSection: View {
                                       onOpen: { [sel = selection] in open(model.rows.filter { sel.contains($0.id) }) }))
         .onAppear { keys.install() }
         .onDisappear { keys.remove() }
-        .aaListCommands(ListCommands(role: .other, selectionCount: selection.count,
-                                     quickLook: { [sel = selection] in quickLook(model, sel, toggle: false) },
-                                     primary: { [sel = selection] in open(model.rows.filter { sel.contains($0.id) }) }))
+        .aaListCommands(listCommands(model))
+    }
+
+    private func listCommands(_ model: FileBankBacklinksModel) -> ListCommands {
+        let sel = selection
+        let hasLocal = model.rows.contains { sel.contains($0.id) && $0.visual.localURL != nil }
+        return ListCommands(role: .other, selectionCount: sel.count,
+                            quickLook: FileBankListPolicy.quickLookAvailable(selectionHasLocalFile: hasLocal)
+                                ? { quickLook(model, sel, toggle: false) } : nil,
+                            primary: { open(model.rows.filter { sel.contains($0.id) }) })
     }
 
     private func row(_ r: FileBankBacklinkRow) -> some View {

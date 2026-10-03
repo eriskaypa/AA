@@ -211,8 +211,8 @@ import AACore
         if FileBankDisplay.openAllNeedsConfirmation(shown.count) {
             let ok = await dialogs.alert(AlertSpec(title: FileBankText.openAllTitle,
                                                    message: FileBankText.openAllPrompt(shown.count), style: .informational,
-                                                   buttons: [AlertButton(title: "Yes", role: .default),
-                                                             AlertButton(title: "No", role: .cancel)])) == 0
+                                                   buttons: [AlertButton(title: FileBankText.yes, role: .default),
+                                                             AlertButton(title: FileBankText.no, role: .cancel)])) == 0
             guard ok else { return }
         }
         await open(shown)

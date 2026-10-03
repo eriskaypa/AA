@@ -159,11 +159,19 @@ struct FileBankTable: View {
     }
 
     private var listCommands: ListCommands {
-        let sel = selection
+        FileBankTable.listCommands(rows: rows, selection: selection, isShared: isShared, actions: actions)
+    }
+
+    /// The router publication of a file-bank list (Table or icon grid), decided by `FileBankListPolicy`.
+    static func listCommands(rows: [FileBankRow], selection sel: Set<FileBankRow.ID>, isShared: Bool,
+                             actions: FileBankRowActions) -> ListCommands {
+        let hasLocal = rows.contains { sel.contains($0.id) && $0.visual.localURL != nil }
+        let canRemove = FileBankListPolicy.removeAvailable(editable: actions.editable, isShared: isShared)
         return ListCommands(role: .fileBank, selectionCount: sel.count, deleteTitle: FileBankListPolicy.deleteTitle,
-                            delete: (actions.editable && !isShared) ? { actions.remove(sel) } : nil,
+                            delete: canRemove ? { actions.remove(sel) } : nil,
                             deleteConfirms: FileBankListPolicy.deleteConfirms,
-                            quickLook: { actions.quickLook(sel, false) },
+                            quickLook: FileBankListPolicy.quickLookAvailable(selectionHasLocalFile: hasLocal)
+                                ? { actions.quickLook(sel, false) } : nil,
                             primary: { actions.open(sel) })
     }
 
@@ -257,12 +265,7 @@ struct FileBankGrid: View {
         .onCopyCommand { FileBankGrid.providers(rows, actions.copyForPasteboard(selection), selection) }
         .onCutCommand { isShared ? [] : FileBankGrid.providers(rows, actions.cutForPasteboard(selection), selection) }
         .onPasteCommand(of: [.item]) { _ in if !isShared { actions.paste() } }
-        .aaListCommands(ListCommands(role: .fileBank, selectionCount: selection.count,
-                                     deleteTitle: FileBankListPolicy.deleteTitle,
-                                     delete: (actions.editable && !isShared) ? { [sel = selection] in actions.remove(sel) } : nil,
-                                     deleteConfirms: FileBankListPolicy.deleteConfirms,
-                                     quickLook: { [sel = selection] in actions.quickLook(sel, false) },
-                                     primary: { [sel = selection] in actions.open(sel) }))
+        .aaListCommands(FileBankTable.listCommands(rows: rows, selection: selection, isShared: isShared, actions: actions))
     }
 
     static func providers(_ rows: [FileBankRow], _ files: [FileItem], _ ids: Set<FileBankRow.ID>) -> [NSItemProvider] {

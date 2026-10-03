@@ -19,6 +19,8 @@ struct FileBankHeaderBar: View {
     let total: Int
     let editable: Bool
     let canEditSelection: Bool
+    /// CONT-087: Cut (like Copy) works without a selection — it empties the clipboard.
+    let canCut: Bool
     let hasSelection: Bool
     let hasShown: Bool
     let actions: FileBankHeaderActions
@@ -69,7 +71,7 @@ struct FileBankHeaderBar: View {
             group {
                 FileBankHeaderButton(title: FileBankText.cut, symbol: "scissors", help: FileBankText.cut,
                                      showsTitle: d == .full, action: actions.cut)
-                    .disabled(!canEditSelection)
+                    .disabled(!canCut)
                 FileBankHeaderButton(title: FileBankText.copy, symbol: "doc.on.doc", help: FileBankText.copy,
                                      showsTitle: d == .full, action: actions.copy)
                 FileBankHeaderButton(title: FileBankText.paste, symbol: "doc.on.clipboard", help: FileBankText.paste,
@@ -178,7 +180,7 @@ struct FileBankScopeBar<Trailing: View>: View {
             .labelStyle(.iconOnly)
             .controlSize(.small)
             .fixedSize()
-            .help("View the files as a list or as icons")
+            .help(FileBankText.viewModeHelp)
             trailing(d == .iconsOnly)
         }
     }
@@ -302,7 +304,7 @@ struct FileBankFooter: View {
         HStack(spacing: AASpacing.s) {
             Text(countText).monospacedDigit().foregroundStyle(AAColor.muted)
             if !lockedSharers.isEmpty {
-                Label("\(lockedSharers.count) locked", systemImage: "lock.fill")
+                Label(FileBankText.lockedSharersCount(lockedSharers.count), systemImage: "lock.fill")
                     .foregroundStyle(AAColor.muted)
                     .help(lockedSharers.map { "\($0) \(FileBankText.lockedOwnerFiles)" }.joined(separator: "\n"))
             }
@@ -319,10 +321,7 @@ struct FileBankFooter: View {
         .overlay(alignment: .top) { Rectangle().fill(AAColor.border).frame(height: 1) }
     }
 
-    private var countText: String {
-        let items = shown == 1 ? "1 item" : "\(shown) items"
-        return selected > 0 ? "\(selected) of \(items) selected" : items
-    }
+    private var countText: String { FileBankText.footerCount(shown: shown, selected: selected) }
 }
 
 // MARK: - Drop (CONT-085, SHELL-679)
@@ -403,8 +402,7 @@ struct FileBankDropOverlay: View {
                     .fill(AAColor.tint.opacity(0.08))
                 RoundedRectangle(cornerRadius: AARadius.tile, style: .continuous)
                     .strokeBorder(AAColor.tint, style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
-                Label(state.linkInPlace ? "Drop to link in place (originals are referenced)"
-                                        : "Drop to import a copy",
+                Label(state.linkInPlace ? FileBankText.dropToLinkInPlace : FileBankText.dropToImportCopy,
                       systemImage: state.linkInPlace ? "link" : "plus.rectangle.on.folder")
                     .font(.system(size: AAType.small, weight: .semibold))
                     .foregroundStyle(AAColor.tint)

@@ -216,6 +216,7 @@ struct FileBankPane: View {
         VStack(spacing: 0) {
             FileBankHeaderBar(title: FileBankText.title, total: container.files.count, editable: editable,
                               canEditSelection: editable && !snap.isShared && !selected.isEmpty,
+                              canCut: editable && !snap.isShared,
                               hasSelection: !selected.isEmpty, hasShown: !snap.rows.isEmpty,
                               actions: headerActions(snap: snap, selected: selected))
             Divider()

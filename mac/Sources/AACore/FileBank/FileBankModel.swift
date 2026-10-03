@@ -178,20 +178,28 @@ public enum FileBankDisplay {
 // MARK: - Router publishing (03 §6.5.1.10 list roles, SHELL-516, SHELL-670, T-KB-04/05)
 
 /// What the file-bank and viewer tables publish to the command router: ⌘⌫ = "Remove" with **no confirmation**
-/// (CONT-088), so plain ⌫/⌦ do nothing (`deleteConfirms == false` → no `.onDeleteCommand`); Space/⌘Y = Quick Look;
-/// ↩ = Open. The viewer list has Open and Quick Look only.
+/// (CONT-088), so plain ⌫/⌦ do nothing (`deleteConfirms == false` → no `.onDeleteCommand`); Space/⌘Y = Quick Look
+/// only while the selection holds a local file (SHELL-543 enable rule); ↩ = Open. The viewer list has Open and
+/// Quick Look only. The AA views build their `ListCommands` from these decisions.
 public enum FileBankListPolicy {
     public static let role = "fileBank"
     public static let viewerRole = "viewerFiles"
     public static let deleteTitle = FileBankText.remove
     public static let deleteConfirms = false
 
-    public static func state(selectionCount: Int, canRemove: Bool) -> ShellListState {
+    /// SHELL-543: `LIST(fileBank | viewerFiles)` "with a selection that has a local file".
+    public static func quickLookAvailable(selectionHasLocalFile: Bool) -> Bool { selectionHasLocalFile }
+
+    /// Remove is published only for an editable bank's own rows (never for the Shared view).
+    public static func removeAvailable(editable: Bool, isShared: Bool) -> Bool { editable && !isShared }
+
+    public static func state(selectionCount: Int, canRemove: Bool, selectionHasLocalFile: Bool = true) -> ShellListState {
         ShellListState(role: role, selectionCount: selectionCount, deleteTitle: deleteTitle, hasDelete: canRemove,
-                       hasQuickLook: true, hasPrimary: true)
+                       hasQuickLook: quickLookAvailable(selectionHasLocalFile: selectionHasLocalFile), hasPrimary: true)
     }
 
-    public static func viewerState(selectionCount: Int) -> ShellListState {
-        ShellListState(role: viewerRole, selectionCount: selectionCount, hasQuickLook: true, hasPrimary: true)
+    public static func viewerState(selectionCount: Int, selectionHasLocalFile: Bool = true) -> ShellListState {
+        ShellListState(role: viewerRole, selectionCount: selectionCount,
+                       hasQuickLook: quickLookAvailable(selectionHasLocalFile: selectionHasLocalFile), hasPrimary: true)
     }
 }
