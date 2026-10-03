@@ -54,6 +54,8 @@ final class EditorController: NSObject {
     @ObservationIgnored private var noticeTask: Task<Void, Never>?
     @ObservationIgnored private var observationGeneration = 0
     @ObservationIgnored private var previewMode = false
+    /// Preview only (no environment): whether the legacy banners assume an app password.
+    private var previewHasAppPassword: Bool?
     private enum ColorTarget { case text, highlight }
 
     @ObservationIgnored private var _scrollView: EditorScrollView?
@@ -376,8 +378,9 @@ final class EditorController: NSObject {
 
     /// Shows `text` without a container (DEBUG snapshots of the format bar and paper).
     func showPreview(_ text: NSAttributedString, selection: NSRange, withheld: EditorWithheldReason? = nil,
-                     notice: EditorNotice? = nil) {
+                     notice: EditorNotice? = nil, hasAppPassword: Bool = true) {
         previewMode = true
+        previewHasAppPassword = hasAppPassword
         loading = true
         storage.setAttributedString(text)
         loading = false
@@ -1034,10 +1037,37 @@ final class EditorController: NSObject {
         return pw.unlock(password)
     }
 
-    /// The withheld banner's "Unlock…" for legacy encrypted bodies (CONT-007): unlock the session, then reload.
+    /// The withheld banner's "Unlock…" for legacy encrypted bodies (CONT-007): unlock the session, then reload. Only
+    /// offered with an app password set (a password set now gets a fresh salt and could never decrypt the body).
     func unlockAndReload() async {
-        guard await ensureUnlocked(), container != nil else { return }
+        guard hasAppPassword, await ensureUnlocked(), container != nil else { return }
         load()
+    }
+
+    /// The withheld banner's "Unlock with App Password…" (CONT-007, D-1): the session was unlocked with a password
+    /// that can't decrypt the body (typically the master password). Asks for the app password, re-keys the session
+    /// only when it decrypts this body, then reloads (which migrates it). Any failure says why and changes nothing.
+    func unlockWithAppPasswordAndReload() async {
+        guard let pw = env?.passwords, let c = container, withheld == .legacyUndecryptable else { return }
+        guard case .ok(let typed, _) = await dialogs.password(.unlock(prompt: EditorLegacyUnlock.prompt)) else { return }
+        guard self.container === c, withheld == .legacyUndecryptable else { return }   // rebound meanwhile
+        let outcome = EditorLegacyUnlock.tryAppPassword(typed, blob: c.richTextXaml, passwords: pw)
+        if let f = outcome.failure {
+            await dialogs.info(f.title, f.text)
+            return
+        }
+        load()
+    }
+
+    /// An app password (hash + salt) exists — the withheld legacy banners depend on it.
+    var hasAppPassword: Bool { previewHasAppPassword ?? env?.passwords.hasPassword ?? false }
+
+    /// The legacy banner's action, run from the view.
+    func performWithheldAction(_ a: EditorWithheldAction) async {
+        switch a {
+        case .unlock: await unlockAndReload()
+        case .unlockWithAppPassword: await unlockWithAppPasswordAndReload()
+        }
     }
 
     private func lockSelection() async {

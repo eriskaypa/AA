@@ -18,18 +18,98 @@ public enum EditorWithheldReason: Equatable, Sendable {
     /// The rich-text engine is not available in this build (placeholder reader) — nothing may be written.
     case engineUnavailable
 
-    /// The banner shown above a withheld note (Mac addition, §6.7 "inline banner").
-    public var bannerText: String {
+    /// The banner shown above a withheld note (Mac addition, §6.7 "inline banner"), assuming an app password is set.
+    public var bannerText: String { bannerText(hasAppPassword: true) }
+
+    /// The banner text. A legacy body can only ever be decrypted with the app password whose salt is stored in the
+    /// settings (§4.6), so without one the note is reported as undecryptable on this Mac instead of offering to set a
+    /// password (a new password gets a fresh salt and could never open it).
+    public func bannerText(hasAppPassword: Bool) -> String {
         switch self {
+        case .legacyLocked where !hasAppPassword, .legacyUndecryptable where !hasAppPassword:
+            return "This note was encrypted by an older AA build, and no app password is set on this Mac, so it can't "
+                + "be decrypted here. It is kept unchanged."
         case .legacyLocked:
-            return "This note is encrypted. Unlock it first (Tools ▸ Set / change password, then reopen) — nothing typed here would be saved."
+            return "This note was encrypted by an older AA build. Click Unlock… and enter the app password to open it. "
+                + "Nothing typed here would be saved until then."
         case .legacyUndecryptable:
-            return "This note is encrypted with a different password or on another computer and can't be opened here. It is kept unchanged."
+            return "This note was encrypted by an older AA build, and the password this session was unlocked with can't "
+                + "decrypt it (the master password never can). Click Unlock with App Password… to open it with the app "
+                + "password. It is kept unchanged."
         case .unparseable:
             return "This note's saved text could not be read, so it is shown as raw markup and can't be edited here. Nothing is changed."
         case .engineUnavailable:
             return "Rich-text editing is not available in this build. The note is shown read-only and is never changed."
         }
+    }
+
+    /// The banner's inline action (nil: nothing the user can do here).
+    public func bannerAction(hasAppPassword: Bool) -> EditorWithheldAction? {
+        guard hasAppPassword else { return nil }
+        switch self {
+        case .legacyLocked: return .unlock
+        case .legacyUndecryptable: return .unlockWithAppPassword
+        case .unparseable, .engineUnavailable: return nil
+        }
+    }
+}
+
+/// The withheld banner's inline actions (CONT-007, §6.10, D-1).
+public enum EditorWithheldAction: Equatable, Sendable {
+    /// Locked session: the CONT-062 unlock gate, then reload.
+    case unlock
+    /// Session unlocked with a password that can't decrypt the body (typically the master password): ask for the app
+    /// password, re-key the session with it, then reload.
+    case unlockWithAppPassword
+
+    public var title: String {
+        switch self {
+        case .unlock: return "Unlock…"
+        case .unlockWithAppPassword: return "Unlock with App Password…"
+        }
+    }
+}
+
+/// "Unlock with App Password…" for an undecryptable legacy `enc:` body (CONT-007, §6.10, D-1; Mac addition).
+public enum EditorLegacyUnlock {
+    public static let prompt = "Enter the app password to open this note (the master password can't decrypt notes "
+        + "encrypted by an older AA build):"
+
+    public enum Outcome: Equatable, Sendable {
+        /// The session now runs on `typed`; reloading the note decrypts it.
+        case unlocked
+        case masterPassword
+        case wrongPassword
+        /// The typed (correct) app password does not decrypt this body either: another computer or an older salt.
+        case cannotDecrypt
+
+        /// The info alert for a failure (nil on success).
+        public var failure: (title: String, text: String)? {
+            switch self {
+            case .unlocked:
+                return nil
+            case .masterPassword:
+                return ("Master password", "The master password can't decrypt notes encrypted by an older AA build. "
+                        + "Enter the app password instead. The note is kept unchanged.")
+            case .wrongPassword:
+                return ("Wrong password", "Wrong password. The note is kept unchanged.")
+            case .cannotDecrypt:
+                return ("Can't open this note", "The app password doesn't decrypt this note either. It was encrypted "
+                        + "on another computer or before the app password was changed, so it can't be opened here. "
+                        + "It is kept unchanged.")
+            }
+        }
+    }
+
+    /// Trial-decrypts `blob` with `typed` first; only when that works is the session re-keyed (lock, then unlock with
+    /// `typed`). Any failure leaves the session exactly as it was. Nothing is written here (the reload migrates).
+    @MainActor public static func tryAppPassword(_ typed: String, blob: String, passwords: PasswordService) -> Outcome {
+        if PasswordHashing.isMaster(typed) { return .masterPassword }
+        guard passwords.hasPassword, passwords.verify(typed) else { return .wrongPassword }
+        guard let salt = passwords.settings.values.passwordSalt,
+              LegacyBodyCrypto.decrypt(blob, password: typed, saltBase64: salt) != nil else { return .cannotDecrypt }
+        passwords.lock()
+        return passwords.unlock(typed) ? .unlocked : .wrongPassword
     }
 }
 

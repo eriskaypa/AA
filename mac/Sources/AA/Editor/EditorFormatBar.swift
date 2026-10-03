@@ -198,9 +198,15 @@ struct EditorFormatBar: View {
         .help(c.help)
     }
 
+    /// A folded menu looks and acts disabled when none of its commands can run (read-only, parked, orphaned note).
+    func menuEnabled(_ commands: [BarCommand]) -> Bool {
+        commands.contains { controller.validate($0.command) }
+    }
+
     private var alignmentMenu: some View {
         let current = Self.alignments.first { $0.isOn(s.alignment) } ?? Self.alignments[0]
-        return EditorBarMenu(symbol: current.symbol, help: "Alignment — " + current.help, label: "Alignment") {
+        return EditorBarMenu(symbol: current.symbol, enabled: menuEnabled(Self.alignments),
+                             help: "Alignment — " + current.help, label: "Alignment") {
             ForEach(Self.alignments, id: \.title) { a in menuItem(a, on: a.isOn(s.alignment)) }
         }
     }
@@ -208,7 +214,7 @@ struct EditorFormatBar: View {
     private var listMenu: some View {
         let current = Self.listCommands.first { $0.isOn(s.list) }
         return EditorBarMenu(symbol: current?.symbol ?? "list.bullet", isOn: current != nil,
-                             help: "Lists — bullets, numbering, indent and outdent", label: "Lists") {
+                             enabled: menuEnabled(Self.listCommands), help: "Lists — bullets, numbering, indent and outdent", label: "Lists") {
             ForEach(Self.listCommands.prefix(2), id: \.title) { c in menuItem(c, on: c.isOn(s.list)) }
             Divider()
             ForEach(Self.listCommands.suffix(2), id: \.title) { c in menuItem(c) }
@@ -216,7 +222,9 @@ struct EditorFormatBar: View {
     }
 
     private func overflowMenu(_ d: Density) -> some View {
-        EditorBarMenu(symbol: "ellipsis.circle", help: "More formatting commands", label: "More") {
+        // Find and Zoom inside work on a read-only note, so the overflow stays live wherever Find does.
+        EditorBarMenu(symbol: "ellipsis.circle", enabled: controller.validate(.showFind),
+                      help: "More formatting commands", label: "More") {
             if d >= .minimal {
                 Button { controller.undo() } label: { Label("Undo", systemImage: "arrow.uturn.backward") }
                     .disabled(!(controller.canUndo && editable))
@@ -250,6 +258,7 @@ struct EditorFormatBar: View {
 struct EditorBarMenu<Content: View>: View {
     let symbol: String
     var isOn = false
+    var enabled = true
     let help: String
     let label: String
     @ViewBuilder var content: () -> Content
@@ -267,6 +276,8 @@ struct EditorBarMenu<Content: View>: View {
         .frame(height: 22)
         .padding(.horizontal, 4)
         .focusable(false)
+        .disabled(!enabled)
+        .aaDisabledOpacity(!enabled)
         .help(help)
         .accessibilityLabel(label)
     }

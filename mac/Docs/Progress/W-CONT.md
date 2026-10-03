@@ -85,6 +85,18 @@ notice uses `AAColor` tokens; the self-test list uses `aaMono`. `showPreview` (d
 history like a load does (D-2) — the self-test's synchronous steps otherwise undid into the previous preview.
 Snapshots: `scratchpad/snapshots/fix1-W-CONT/`. Gate green: 1,589 tests.
 
+## Fix pass FIX2-W-CONT (round-2 verification, V2-J3) — 2 / 2 fixed
+
+| Finding | Fix | Test / check |
+|---|---|---|
+| V2-J3 minor — legacy `enc:` body: dead end after a master-password unlock; "Unlock…" without an app password set a new password; banner text pointed at the Tools menu | AACore `EditorWithheldReason.bannerText(hasAppPassword:)` / `bannerAction(hasAppPassword:)` + `EditorWithheldAction` (`Unlock…`, `Unlock with App Password…`) + `EditorLegacyUnlock.tryAppPassword` (refuses the master password, verifies, trial-decrypts the kept blob, only then `lock()` + `unlock(typed)`); `EditorController.unlockWithAppPasswordAndReload` / `performWithheldAction`, `unlockAndReload` only with an app password; `EditorPane` banner shows the action for the case (warning with an action, danger without). | `legacyBannerActions`, `lockAndLegacyBodiesJourney` (§7.6 vector: master → undecryptable, blob kept; master / wrong password change nothing; test1234 → unlocked → reload migrates to plaintext), `appPasswordThatCannotDecryptKeepsSession`, `noAppPasswordOffersNothing`; snapshots `w-cont.editor-legacy`, `w-cont.editor-legacy-undecryptable`, `w-cont.editor-legacy-nopassword` (light + dark) |
+| V2-J3 polish — folded Alignment / Lists / More menus full-strength on a read-only note | `EditorBarMenu` takes `enabled` (`.disabled` + `aaDisabledOpacity`); Alignment and Lists are enabled only when one of their commands validates; the overflow follows `validate(.showFind)` (Find and Zoom work read-only). | self-test checks "folded menus live while editable", "Alignment menu disabled read-only", "Lists menu disabled read-only", "overflow (Find / Zoom) live read-only" (all ✓); snapshots `w-cont.editor-legacy-*`, `w-cont.selftest-*` |
+
+New sheet ids: `w-cont.editor-legacy-undecryptable`, `w-cont.editor-legacy-nopassword`. Snapshots:
+`scratchpad/snapshots/fix2-W-CONT/`. Gate green: 1,658 tests. Follow-up request (F1, optional): a
+`PasswordService.isUnlockedWithMasterPassword` would let the undecryptable banner say for certain that the master
+password was used; today it names the master password as the usual cause.
+
 ## Post-merge (Stage V)
 
 * Gated tests `EditorSessionRealEngineTests` (real reader/writer round trip, untouched notes not rewritten).
