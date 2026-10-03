@@ -52,6 +52,19 @@ Owner of: builders, editors, procedure checklist area, Saved Lists tab (OWNERSHI
 - Snapshots (light + dark): `scratchpad/snapshots/fix1-W-BUILD/` — task-editor, lists, proc-1400, proc-1100,
   subtask-builder, crew-embedded, checklist-builder.
 
+## Stage V round 2 fixes (FIX2-W-BUILD)
+- V2-J7 #1 (DECISIONS 06 "log the unlogged actions: yes", 06 §8 D8): group create / rename / delete, saved-list
+  rename and Move to group now add log entries — `Added · List group · {name} · ""`, `Added · List group · {new} ·
+  renamed from '{old}'`, `Removed · List group · {name} · {n} list(s) ungrouped`, `Added · Saved list · {new} ·
+  renamed from '{old}'`, `Added · Saved list · {name} · moved to group '{g}'` / `moved to Ungrouped`. Unchanged
+  renames and moves to the current group are not logged. Test: `BuilderSavedListsTests.d8GroupAndRenameActionsAreLogged`.
+- V2-J7 #2 (06 §8 D3): the template-editor rescue ("Save as New List") and its prompt use the list's latest name —
+  `BuilderTemplateSession` remembers the template object it last resolved, so a rename through "Manage saved lists…"
+  followed by a delete rescues as the renamed list (`openedName` → `lastKnownName`). Tests:
+  `BuilderTemplateSessionTests.rescueAfterRenameThenDeleteUsesTheLatestName`, `…EvenWhenTheHeaderNeverReadIt`.
+- Gate: build + 1,657 tests green with `-warnings-as-errors`; `check-ownership.sh` green. No UI layout change (log
+  rows and a prompt name only), so no new snapshots.
+
 ## Not done / post-merge (Stage V)
 - Editors show the real rich-text + file-bank pane once W-CONT's `ContainerEditorView` lands (placeholder in this
   worktree).

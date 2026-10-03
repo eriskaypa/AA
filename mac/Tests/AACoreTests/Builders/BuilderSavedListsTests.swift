@@ -216,9 +216,8 @@ import Testing
         #expect(copy.name == "Rounds (copy)" && copy.groupId == g.id && copy.id != t.id)
         #expect(store.data.checklistTemplates.last === copy)
         #expect(store.data.log.last!.detail == "1 item(s)")
-        let logsBefore = store.data.log.count
         #expect(BuilderSavedLists.renameGroup(store, g, rawName: " Bridge "))
-        #expect(g.name == "Bridge" && store.data.log.count == logsBefore)       // groups are not logged
+        #expect(g.name == "Bridge" && store.data.log.last!.kind == "List group")   // DECISIONS 06 / D8 (additive)
         #expect(BuilderSavedLists.manageGroupRows(store.data).map(\.display) == ["Bridge  ·  2 list(s)"])
         #expect(BuilderSavedLists.moveToGroupRows(store.data).map(\.display) == ["(No group — ungrouped)", "Bridge"])
         BuilderSavedLists.deleteGroup(store, g)
@@ -229,6 +228,49 @@ import Testing
         #expect(store.data.log.last!.action == "Removed" && store.data.log.last!.name == "Rounds" && store.data.log.last!.detail == "")
         BuilderSavedLists.setSortAZ(store, true)
         #expect(BuilderSavedLists.isSortAZ(store.data) && store.data.ui.sortAZ["savedlists"] == true)
+    }
+
+    @Test func d8GroupAndRenameActionsAreLogged() {
+        // FIX2 V2-J7: DECISIONS 06 "log the unlogged actions: yes" → 06 §8 D8 group create / rename / delete and list
+        // rename (+ Move to group) get additive Added / Removed entries; no-op renames and moves add nothing.
+        let m = StoreFactory.make(); let store = m.store
+        let g = BuilderSavedLists.newGroup(store, rawName: " Deck ")!
+        var e = store.data.log.last!
+        #expect(e.action == "Added" && e.kind == "List group" && e.name == "Deck" && e.detail == "")
+
+        let t = BuilderSavedLists.newList(store, rawName: "Bunkering")!
+        let u = BuilderSavedLists.newList(store, rawName: "Mooring")!
+        BuilderSavedLists.assign(store, t, toGroup: g.id)
+        e = store.data.log.last!
+        #expect(e.action == "Added" && e.kind == "Saved list" && e.name == "Bunkering" && e.detail == "moved to group 'Deck'")
+        BuilderSavedLists.assign(store, u, toGroup: g.id)
+        var count = store.data.log.count
+        BuilderSavedLists.assign(store, t, toGroup: g.id)                       // same group: not logged
+        #expect(store.data.log.count == count)
+
+        #expect(BuilderSavedLists.rename(store, t, rawName: " Galley "))
+        e = store.data.log.last!
+        #expect(e.action == "Added" && e.kind == "Saved list" && e.name == "Galley" && e.detail == "renamed from 'Bunkering'")
+        count = store.data.log.count
+        #expect(BuilderSavedLists.rename(store, t, rawName: "Galley"))          // unchanged: not logged
+        #expect(!BuilderSavedLists.rename(store, t, rawName: "  "))             // blank: refused, not logged
+        #expect(store.data.log.count == count)
+
+        #expect(BuilderSavedLists.renameGroup(store, g, rawName: "Bridge"))
+        e = store.data.log.last!
+        #expect(e.action == "Added" && e.kind == "List group" && e.name == "Bridge" && e.detail == "renamed from 'Deck'")
+        count = store.data.log.count
+        #expect(BuilderSavedLists.renameGroup(store, g, rawName: " Bridge "))   // unchanged after trim: not logged
+        #expect(store.data.log.count == count)
+
+        BuilderSavedLists.assign(store, u, toGroup: nil)
+        e = store.data.log.last!
+        #expect(e.name == "Mooring" && e.detail == "moved to Ungrouped")
+
+        BuilderSavedLists.deleteGroup(store, g)
+        e = store.data.log.last!
+        #expect(e.action == "Removed" && e.kind == "List group" && e.name == "Bridge" && e.detail == "1 list(s) ungrouped")
+        #expect(t.groupId == nil && store.data.listGroups.isEmpty)
     }
 
     @Test func templateEditorRoundTripKeepsIdsWhenUnchanged() {

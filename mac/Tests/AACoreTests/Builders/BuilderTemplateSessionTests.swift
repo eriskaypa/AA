@@ -76,6 +76,35 @@ import Testing
         #expect(log.action == "Added" && log.kind == "Saved list" && log.detail == "2 item(s)")
     }
 
+    @Test func rescueAfterRenameThenDeleteUsesTheLatestName() {
+        // FIX2 V2-J7 (06 §8 D3): rename the open list through "Manage saved lists…", then delete it → the rescue list
+        // carries the name shown in the editor header until the delete, not the name the editor opened with.
+        let m = StoreFactory.make()
+        let tpl = ChecklistTemplate(name: "Bunkering", items: [ChecklistTemplateItem(title: "Sample")])
+        m.store.data.checklistTemplates.append(tpl)
+        let s = BuilderTemplateSession(store: m.store, templateID: tpl.id)
+        s.steps.append(ChecklistStep(title: "Soundings"))
+        _ = BuilderSavedLists.rename(m.store, tpl, rawName: "Bunkering v2")
+        #expect(s.ownerName == "Bunkering v2")
+        BuilderSavedLists.delete(m.store, tpl)
+        #expect(s.ownerName == "Bunkering v2" && s.lastKnownName == "Bunkering v2")
+        #expect(!s.finish())
+        let rescue = s.saveAsNewList()
+        #expect(rescue.name == "Bunkering v2" && rescue.items.map(\.title) == ["Sample", "Soundings"])
+    }
+
+    @Test func rescueUsesTheLatestNameEvenWhenTheHeaderNeverReadIt() {
+        // Rename + delete with no read of the session in between: the remembered object carries the in-place rename.
+        let m = StoreFactory.make()
+        let tpl = ChecklistTemplate(name: "Bunkering", items: [ChecklistTemplateItem(title: "Sample")])
+        m.store.data.checklistTemplates.append(tpl)
+        let s = BuilderTemplateSession(store: m.store, templateID: tpl.id)
+        _ = BuilderSavedLists.rename(m.store, tpl, rawName: "Bunkering v3")
+        BuilderSavedLists.delete(m.store, tpl)
+        #expect(!s.finish())
+        #expect(s.saveAsNewList().name == "Bunkering v3")
+    }
+
     @Test func reloadedTemplateIsResolvedById() {
         // 06 §8 R1: a reload replaces the template object; the write-back lands on the new one (same id).
         let t = ChecklistTemplate(name: "Deck", items: [ChecklistTemplateItem(title: "A")])
