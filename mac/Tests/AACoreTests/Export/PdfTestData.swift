@@ -82,6 +82,83 @@ enum PdfTestData {
         return data
     }
 
+    /// Editor-shaped XAML with arbitrary inner blocks (05 §4.3 root).
+    static func section(_ inner: String) -> String {
+        "<Section xmlns=\"\(xmlns)\" xml:space=\"preserve\" TextAlignment=\"Left\" LineHeight=\"Auto\" xml:lang=\"en-us\" "
+            + "FlowDirection=\"LeftToRight\" FontFamily=\"Consolas\" FontStyle=\"Normal\" FontWeight=\"Normal\" "
+            + "FontStretch=\"Normal\" FontSize=\"14\" Foreground=\"#FF1A1A1A\">" + inner + "</Section>"
+    }
+
+    /// A realistic data folder for the snapshot hook and the visual dump (no personal data).
+    static func showcase() -> AppData {
+        let data = AppData()
+        let pump = Equipment(id: G(1001), name: "No.1 Cargo pump")
+        pump.description = "Submerged cargo pump, tank 1"
+        pump.components = [Component(name: "Impeller", notes: "Inspect for wear at every overhaul"),
+                           Component(name: "Mechanical seal", notes: "Replace per maker's manual\nKeep the old seal for the survey")]
+        let room = Equipment(id: G(1002), name: "Cargo compressor room")
+        room.description = "Deck house, port side"
+        let overhaul = TaskItem(id: G(1003), name: "Cargo pump overhaul")
+        overhaul.description = "Planned maintenance — dry-dock list"
+        overhaul.deadline = day(2026, 11, 20)
+        overhaul.rangeStart = day(2026, 11, 16)
+        overhaul.recurrence = .yearly
+        overhaul.container.richTextXaml = section(
+            "<Paragraph><Run FontWeight=\"Bold\" Foreground=\"#FFC00000\">Warning:</Run><Run> isolate and gas-free the tank before work. "
+            + "Manual: https://www.example.com/manuals/cargo-pump and contact ops@example.com.</Run></Paragraph>"
+            + "<List MarkerStyle=\"Disc\" Margin=\"0,6,0,6\" Padding=\"24,0,0,0\"><ListItem><Paragraph><Run>Permit to work signed</Run></Paragraph></ListItem>"
+            + "<ListItem><Paragraph><Run>Electrical isolation tagged</Run></Paragraph></ListItem></List>"
+            + "<Paragraph><Run Background=\"#FFFFFF00\">Record all clearances in the log.</Run></Paragraph>"
+            + "<Paragraph><Run TextDecorations=\"Strikethrough\">Old procedure ref. 4.2</Run><Run> superseded.</Run></Paragraph>"
+            + "<Table CellSpacing=\"0\"><TableRowGroup><TableRow><TableCell BorderBrush=\"#FF9AA0A6\" BorderThickness=\"0.6,0.6,0.6,0.6\" FontWeight=\"Bold\">"
+            + "<Paragraph><Run>Part</Run></Paragraph></TableCell><TableCell BorderBrush=\"#FF9AA0A6\" BorderThickness=\"0.6,0.6,0.6,0.6\" FontWeight=\"Bold\">"
+            + "<Paragraph><Run>Action</Run></Paragraph></TableCell></TableRow><TableRow><TableCell BorderBrush=\"#FF9AA0A6\" BorderThickness=\"0.6,0.6,0.6,0.6\">"
+            + "<Paragraph><Run>Impeller</Run></Paragraph></TableCell><TableCell BorderBrush=\"#FF9AA0A6\" BorderThickness=\"0.6,0.6,0.6,0.6\">"
+            + "<Paragraph><Run>Inspect</Run></Paragraph></TableCell></TableRow></TableRowGroup></Table>")
+        let drain = TaskItem(id: G(1004), name: "Drain and ventilate")
+        drain.deadline = day(2026, 11, 16)
+        drain.container.richTextXaml = xaml(["Use the portable fan; check the atmosphere before entry."])
+        let check = TaskItem(id: G(1005), name: "Check vent line")
+        check.isComplete = true
+        drain.subtasks = [check]
+        overhaul.subtasks = [drain, TaskItem(id: G(1006), name: "Reassemble and test run")]
+        overhaul.container.files = [FileItem(name: "pump-manual.pdf", path: "files/3f2a_pump-manual.pdf", kind: .document),
+                                    FileItem(name: "Maker site", path: "https://www.example.com/support", kind: .link, isLink: true)]
+        let prearrival = Procedure(id: G(1007), name: "Pre-arrival checklist")
+        prearrival.description = "Complete before the pilot station"
+        let titles = ["Test steering gear", "Test whistle and navigation lights", "Prepare mooring stations",
+                      "Pilot ladder rigged", "Cargo manifold ready", "Gas detection tested"]
+        prearrival.steps = titles.enumerated().map { i, t in
+            let s = ChecklistStep(title: t)
+            s.done = i < 2
+            if i == 4 { s.taskIds = [overhaul.id]; s.equipmentIds = [pump.id, room.id] }
+            if i == 2 { s.deadline = day(2026, 10, 3) }
+            return s
+        }
+        pump.procedureIds = [prearrival.id]
+        pump.taskIds = [overhaul.id]
+        overhaul.relatedIds = [pump.id, prearrival.id]
+        let vessel = Vessel(id: G(1008), name: "LNG carrier (sample)")
+        vessel.description = "Membrane-type LNG carrier"
+        data.equipment = [pump, room]
+        data.tasks = [overhaul]
+        data.procedures = [prearrival]
+        data.vessels = [vessel]
+        let deck = ListGroup(id: G(1101), name: "Deck"), engine = ListGroup(id: G(1102), name: "Engine")
+        data.listGroups = [deck, engine]
+        data.checklistTemplates = [
+            ChecklistTemplate(id: G(1201), name: "Mooring stations", items: [
+                ChecklistTemplateItem(title: "Brief the mooring team", isJob: true),
+                ChecklistTemplateItem(title: "Check winch brakes", container: Container(richTextXaml: xaml(["Record brake test result."]))),
+                ChecklistTemplateItem(title: "Lines and stoppers ready")], groupId: deck.id),
+            ChecklistTemplate(id: G(1202), name: "Bunkering", items: [
+                ChecklistTemplateItem(title: "Sound tanks"), ChecklistTemplateItem(title: "Scuppers plugged")], groupId: engine.id),
+            ChecklistTemplate(id: G(1203), name: "Pilot boarding", items: [
+                ChecklistTemplateItem(title: "Ladder rigged and lit")], groupId: nil),
+        ]
+        return data
+    }
+
     static func lookup(_ g: Golden) -> PdfLookup {
         PdfSnapshotBuilder.lookup(store: g.made.store, isGated: { _ in false })
     }

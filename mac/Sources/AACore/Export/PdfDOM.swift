@@ -263,7 +263,7 @@ public struct PdfDoc: Sendable, Hashable {
 public enum PdfText {
     /// CRLF and lone CR become LF (DEV-13).
     public static func normalizeNewlines(_ s: String) -> String {
-        guard s.contains("\r") else { return s }
+        guard s.utf8.contains(0x0D) else { return s }
         return s.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
     }
 

@@ -76,6 +76,20 @@ struct PdfVisualDumpTests {
                               name: "saved-all-numbered")
         }
         try PdfDump.write(PdfRenderer.render(PdfEngineDemo.document()), name: "engine-demo")
+
+        // The showcase data folder (copied to Fixtures/ui/w-pdf/sample-data.json) and its exports.
+        let show = StoreFactory.make(data: PdfTestData.showcase())
+        if let dir = PdfDump.dir {
+            try show.dataStore.serializeForSave(show.store.data).write(to: dir.appending(path: "sample-data.json"))
+        }
+        for item in show.store.allItems() {
+            let s = PdfSnapshotBuilder.item(item, store: show.store, isGated: { _ in false })
+            try PdfDump.write(PdfExport.itemPDF(s, stamp: stamp), name: "show-\(item.kind.name)-\(item.name.prefix(12))")
+        }
+        if case .entries(let title, let entries) = PdfExport.savedListsSelection(.all, data: show.store.data) {
+            try PdfDump.write(PdfExport.savedListsPDF(title: title, entries: entries, numbered: false, stamp: stamp),
+                              name: "show-saved-all")
+        }
     }
 }
 
