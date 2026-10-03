@@ -6,6 +6,7 @@
 //       ListCommands role `workOrders`), §9.7 (memoised rebuilds, 200 ms debounce).
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import AACore
 
 /// The per-vessel Shippalm work-orders panel ("Work Orders" tab).
@@ -142,6 +143,7 @@ struct WorkOrdersPanelContent: View {
     @State private var selection = Set<ObjectIdentifier>()
     @State private var sortOrder: [KeyPathComparator<WorkOrderRowItem>]
     @State private var searchDebounce: Task<Void, Never>?
+    @State private var dropTargeted = false
 
     init(vessel: Vessel) {
         self.vessel = vessel
@@ -162,6 +164,12 @@ struct WorkOrdersPanelContent: View {
             table
         }
         .padding(AASpacing.m)
+        .overlay { VesselDropHighlight(active: dropTargeted).padding(4) }
+        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
+            VesselWorkbookDrop.handle(providers) { url in
+                Task { await VesselFlows.importWorkOrders(vesselID: vessel.id, env: env, dialogs: dialogs, file: url) }
+            }
+        }
         .onAppear {
             model.populateFilters()
             model.rebuild(today: today)
@@ -197,10 +205,12 @@ struct WorkOrdersPanelContent: View {
 
     // MARK: Toolbar (VESSEL-100 row 1)
 
+    /// Two wrapping rows: file actions, search and the selection actions; then the filters and the "shown" actions.
+    /// Same controls, words and tooltips as the Windows wrap panel (VESSEL-100), grouped so nothing is orphaned.
     private var toolbar: some View {
         @Bindable var s = session
         return VStack(alignment: .leading, spacing: AASpacing.s) {
-            VesselFlowLayout {
+            VesselFlowLayout(spacing: AASpacing.s) {
                 Button {
                     Task { await VesselFlows.importWorkOrders(vesselID: vessel.id, env: env, dialogs: dialogs) }
                 } label: {
@@ -218,8 +228,15 @@ struct WorkOrdersPanelContent: View {
                 AASearchField(text: $s.workQuery, prompt: WorkOrderAnalysis.searchPlaceholder)
                     .frame(width: 240)
                     .aaFilterField(for: .main)
+                Divider().frame(height: 18)
+                Button { setCompleted(true, ids: []) } label: { Label("Mark completed", systemImage: AASymbol.markDone) }
+                    .help("Mark the selected work orders (or all shown, if none selected) as completed.")
+                Button { setCompleted(false, ids: []) } label: { Label("Mark active", systemImage: "arrow.uturn.backward") }
+                    .help("Clear the completed flag on the selected work orders (or all shown, if none selected).")
+                Button(role: .destructive) { delete(ids: selection) } label: { Label("Delete", systemImage: AASymbol.delete) }
+                    .help("Delete the selected work orders from this ship (permanent).")
             }
-            VesselFlowLayout {
+            VesselFlowLayout(spacing: AASpacing.s) {
                 combo(items: model.statusItems, selection: $s.workStatus, width: 135, help: "Filter by Work Order Status.")
                 combo(items: model.categoryItems, selection: $s.workCategory, width: 135, help: "Filter by Work Order Category.")
                 combo(items: model.rankItems, selection: $s.workRank, width: 120, help: "Filter by Responsible rank.")
@@ -234,25 +251,15 @@ struct WorkOrdersPanelContent: View {
                 Toggle("Notify on only", isOn: $s.workNotifyOnly)
                     .toggleStyle(.button)
                     .help("Show only jobs set to raise notifications.")
-                Group {
-                    Button { setCompleted(true, ids: []) } label: { Label("Mark completed", systemImage: AASymbol.markDone) }
-                        .help("Mark the selected work orders (or all shown, if none selected) as completed.")
-                    Button { setCompleted(false, ids: []) } label: { Label("Mark active", systemImage: "arrow.uturn.backward") }
-                        .help("Clear the completed flag on the selected work orders (or all shown, if none selected).")
-                }
-                .labelStyle(.titleAndIcon)
-                Button(role: .destructive) { delete(ids: selection) } label: { Label("Delete", systemImage: AASymbol.delete) }
-                    .help("Delete the selected work orders from this ship (permanent).")
-                Group {
-                    Button { setNotifyShown(true) } label: { Label("shown ON", systemImage: AASymbol.notifyOn) }
-                        .help("Turn ON notifications for every job currently shown.")
-                    Button { setNotifyShown(false) } label: { Label("shown OFF", systemImage: AASymbol.notifyOff) }
-                        .help("Turn OFF notifications for every job currently shown.")
-                }
-                .labelStyle(.titleAndIcon)
+                Divider().frame(height: 18)
+                Button { setNotifyShown(true) } label: { Label("shown ON", systemImage: AASymbol.notifyOn) }
+                    .help("Turn ON notifications for every job currently shown.")
+                Button { setNotifyShown(false) } label: { Label("shown OFF", systemImage: AASymbol.notifyOff) }
+                    .help("Turn OFF notifications for every job currently shown.")
             }
-            .controlSize(.regular)
         }
+        .labelStyle(.titleAndIcon)
+        .controlSize(.regular)
     }
 
     private func combo(items: [String], selection: Binding<String?>, width: CGFloat, help: String) -> some View {

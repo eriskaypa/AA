@@ -26,13 +26,17 @@ import AACore
 
     // MARK: Work orders (VESSEL-101, VESSEL-103)
 
-    static func importWorkOrders(vesselID: UUID, env: AppEnvironment, dialogs: DialogPresenter) async {
+    /// `file` = a workbook dropped from Finder (X.7.3); nil shows the open panel. Both go through the same gate.
+    static func importWorkOrders(vesselID: UUID, env: AppEnvironment, dialogs: DialogPresenter, file: URL? = nil) async {
         guard let vessel = env.store.vessel(id: vesselID) else { return }
         let session = VesselSessionState.shared
         guard !session.busyWorkOrders.contains(vesselID) else { return }
-        let urls = await dialogs.openPanel(OpenPanelConfig(message: WorkOrderAnalysis.importDialogTitle(vessel.name),
-                                                           allowedTypes: [.xlsx], allFilesAccessory: true))
-        guard let url = urls.first else { return }
+        var picked = file
+        if picked == nil {
+            picked = await dialogs.openPanel(OpenPanelConfig(message: WorkOrderAnalysis.importDialogTitle(vessel.name),
+                                                             allowedTypes: [.xlsx], allFilesAccessory: true)).first
+        }
+        guard let url = picked else { return }
         session.setBusy(workOrders: vesselID, true)
         defer {
             session.setBusy(workOrders: vesselID, false)
@@ -65,6 +69,7 @@ import AACore
             return
         }
         guard let url = await dialogs.savePanel(SavePanelConfig(title: WorkOrderAnalysis.exportDialogTitle(vessel.name),
+                                                                message: WorkOrderAnalysis.exportDialogTitle(vessel.name),
                                                                 defaultName: VesselText.workOrdersExportName(vessel.name),
                                                                 allowedTypes: [.xlsx])) else { return }
         let jobs = vessel.jobs
@@ -80,13 +85,18 @@ import AACore
 
     // MARK: Ports (VESSEL-201…205, VESSEL-209)
 
-    static func importPorts(vesselID: UUID, env: AppEnvironment, dialogs: DialogPresenter) async {
+    /// `file` = a workbook dropped from Finder (X.7.3); nil shows the open panel. Both go through the same gate and
+    /// the same different-vessel confirmation.
+    static func importPorts(vesselID: UUID, env: AppEnvironment, dialogs: DialogPresenter, file: URL? = nil) async {
         guard let vessel = env.store.vessel(id: vesselID) else { return }
         let session = VesselSessionState.shared
         guard !session.busyPorts.contains(vesselID) else { return }
-        let urls = await dialogs.openPanel(OpenPanelConfig(message: PortsAnalysis.importDialogTitle(vessel.name),
-                                                           allowedTypes: [.xlsx], allFilesAccessory: true))
-        guard let url = urls.first else { return }
+        var picked = file
+        if picked == nil {
+            picked = await dialogs.openPanel(OpenPanelConfig(message: PortsAnalysis.importDialogTitle(vessel.name),
+                                                             allowedTypes: [.xlsx], allFilesAccessory: true)).first
+        }
+        guard let url = picked else { return }
         session.setBusy(ports: vesselID, true)
         defer {
             session.setBusy(ports: vesselID, false)
@@ -131,6 +141,7 @@ import AACore
             return
         }
         guard let url = await dialogs.savePanel(SavePanelConfig(title: PortsAnalysis.exportDialogTitle,
+                                                                message: PortsAnalysis.exportDialogTitle,
                                                                 defaultName: VesselText.portsExportName(vessel.name),
                                                                 allowedTypes: [.xlsx])) else { return }
         do {
@@ -249,5 +260,32 @@ import AACore
         guard !card.isLink, !NetText.isBlank(card.target),
               let url = AttachmentOpener.url(forStored: card.target, isLink: false, dataStore: env.dataStore) else { return }
         QuickLookCoordinator.shared.preview([url])
+    }
+}
+
+/// Finder drops of a workbook onto the Work Orders / Ports panels (10 X.7.3, additive): the first file URL starts the
+/// same import as the toolbar button (the VESSEL-301 extension gate decides what is accepted).
+@MainActor enum VesselWorkbookDrop {
+    static func handle(_ providers: [NSItemProvider], perform: @escaping @MainActor (URL) -> Void) -> Bool {
+        guard let provider = providers.first(where: { $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) })
+        else { return false }
+        _ = provider.loadObject(ofClass: URL.self) { url, _ in
+            guard let url else { return }
+            Task { @MainActor in perform(url) }
+        }
+        return true
+    }
+}
+
+/// The drop highlight of a panel accepting a workbook (system accent, X.7.3).
+struct VesselDropHighlight: View {
+    let active: Bool
+    var body: some View {
+        RoundedRectangle(cornerRadius: AARadius.control, style: .continuous)
+            .strokeBorder(Color.accentColor, lineWidth: 2)
+            .background(Color.accentColor.opacity(0.06), in: RoundedRectangle(cornerRadius: AARadius.control, style: .continuous))
+            .opacity(active ? 1 : 0)
+            .animation(.easeOut(duration: 0.12), value: active)
+            .allowsHitTesting(false)
     }
 }

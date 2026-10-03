@@ -22,12 +22,22 @@ struct QuickCardEditorSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // VESSEL-040: the Windows window title `Quick card` (a sheet has no title bar).
+            HStack(spacing: AASpacing.s) {
+                Image(systemName: "square.grid.2x2.fill").foregroundStyle(AAColor.accent)
+                Text(QuickCardLayout.noTargetTitle).font(.system(size: AAType.title, weight: .bold))
+                Spacer()
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 14)
+            .padding(.bottom, 10)
+            Divider()
             HStack(alignment: .top, spacing: 14) {
                 form
                 previewColumn.frame(width: 210)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 18)
+            .padding(.top, 14)
             Spacer(minLength: AASpacing.m)
             Divider()
             HStack {
@@ -41,7 +51,7 @@ struct QuickCardEditorSheet: View {
             .padding(.horizontal, 20)
             .padding(.vertical, 12)
         }
-        .frame(width: 660, height: 580)
+        .frame(width: 660, height: 620)
         .background(AAColor.panel)
         .aaSheet(.decision)
         .onAppear {

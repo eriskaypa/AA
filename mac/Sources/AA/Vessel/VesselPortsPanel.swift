@@ -4,6 +4,7 @@
 //       VESSEL-003, VESSEL-004; ARCHITECTURE.md §7.6 (`.aaFilterField(for: .main)`, ListCommands role `portsOfCall`).
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import AACore
 
 /// The per-vessel ports-of-call panel ("Ports" tab).
@@ -77,6 +78,7 @@ struct VesselPortsPanelContent: View {
     @State private var summary = ""
     @State private var selection = Set<ObjectIdentifier>()
     @State private var sortOrder: [KeyPathComparator<PortCallRowItem>]
+    @State private var dropTargeted = false
 
     init(vessel: Vessel) {
         self.vessel = vessel
@@ -94,6 +96,12 @@ struct VesselPortsPanelContent: View {
             table
         }
         .padding(AASpacing.m)
+        .overlay { VesselDropHighlight(active: dropTargeted).padding(4) }
+        .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
+            VesselWorkbookDrop.handle(providers) { url in
+                Task { await VesselFlows.importPorts(vesselID: vessel.id, env: env, dialogs: dialogs, file: url) }
+            }
+        }
         .onAppear { buildView() }
         .onChange(of: session.revision) { _, _ in buildView() }
         .onChange(of: env.store.generation) { _, _ in buildView() }

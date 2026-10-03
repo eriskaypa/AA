@@ -160,13 +160,13 @@ struct PortsDatabaseVisitsTable: View {
         let rows = visits.enumerated().map { Row(id: $0.offset, visit: $0.element) }
         Table(rows) {
             TableColumn("Vessel") { r in Text(r.visit.vesselName).fontWeight(.medium) }
-                .width(min: 120, ideal: 220)
+                .width(min: 100)
             TableColumn("Arrival") { r in Text(r.visit.arrivalDisplay).font(.aaMono(AAType.small)) }
-                .width(min: 100, ideal: 140)
+                .width(130)
             TableColumn("Departure") { r in Text(r.visit.departureDisplay).font(.aaMono(AAType.small)) }
-                .width(min: 100, ideal: 140)
-            TableColumn("Imported") { r in Text(r.visit.importedAt).font(.aaMono(AAType.small)).foregroundStyle(.secondary) }
-                .width(min: 100, ideal: 140)
+                .width(130)
+            TableColumn("Imported") { r in Text(r.visit.importedAt).font(.aaMono(AAType.caption)).foregroundStyle(.secondary) }
+                .width(126)
         }
         .tableStyle(.inset(alternatesRowBackgrounds: true))
         .font(.system(size: AAType.small))

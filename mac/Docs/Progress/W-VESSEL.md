@@ -24,15 +24,32 @@ Post-merge items (need other owners' real code, verified in Stage V — not part
   `VesselActions` + `VesselTab`, `WorkOrderNotifications`, `VesselFlows` (shared panel/menu flows),
   `VesselSessionState` (VESSEL-003 session state, change revision, busy flags), `VesselDebugSnapshots`.
 
-## Tests (Tests/AACoreTests/Vessel) — 55 tests (+3 gated on W-PERSIST)
+## Tests (Tests/AACoreTests/Vessel) — 58 tests (+3 gated on W-PERSIST)
 
 10 §7.1 NormDate (15 vectors), §7.2 NormTime (10), §7.3 split/keys/displays, §7.4/§7.5 POC layouts (fixtures copied to
 `Fixtures/vessel/`), §7.6 scenarios 1–8 (7–8 per DECISIONS Q3), §7.7 lossy re-import (35/12/35), §7.8 ExcelDate /
 ParseBool / Overdue Days, §7.9 header detection, §7.10 upsert, §7.11 DueInfo + DST, §7.12 summary + bar, §7.13 filters
 and sort, §7.14 quick cards, §7.15 JSON round trip, §7.16 export → import round trip, X.8.1 columns C·D / C·T,
-X.8.9, 2 524-row parse < 1 s, notification dedup with `FixedClock`.
+X.8.9, 2 524-row parse < 1 s, notification dedup with `FixedClock`, every exact user-visible string of the three
+panels, the editor and the Ports Database (`VesselUserStringTests`).
 
 ## Snapshots (both appearances checked)
 
-`TabPorts` (Ports Database, with and without a selection), `--sheet w-vessel.quick-cards`, `w-vessel.work-orders`,
-`w-vessel.ports`, `w-vessel.quick-card-editor` (+ `-new`); fixture `Fixtures/ui/w-vessel/sample-data.json`.
+`TabPorts` (Ports Database, with and without a selection — `AA_SNAPSHOT_PORT`), `--sheet w-vessel.quick-cards`
+(also empty, `AA_SNAPSHOT_VESSEL="BW Lilac"`), `w-vessel.work-orders` (also empty), `w-vessel.ports`,
+`w-vessel.quick-card-editor` (+ `-new`); fixture `Fixtures/ui/w-vessel/sample-data.json`. Render the 1320-wide panel
+sheets with `--size 1480x900` (the default 1280-wide window clips them).
+
+## Audit (independent pass)
+
+All 91 IDs re-checked against 10 §2–§7 and the C# (`PortCallReader.cs`, `ShippalmReader.cs`, `PortsPanel.xaml.cs`):
+91 OK after fixes, 0 partial, 0 missing. Fixed in the audit: Ports Database visits table clipped the `Imported`
+column (fixed widths); Work Orders toolbar orphaned `shown OFF` on a third row (regrouped); editor sheet lacked the
+`Quick card` title (VESSEL-040); export save panels showed their title only in an invisible title bar; added the
+X.7.3 Finder drop-to-import on Work Orders / Ports; added exact-string tests.
+
+## Gate
+
+`swift build` and `swift test` (-j 3, warnings as errors) green: 460 tests, 0 failures (3 W-PERSIST-gated skipped).
+`Scripts/check-placeholders.sh W-VESSEL` prints nothing. `Scripts/check-ownership.sh` fails on one path only:
+`Docs/Progress/W-VESSEL.md` (required by DECISIONS REQ-F1-01, not encoded in F1's script — REQ-W-VESSEL-01).
