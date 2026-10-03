@@ -13,11 +13,13 @@ Contracts (ARCH §7.7): `FileBankView`, `FileBankContext`, `FileBankOperations`,
 `ContainerViewerSheet` (+ subtitle overload, REQ-W-FILES-01), `QuickLookCoordinator` (responder-chain controller) —
 all real; `FileBankContractStatus.wFilesImplemented = true`; `Scripts/check-placeholders.sh W-FILES` prints nothing.
 
-Tests (`Tests/AACoreTests/FileBank/`, 48): tab filters / columns / strings, entry shapes, clipboard (copy, true-move
+Tests (`Tests/AACoreTests/FileBank/`, 54): tab filters / columns / strings, entry shapes, clipboard (copy, true-move
 cut, stale generation, duplicate ids), open-all threshold, folder scan (K-8, packages, symlinks), link-in-place stored
 form (reverse mapping, SMB UNC), importer (copies, folders, failures, packages, `files/` references, links in place,
 `addImported`), container owners / sharing / backlinks / link picker (VIEW-215), viewer body, resolution, T-KB-04/05
-and Quick Look routing. Gated on other owners (run in Stage V): `realAttachmentStoreImport`, `missingCopyNamesTheResolvedPath`
+and Quick Look routing (incl. the SHELL-543 "selection has a local file" rule), the resolution state machine over
+an injected stand-in for W-PERSIST's primitives (TV-OWN-06 resolved missing path, mapped / unmapped Windows paths,
+`files\` separators). Gated on other owners (run in Stage V): `realAttachmentStoreImport`, `missingCopyNamesTheResolvedPath`
 (TV-OWN-06), `unmappedWindowsPaths` (W-PERSIST); `viewerRendersXamlWithLinks` (W-RICH).
 
 Snapshots (both appearances, fixture `Tests/AACoreTests/Fixtures/ui/w-files/`, sheet ids `w-files.*`): file bank (list,
@@ -32,3 +34,24 @@ Not done in-worktree (post-merge, Stage V — need other owners' real code): ope
 in the viewer (W-RICH; the placeholder reader shows the raw XAML, as CONT-006 requires); hosting inside
 `ContainerEditorView` (W-CONT) and `FileBacklinksSection` in the Relationships tab (W-HIER); Saved Lists double-click →
 viewer (W-BUILD).
+
+## Independent audit (2026-10-02)
+
+Counts: 22 feature IDs checked · 19 OK as built · 3 partial → fixed (SHELL-669 / HIER-M06 — Quick Look stayed
+published for selections with no local file, against the SHELL-543 enable rule; CONT-087 — Cut was disabled
+without a selection, so it could not empty the clipboard as Windows does) · 0 missing.
+
+* `FileBankListPolicy` now decides what every list publishes (file bank Table and icon grid, viewer list, backlinks):
+  Quick Look only while the selection holds a local file; Remove only for an editable bank's own rows.
+* `FileBankResolve` takes an injectable `FileBankResolver` (default = W-PERSIST's contract), so OC-12 / TV-OWN-06 and
+  the unmapped-path state are tested now; the gated tests still run the same checks against the real store.
+* Remaining user-visible strings (footer counts, drop overlay, source help, view-mode help, Yes/No, viewer link
+  failure) moved into `FileBankText`.
+* Snapshots re-rendered in both appearances (file bank list / icons / Images / Links / Shared / narrow / empty,
+  viewer, viewer empty, backlinks): no clipping or overlap. In-worktree limits: copies show the missing badge and
+  the viewer shows raw XAML until W-PERSIST's resolver and W-RICH's reader merge (the debug fixture absolutises
+  copy paths so thumbnails render).
+
+Gate: `swift build` and `swift test` (-j 3, warnings as errors) green; `check-placeholders.sh W-FILES` empty;
+`check-ownership.sh` steps 2–4 green, step 1 flags only this file (`Docs/Progress/W-FILES.md`, REQ-W-FILES-02 —
+required by DECISIONS REQ-F1-01, the script is F1's).
