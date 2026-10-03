@@ -71,6 +71,20 @@ public enum FileBankText {
     }
     public static let fileLinksSettings = "File Links Settings…"
     public static let connectToServer = "Connect to Server…"
+    /// 01 §6.6: pick the file on this Mac; the answer stores the inferred mapping (`PathMapper.inferredMapping`).
+    public static let locate = "Locate…"
+    /// Open-panel message of Locate… (W-PERSIST-13 / quick-card wording).
+    public static func locateMessage(_ windowsPath: String) -> String {
+        let leaf = windowsPath.replacingOccurrences(of: "/", with: "\\").split(separator: "\\").last.map(String.init)
+            ?? windowsPath
+        return "Locate “\(leaf)” on this Mac"
+    }
+    /// Status line after Locate… stored a mapping (W-PERSIST-6 wording).
+    public static func mappedStatus(_ m: PathMapping) -> String { "Mapped \(m.windowsPrefix) to \(m.macPath) on this Mac." }
+    /// Status line when Connect to Server… did not mount the share within the retry window.
+    public static func shareNotMountedStatus(_ share: String) -> String {
+        "\(share) is not mounted yet — open the file again once Finder has connected."
+    }
     public static let openAnyway = "Yes"
     public static let yes = "Yes"
     public static let no = "No"

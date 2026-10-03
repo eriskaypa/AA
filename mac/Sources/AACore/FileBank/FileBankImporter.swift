@@ -29,13 +29,34 @@ import Foundation
     public var classify: (String) -> FileKind
     /// The per-Mac path-mapping table (`PathMapper.shared.mappings`) used in reverse for links in place.
     public var mappings: [PathMapping]
+    /// The display name an existing entry already gives a stored `files/<leaf>` path (nil when none does) — so a file
+    /// of this data folder dropped in again keeps the name the user sees, not the sanitised stored leaf.
+    public var nameForStoredPath: (String) -> String?
 
     public init(dataStore: DataStore, importFile: ((URL) throws -> String)? = nil, classify: ((String) -> FileKind)? = nil,
-                mappings: [PathMapping]? = nil) {
+                mappings: [PathMapping]? = nil, nameForStoredPath: ((String) -> String?)? = nil) {
         self.dataStore = dataStore
         self.importFile = importFile ?? { url in try AttachmentStore.importFile(dataStore, from: url) }
         self.classify = classify ?? { AttachmentStore.classify(path: $0) }
         self.mappings = mappings ?? PathMapper.shared.mappings
+        self.nameForStoredPath = nameForStoredPath ?? { _ in nil }
+    }
+
+    /// `nameForStoredPath` over `containers` (the first copy entry storing that path wins; `files\x` = `files/x`,
+    /// case-insensitive like Windows).
+    public static func storedNames(in containers: [Container]) -> (String) -> String? {
+        var names: [String: String] = [:]
+        for c in containers {
+            for f in c.files where !f.isLink && !f.linkInPlace {
+                let key = normalizedStoredKey(f.path)
+                if names[key] == nil { names[key] = f.name }
+            }
+        }
+        return { names[normalizedStoredKey($0)] }
+    }
+
+    nonisolated static func normalizedStoredKey(_ p: String) -> String {
+        NetText.toLowerInvariant(p.replacingOccurrences(of: "\\", with: "/"))
     }
 
     // MARK: Copies (CONT-082, CONT-083, plain drop)
@@ -62,17 +83,21 @@ import Foundation
         return out
     }
 
-    private func importOne(_ url: URL, into container: Container, now: NetDateTime, outcome: inout Outcome) {
+    private func importOne(_ dropped: URL, into container: Container, now: NetDateTime, outcome: inout Outcome) {
+        // A row dragged out of a file bank arrives as its staged export (named after the entry): act on the real file
+        // and keep the entry's display name.
+        let origin = FileBankExport.origin(of: dropped)
+        let url = origin?.source ?? dropped
         if let existing = storedPathInsideFilesFolder(url) {
-            let item = FileBankEntries.copy(name: displayNameOfStoredLeaf(url.lastPathComponent), storedPath: existing,
-                                            kind: classify(url.path), added: now)
+            let name = origin?.name ?? nameForStoredPath(existing) ?? displayNameOfStoredLeaf(url.lastPathComponent)
+            let item = FileBankEntries.copy(name: name, storedPath: existing, kind: classify(url.path), added: now)
             container.files.append(item)
             outcome.added.append(item)
             return
         }
         do {
             let stored = try importFile(url)
-            var name = url.lastPathComponent
+            var name = origin?.name ?? url.lastPathComponent
             let packaged = FileBankFolderScan.isPackage(url) || FileBankFolderScan.isPlainDirectory(url)
             if packaged, stored.lowercased().hasSuffix(".zip"), !name.lowercased().hasSuffix(".zip") { name += ".zip" }
             let item = FileBankEntries.copy(name: name, storedPath: stored, kind: classify(packaged ? stored : url.path),
@@ -108,7 +133,9 @@ import Foundation
     /// `"{folder}  (folder)"` entry of Kind Other. Missing paths are skipped (Windows checks existence too).
     public func linkInPlace(_ urls: [URL], into container: Container, now: NetDateTime) -> [FileItem] {
         var added: [FileItem] = []
-        for url in urls {
+        for dropped in urls {
+            let origin = FileBankExport.origin(of: dropped)             // a staged export links its real file
+            let url = origin?.source ?? dropped
             var isDir: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir) else { continue }
             let stored = FileBankLinkPath.storedPath(for: url, mappings: mappings)
@@ -117,7 +144,7 @@ import Foundation
                 item = FileBankEntries.linkedFolder(folderName: FileBankEntries.folderName(for: url), storedPath: stored,
                                                     added: now)
             } else {
-                item = FileBankEntries.linkedFile(name: url.lastPathComponent, storedPath: stored,
+                item = FileBankEntries.linkedFile(name: origin?.name ?? url.lastPathComponent, storedPath: stored,
                                                   kind: classify(url.path), added: now)
             }
             container.files.append(item)

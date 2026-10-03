@@ -73,6 +73,20 @@ public enum FileBankViewerBody {
         case missing(String)
         /// A Windows drive-letter / UNC path with no mapping on this Mac (ARCH §9.4).
         case windowsUnmapped(String)
+        /// A Windows path mapped to a network URL (`smb://server/share`, `afp://…`; 01 §6.6, ARCH §9.4
+        /// `PathMapper.join`): not a local file, so never "missing" and never previewed — opening it hands the URL to
+        /// NSWorkspace, which mounts the share.
+        case remote(URL)
+    }
+
+    /// The network URL a mapped Windows path resolves to when the mapping's Mac side is `smb://` / `afp://` (nil for
+    /// links, local paths and unmapped paths).
+    public static func remoteURL(of f: FileItem, dataStore: DataStore, using resolver: FileBankResolver? = nil) -> URL? {
+        let r = resolver ?? .persist
+        guard !f.isLink, r.isWindowsPath(f.path) else { return nil }
+        if let u = r.urlForStored(f.path, dataStore) { return u.isFileURL ? nil : u }
+        if let u = r.macURL(f.path), !u.isFileURL { return u }
+        return nil
     }
 
     /// The text `{target}` of the OC-12 messages: the stored URL for links, else the resolved path.
@@ -80,17 +94,18 @@ public enum FileBankViewerBody {
         let r = resolver ?? .persist
         if f.isLink { return f.path }
         if let u = r.urlForStored(f.path, dataStore), u.isFileURL { return u.path }
+        if let u = remoteURL(of: f, dataStore: dataStore, using: r) { return u.absoluteString }
         if r.isWindowsPath(f.path), let u = r.macURL(f.path) { return u.path }
         return r.resolveFilePath(dataStore, f.path)
     }
 
-    /// The local file URL of a copy / live entry when it resolves to an absolute path (nil for links and for
-    /// unmapped Windows paths).
+    /// The local file URL of a copy / live entry when it resolves to an absolute path (nil for links, for unmapped
+    /// Windows paths and for Windows paths mapped to a network URL — `smb://` is never a local path).
     public static func fileURL(of f: FileItem, dataStore: DataStore, using resolver: FileBankResolver? = nil) -> URL? {
         let r = resolver ?? .persist
         guard !f.isLink else { return nil }
         if let u = r.urlForStored(f.path, dataStore), u.isFileURL { return u }
-        if r.isWindowsPath(f.path) { return r.macURL(f.path) }
+        if r.isWindowsPath(f.path) { return r.macURL(f.path).flatMap { $0.isFileURL ? $0 : nil } }
         let resolved = r.resolveFilePath(dataStore, f.path)
         guard resolved.hasPrefix("/") else { return nil }
         return URL(fileURLWithPath: resolved)
@@ -101,6 +116,7 @@ public enum FileBankViewerBody {
         if f.isLink {
             return .web(r.normalizeWebLink(f.path) ?? URL(string: f.path))
         }
+        if let remote = remoteURL(of: f, dataStore: dataStore, using: r) { return .remote(remote) }
         if let u = fileURL(of: f, dataStore: dataStore, using: r) {
             return FileManager.default.fileExists(atPath: u.path) ? .present(u) : .missing(u.path)
         }
@@ -115,6 +131,30 @@ public enum FileBankViewerBody {
         return files.compactMap { f in
             if case .present(let u) = state(of: f, dataStore: dataStore, using: r) { return u }
             return nil
+        }
+    }
+
+    /// The buttons of the unmapped-Windows-path alert, in order (the first is the default, Cancel answers ⎋).
+    /// 01 §6.6 / W-PERSIST-13: a UNC path leads with "Connect to Server…" (Finder mounts `smb://server/share`); every
+    /// Windows path offers "Locate…" (an open panel whose answer stores the inferred mapping), then
+    /// "File Links Settings…" and "Cancel".
+    public nonisolated static func recoveryChoices(for windowsPath: String) -> [RecoveryChoice] {
+        if PathMapper.smbShareURL(forUNC: windowsPath) != nil {
+            return [.connectToServer, .locate, .fileLinksSettings, .cancel]
+        }
+        return [.locate, .fileLinksSettings, .cancel]
+    }
+
+    public enum RecoveryChoice: Equatable, Sendable {
+        case connectToServer, locate, fileLinksSettings, cancel
+
+        public var title: String {
+            switch self {
+            case .connectToServer: return FileBankText.connectToServer
+            case .locate: return FileBankText.locate
+            case .fileLinksSettings: return FileBankText.fileLinksSettings
+            case .cancel: return FileBankText.cancel
+            }
         }
     }
 

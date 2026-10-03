@@ -58,7 +58,12 @@ struct FileBankView: View {
     /// "Link in Place Instead" (K-9).
     @discardableResult
     static func addFiles(_ urls: [URL], linkInPlace: Bool, to container: Container, env: AppEnvironment) throws -> [FileItem] {
-        let importer = FileBankImporter(dataStore: env.dataStore)
+        let store = env.store
+        var names: ((String) -> String?)?
+        let importer = FileBankImporter(dataStore: env.dataStore, nameForStoredPath: { stored in
+            if names == nil { names = FileBankImporter.storedNames(in: AttachmentStore.enumerateContainers(store.data)) }
+            return names?(stored)
+        })
         let now = env.clock.now()
         if linkInPlace {
             let added = importer.linkInPlace(urls, into: container, now: now)
@@ -126,6 +131,18 @@ struct FileBankRow: Identifiable {
     }
 
     var isWeb: Bool { if case .web = visual.state { return true }; return false }
+
+    /// The name a dragged / copied local file leaves AA under (05 §6.9: the entry's display name, never the stored
+    /// `<32hex>_leaf`); nil for links, folders and files that are not here.
+    @MainActor var dragName: String? { FileBankDrag.exportName(file, visual: visual) }
+}
+
+/// Drag-out naming shared by the file bank, the viewer and the backlinks section.
+@MainActor enum FileBankDrag {
+    static func exportName(_ f: FileItem, visual: FileBankVisual) -> String? {
+        guard case .present = visual.state, visual.glyph == .file else { return nil }
+        return f.name
+    }
 }
 
 /// Everything one render needs (built once per body, ARCH §9.7).

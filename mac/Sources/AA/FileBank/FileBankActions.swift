@@ -87,7 +87,7 @@ import AACore
     func handleDrop(fileURLs: [URL], webURLs: [URL], linkInPlace: Bool) async {
         let present = Set(container.files.compactMap { FileBankResolve.fileURL(of: $0, dataStore: env.dataStore)?
             .standardizedFileURL.path })
-        let incoming = fileURLs.filter { !present.contains($0.standardizedFileURL.path) }
+        let incoming = fileURLs.filter { !present.contains(FileBankExport.sourceURL(of: $0).standardizedFileURL.path) }
         if !incoming.isEmpty {
             if linkInPlace {
                 _ = try? FileBankOperations.addFiles(incoming, linkInPlace: true, to: container, env: env)
@@ -246,8 +246,8 @@ import AACore
         case .windowsUnmapped(let p):
             await reportUnmapped(p, file: f, env: env, dialogs: dialogs) { await open(f, env: env, dialogs: dialogs, style: style) }
             return
-        case .web, .present:
-            break
+        case .web, .present, .remote:
+            break                                   // remote: NSWorkspace hands smb:// / afp:// to Finder, which mounts it
         }
         switch AttachmentOpener.open(stored: f.path, isLink: f.isLink, dataStore: ds) {
         case .opened:
@@ -273,36 +273,59 @@ import AACore
         }
     }
 
-    /// ARCH §9.4: drive letters point to Settings ▸ File Links; UNC shares also offer "Connect to Server…" (Finder
-    /// mounts `smb://server/share`), then retry once the share appears (up to 15 s).
+    /// ARCH §9.4 / 01 §6.6 / W-PERSIST-13: the OC-12 alert of an unmapped Windows path with the shared recovery —
+    /// "Connect to Server…" (UNC only: Finder mounts the share ROOT `smb://server/share`, then the action is retried
+    /// once the path resolves, up to 15 s), "Locate…" (open panel → `PathMapper.inferredMapping` → upsert → retry),
+    /// "File Links Settings…", "Cancel".
     static func reportUnmapped(_ path: String, file: FileItem, env: AppEnvironment, dialogs: DialogPresenter,
                                retry: @escaping @MainActor () async -> Void) async {
         let root = FileBankResolve.windowsRoot(of: path)
-        if path.hasPrefix("\\\\"), let smb = PathMapper.smbURL(forUNC: path) {
-            let pick = await dialogs.alert(AlertSpec(
-                title: FileBankText.openFailedTitle, message: FileBankText.windowsShareUnmapped(root), style: .warning,
-                buttons: [AlertButton(title: FileBankText.connectToServer, role: .default),
-                          AlertButton(title: FileBankText.fileLinksSettings),
-                          AlertButton(title: FileBankText.cancel, role: .cancel)]))
-            if pick == 0 {
-                NSWorkspace.shared.open(smb)
-                for _ in 0..<30 {
-                    try? await Task.sleep(for: .milliseconds(500))
-                    if case .present = FileBankResolve.state(of: file, dataStore: env.dataStore) {
-                        await retry()
-                        return
-                    }
-                }
-            } else if pick == 1 {
-                env.open(.settings(tab: .fileLinks))
-            }
-            return
+        let isShare = path.hasPrefix("\\\\")
+        let choices = FileBankResolve.recoveryChoices(for: path)
+        let buttons = choices.enumerated().map { i, c in
+            AlertButton(title: c.title, role: c == .cancel ? .cancel : (i == 0 ? .default : .normal))
         }
         let pick = await dialogs.alert(AlertSpec(
-            title: FileBankText.openFailedTitle, message: FileBankText.windowsDriveUnmapped(root), style: .warning,
-            buttons: [AlertButton(title: FileBankText.fileLinksSettings, role: .default),
-                      AlertButton(title: FileBankText.ok, role: .cancel)]))
-        if pick == 0 { env.open(.settings(tab: .fileLinks)) }
+            title: FileBankText.openFailedTitle,
+            message: isShare ? FileBankText.windowsShareUnmapped(root) : FileBankText.windowsDriveUnmapped(root),
+            style: .warning, buttons: buttons))
+        guard pick >= 0, pick < choices.count else { return }
+        switch choices[pick] {
+        case .connectToServer:
+            guard let share = PathMapper.smbShareURL(forUNC: path) else { return }
+            NSWorkspace.shared.open(share)
+            for _ in 0..<30 {
+                try? await Task.sleep(for: .milliseconds(500))
+                if Task.isCancelled { return }
+                if resolvesHere(file, dataStore: env.dataStore) {
+                    await retry()
+                    return
+                }
+            }
+            env.status.post(FileBankText.shareNotMountedStatus(root))
+        case .locate:
+            let urls = await dialogs.openPanel(OpenPanelConfig(message: FileBankText.locateMessage(path),
+                                                               canChooseFiles: true, canChooseDirectories: true))
+            guard let chosen = urls.first, let m = PathMapper.inferredMapping(windowsPath: path, chosen: chosen) else {
+                return
+            }
+            PathMapper.shared.upsert(m)
+            env.status.post(FileBankText.mappedStatus(m))
+            if case .windowsUnmapped = FileBankResolve.state(of: file, dataStore: env.dataStore) { return }
+            await retry()                               // present → opens; mapped but absent → the OC-12 "Not found"
+        case .fileLinksSettings:
+            env.open(.settings(tab: .fileLinks))
+        case .cancel:
+            return
+        }
+    }
+
+    /// The entry now resolves on this Mac (a mapping was added or the share is mounted).
+    private static func resolvesHere(_ f: FileItem, dataStore: DataStore) -> Bool {
+        switch FileBankResolve.state(of: f, dataStore: dataStore) {
+        case .present, .remote: return true
+        case .missing, .windowsUnmapped, .web: return false
+        }
     }
 
     /// CONT-091 with K-10: links open their URL; copies / live files reveal in Finder (folders too).
@@ -318,6 +341,14 @@ import AACore
             return
         case .windowsUnmapped(let p):
             await reportUnmapped(p, file: f, env: env, dialogs: dialogs) { await showInFinder(f, env: env, dialogs: dialogs) }
+            return
+        case .remote(let u):
+            // A network URL cannot be "selected" before it is mounted: open the containing folder (the folder itself for
+            // a linked folder) so Finder mounts the share and shows it.
+            let folder = FileBankDisplay.isLinkedFolder(f) ? u : u.deletingLastPathComponent()
+            if !NSWorkspace.shared.open(folder) {
+                await dialogs.info(FileBankText.openFolderFailedTitle, folder.absoluteString)
+            }
             return
         case .present, .web:
             break
@@ -375,7 +406,10 @@ import AACore
         var text: [String] = []
         for f in files {
             switch FileBankResolve.state(of: f, dataStore: dataStore) {
-            case .present(let u): objects.append(u as NSURL)
+            case .present(let u):
+                // Finder / Mail paste the entry under its display name, never the stored `<32hex>_leaf` (05 §6.9).
+                let name = FileBankDrag.exportName(f, visual: FileBankVisual(f, dataStore: dataStore))
+                objects.append((name.map { FileBankExport.exportURL(for: u, displayName: $0) } ?? u) as NSURL)
             case .web(let u): if let u { objects.append(u as NSURL) }
             default: break
             }
