@@ -11,7 +11,7 @@ Counts are feature IDs from `Docs/OWNERSHIP.md` §4 (1,583 total).
 | F1 placeholders | F1-stubs | done | 69 placeholder files for 16 owners (F2 29: Store 7, Services 15, XlsxRead 7; W-PERSIST 11; W-RICH 10; §6.8 contracts 6; ContractStatus flags 15 — W-PERSIST's and W-RICH's counted above); 306 `PLACEHOLDER(...)` markers, 0 for F1; `Scripts/check-placeholders.sh`, `Scripts/check-ownership.sh` (paths, non-Swift files, basenames, cross-owner symbols); wired `DataStore.normalizeFilePaths` → `AttachmentStore`, `CrewMember.parseDate` → `NetDateParser`, `ContractStatus.isImplemented` → per-owner flags; 209 tests / 38 suites green |
 | F1 verification | F1 (verifier) | done | clean-build gate green (229 tests / 42 suites); every in-worktree acceptance item of the F1 card mapped to a passing test; compile-time conformance tests for every public signature of ARCH §3–§6.8 (`Foundation/FoundationContractSignatureTests.swift`, `FoundationPlaceholderSignatureTests.swift`) — 0 mismatches; hand-written Windows-style data.json (`Fixtures/model/WIN.*`) round-trips byte-identically |
 | F2 domain services | F2 | pending | |
-| F3 app shell | F3 | pending | |
+| F3 app shell | F3 | done (in-worktree) | AACore Launch/Commands (args, AppFolder + pre-flight, crash log, registry of every §6.5.1 row, menu tree, pure router table, picker model); AA App/Shell/Commands/Design/Shared/Debug (launch phases, bootstrap scene + SceneOpener, all scenes, AppEnvironment, main window, menus via router + AppKit bridge, shared dialogs, quit pipeline, autosave, snapshot hook); placeholders for every AA-target contract (71 files, 14 wave owners); 285 tests green (56 F3 tests); 80 snapshots (every section and scene, both appearances, F3 sheets); deviations `Docs/Deviations/F3.md`, requests `Docs/Requests/F3.md` |
 | Wave (16 vertical slices) | W-* | pending | |
 | Verification | V | pending | |
 
@@ -26,3 +26,4 @@ Counts are feature IDs from `Docs/OWNERSHIP.md` §4 (1,583 total).
   mismatch); parser/date/number edge cases probed (no defect); new Windows-style fixture (every model type, three
   date kinds, unknown members on 20+ objects, legacy `BucketId`, Trash payload) proves parse → model → write is
   byte-identical in five time zones; element-level JSON null leniency recorded as A06e in `Docs/Deviations/F1.md`.
+- 2026-10-02 — F3 finished in its worktree (`stage/F3`): app plumbing, menu bar per 03 §6.5.1 (live menu dump matches §6.5.1.6), design system, shared dialogs, snapshot hook; `check-placeholders.sh F3` empty.

@@ -81,12 +81,10 @@ struct LoginView: View {
 
             HStack(spacing: AASpacing.s) {
                 Spacer()
-                Button("Exit") { model.exit() }
-                    .frame(width: 90)
-                Button("Sign in") { model.submit() }
+                Button { model.exit() } label: { Text("Exit").frame(minWidth: 70) }
+                Button { model.submit() } label: { Text("Sign in").frame(minWidth: 86) }
                     .keyboardShortcut(.defaultAction)
                     .aaProminent()
-                    .frame(width: 110)
             }
         }
         .padding(22)

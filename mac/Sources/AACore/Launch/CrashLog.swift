@@ -82,19 +82,19 @@ public enum CrashLog {
 
     public static let markerPrefix = "[crash marker] signal "
 
-    /// Installs async-signal-safe handlers for SIGABRT, SIGSEGV, SIGBUS, SIGILL and SIGTRAP that write the marker to a
-    /// pre-opened descriptor (primary, else fallback), restore `SIG_DFL` and re-raise. Returns the file used.
+    /// Installs async-signal-safe handlers for SIGABRT, SIGSEGV, SIGBUS, SIGILL and SIGTRAP that append the marker to
+    /// crash.log (primary if its folder is writable, else the fallback), restore `SIG_DFL` and re-raise. The file is
+    /// opened inside the handler (`open(2)` / `write(2)` are async-signal-safe), so a clean run never creates it.
     @discardableResult
     public static func installSignalMarker(appFolder: URL?) -> URL? {
         var target: URL?
-        var fd: Int32 = -1
         for u in [appFolder?.appending(path: fileName), fallbackURL].compactMap({ $0 }) {
-            try? FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
-            fd = open(u.path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
-            if fd >= 0 { target = u; break }
+            let dir = u.deletingLastPathComponent()
+            if u == fallbackURL { try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+            if access(dir.path, W_OK) == 0 { target = u; break }
         }
-        guard fd >= 0 else { return nil }
-        CrashSignalState.install(fd: fd)
+        guard let target else { return nil }
+        CrashSignalState.install(path: target.path)
         return target
     }
 
@@ -109,15 +109,15 @@ public enum CrashLog {
     }
 }
 
-/// Pre-built marker buffers indexed by signal number and the descriptor; only `write(2)` runs inside the handler.
+/// Pre-built marker buffers indexed by signal number and the log path; only `open`/`write` run inside the handler.
 private enum CrashSignalState {
     static let maxSignal = 32
-    nonisolated(unsafe) static var fd: Int32 = -1
+    nonisolated(unsafe) static var path: UnsafeMutablePointer<CChar>?
     nonisolated(unsafe) static var lengths = UnsafeMutablePointer<Int>.allocate(capacity: maxSignal)
     nonisolated(unsafe) static var texts = UnsafeMutablePointer<UnsafeMutablePointer<UInt8>?>.allocate(capacity: maxSignal)
 
-    static func install(fd newFD: Int32) {
-        fd = newFD
+    static func install(path newPath: String) {
+        path = strdup(newPath)
         for i in 0..<maxSignal { lengths[i] = 0; texts[i] = nil }
         for s in [SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGTRAP] where s > 0 && Int(s) < maxSignal {
             let bytes = Array(CrashLog.markerLine(signal: s).utf8)
@@ -131,9 +131,13 @@ private enum CrashSignalState {
 }
 
 private func crashSignalHandler(_ sig: Int32) {
-    let fd = CrashSignalState.fd
-    if fd >= 0, sig > 0, Int(sig) < CrashSignalState.maxSignal, let p = CrashSignalState.texts[Int(sig)] {
-        _ = write(fd, p, CrashSignalState.lengths[Int(sig)])
+    if let path = CrashSignalState.path, sig > 0, Int(sig) < CrashSignalState.maxSignal,
+       let p = CrashSignalState.texts[Int(sig)] {
+        let fd = open(path, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+        if fd >= 0 {
+            _ = write(fd, p, CrashSignalState.lengths[Int(sig)])
+            close(fd)
+        }
     }
     signal(sig, SIG_DFL)
     raise(sig)
