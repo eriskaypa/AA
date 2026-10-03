@@ -93,10 +93,10 @@ public enum BuilderReorderCheck {
         return meta.joined(separator: "  ·  ")
     }
 
-    /// BUILD-076 viewer subtitle (passed to the read-only viewer where supported).
+    /// BUILD-076 viewer subtitle, passed to `ContainerViewerSheet(title:container:subtitle:)` (REQ-W-BUILD-01).
+    /// Same text as W-FILES' `FileBankText.savedListSubtitle(listName:)` (HIER-136), which it delegates to.
     public static func viewerSubtitle(listName: String?) -> String {
-        let part = NetText.isBlank(listName) ? "" : " · \(listName ?? "")"
-        return "Saved-list item\(part) — read-only. Click a link to open it; double-click a file to open it."
+        FileBankText.savedListSubtitle(listName: listName)
     }
 
     // MARK: Rows (BUILD-072, BUILD-A10, D1)

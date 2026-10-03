@@ -518,9 +518,10 @@ struct SavedListsTabView: View {
         guard let item = t.items.first(where: { ids.contains($0.id) }) else { return }
         let title = BuilderSavedLists.itemTitle(item)
         let container = item.container
+        let subtitle = BuilderSavedLists.viewerSubtitle(listName: t.name)
         run {
             await dialogs.presentSheet(.closeType) { _ in
-                ContainerViewerSheet(title: title, container: container)
+                ContainerViewerSheet(title: title, container: container, subtitle: subtitle)
             }
         }
     }

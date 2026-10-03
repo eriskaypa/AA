@@ -15,10 +15,10 @@ struct ContainerViewerSheet: View {
     let container: Container
     let subtitle: String?
 
-    init(title: String, container: Container) { self.title = title; self.container = container; self.subtitle = nil }
-
-    /// Saved Lists passes `FileBankText.savedListSubtitle(listName:)` (HIER-136).
-    init(title: String, container: Container, subtitle: String?) {
+    /// `subtitle == nil` (or blank) shows `FileBankText.viewerDefaultSubtitle`; Saved Lists passes
+    /// `BuilderSavedLists.viewerSubtitle(listName:)` (HIER-136, BUILD-076; DECISIONS "Contract amendments
+    /// (post-wave)", REQ-W-BUILD-01 / REQ-W-FILES-01).
+    init(title: String, container: Container, subtitle: String? = nil) {
         self.title = title; self.container = container; self.subtitle = subtitle
     }
 
