@@ -75,6 +75,7 @@ struct BoardTabView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dialogs) private var dialogs
     @State private var model = BoardPageModel()
+    @FocusState private var findFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -95,7 +96,8 @@ struct BoardTabView: View {
             model.selection = [:]
             model.attach(env.store)
         }
-        .aaSectionCommands(.board, SectionCommands())
+        .aaSectionCommands(.board, SectionCommands(focusSearchField: { findFocused = true },
+                                                   searchFieldIsFocused: findFocused))
     }
 
     private var headerControls: some View {
@@ -103,7 +105,7 @@ struct BoardTabView: View {
             Text(BoardModel.findLabel).font(.aaMono(AAType.small)).foregroundStyle(AAColor.muted).fixedSize()
             AASearchField(text: $model.query, prompt: "Find")
                 .frame(width: 180)
-                .aaFilterField(for: .main)
+                .focused($findFocused)
             Toggle(BoardModel.hideDoneLabel, isOn: $model.hideDone)
                 .toggleStyle(.checkbox)
                 .fixedSize()

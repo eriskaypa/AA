@@ -41,6 +41,7 @@ struct RelationshipMapTabView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var model = MapPageModel()
     @State private var selectedRow: String?
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         let rows = MapLayout.filter(MapLayout.inspectRows(store: env.store), query: model.query)
@@ -62,14 +63,15 @@ struct RelationshipMapTabView: View {
         }
         .onChange(of: model.focusID) { _, _ in syncSelection(rows) }
         .onChange(of: model.query) { _, _ in selectedRow = nil }        // VIEW-172: re-filtering clears the selection
-        .aaSectionCommands(.map, SectionCommands())
+        .aaSectionCommands(.map, SectionCommands(focusSearchField: { searchFocused = true },
+                                                 searchFieldIsFocused: searchFocused))
     }
 
     private func inspectPane(_ rows: [MapInspectRow]) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             CalPaneTitle(title: MapLayout.inspectTitle, symbol: "point.3.connected.trianglepath.dotted")
             AASearchField(text: $model.query, prompt: "Search")
-                .aaFilterField(for: .main)
+                .focused($searchFocused)
                 .padding(.horizontal, AASpacing.s)
                 .padding(.bottom, AASpacing.s)
             List(selection: Binding(get: { selectedRow }, set: { id in

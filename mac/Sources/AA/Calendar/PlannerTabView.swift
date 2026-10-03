@@ -81,6 +81,7 @@ struct PlannerTabView: View {
     @Environment(AppEnvironment.self) private var env
     @Environment(\.dialogs) private var dialogs
     @State private var model = PlannerPageModel()
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -90,7 +91,7 @@ struct PlannerTabView: View {
                 navigation
             }
             HSplitView {
-                PlannerPoolPane(model: model, actions: actions)
+                PlannerPoolPane(model: model, actions: actions, searchFocused: $searchFocused)
                     .frame(minWidth: 240, idealWidth: 260, maxWidth: 400)
                 Group {
                     if model.mode == .month {
@@ -108,7 +109,9 @@ struct PlannerTabView: View {
         .onChange(of: env.store.generation) { _, _ in model.attach(env.store) }
         .aaSectionCommands(.planner, SectionCommands(plannerPrevious: { model.previous() },
                                                      plannerToday: { model.goToToday() },
-                                                     plannerNext: { model.next() }))
+                                                     plannerNext: { model.next() },
+                                                     focusSearchField: { searchFocused = true },
+                                                     searchFieldIsFocused: searchFocused))
     }
 
     private var actions: PlannerActions { PlannerActions(env: env, dialogs: dialogs, model: model) }
@@ -238,6 +241,7 @@ private func plannerDroppedRef(_ info: DropInfo, apply: @escaping @MainActor (Pl
 private struct PlannerPoolPane: View {
     @Bindable var model: PlannerPageModel
     let actions: PlannerActions
+    var searchFocused: FocusState<Bool>.Binding
 
     var body: some View {
         let rows = model.pool.value
@@ -245,7 +249,7 @@ private struct PlannerPoolPane: View {
             CalPaneTitle(title: PlannerPlacement.poolTitle, symbol: "tray")
             AASearchField(text: $model.query, prompt: PlannerPlacement.poolSearchPrompt)
                 .help(PlannerPlacement.poolSearchHelp)
-                .aaFilterField(for: .main)
+                .focused(searchFocused)
                 .padding(.horizontal, AASpacing.s)
             Button {
                 actions.addFromSavedList()
