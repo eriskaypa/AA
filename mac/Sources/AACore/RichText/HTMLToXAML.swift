@@ -165,6 +165,8 @@ struct RichHTMLConverter {
     /// DECISIONS 05 clean-up: a paragraph opened by a block element is written lazily, so one that a nested block
     /// closes before it received any content leaves nothing behind (no empty `<div>`→`<p>` paragraphs).
     private var pending: (attrs: [(String, String)], byBlock: Bool)?
+    /// Whitespace-only runs that arrived while `pending` was still unwritten (dropped with it, else written first).
+    private var pendingWhitespace: [(String, RichHTMLStyle)] = []
 
     static let inlineTags: Set<String> = ["a", "b", "strong", "i", "em", "u", "s", "strike", "del", "span", "font", "mark",
                                           "sub", "sup", "code", "tt", "cite", "abbr", "big", "small"]
@@ -174,6 +176,7 @@ struct RichHTMLConverter {
     // MARK: Paragraph state
 
     private mutating func openParagraph(_ s: RichHTMLStyle, indent: String? = nil, byBlock: Bool) {
+        pendingWhitespace = []
         var attrs: [(String, String)] = []
         if let a = s.align, !a.isEmpty { attrs.append(("TextAlignment", a)) }
         if let i = indent { attrs.append(("Margin", i)) }
@@ -185,12 +188,15 @@ struct RichHTMLConverter {
         out.start("Paragraph")
         for (n, v) in p.attrs { out.attr(n, v) }
         pending = nil
+        let ws = pendingWhitespace
+        pendingWhitespace = []
+        for (t, st) in ws { writeRun(t, st) }
     }
 
     /// Close the open paragraph. `byNestedBlock`: a still-empty paragraph opened by a block element is dropped.
     mutating func closeParagraph(byNestedBlock: Bool = false) {
         if let p = pending {
-            if byNestedBlock && p.byBlock { pending = nil; return }
+            if byNestedBlock && p.byBlock { pending = nil; pendingWhitespace = []; return }
             materialise()
         }
         out.end()
@@ -227,6 +233,10 @@ struct RichHTMLConverter {
                     if NetText.isBlank(text) { continue }               // DECISIONS 05: no blank " " paragraphs
                     openParagraph(style, byBlock: false)
                     open = true
+                }
+                if pending != nil, NetText.isBlank(text) {
+                    pendingWhitespace.append((text, style))             // kept only if the paragraph gets content
+                    continue
                 }
                 materialise()
                 writeRun(text, style)

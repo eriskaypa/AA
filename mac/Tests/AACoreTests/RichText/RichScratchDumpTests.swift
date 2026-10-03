@@ -5,13 +5,21 @@ import Testing
 @MainActor
 @Suite struct RichScratchDumpTests {
     @Test(.enabled(if: ProcessInfo.processInfo.environment["RICH_DUMP"] != nil)) func dump() throws {
-        for name in ["S-01-editor-save.xaml", "S-02-nested-bullets.xaml", "S-03-numbered-insert.xaml", "S-04-table-2x2.xaml",
-                     "S-05-hyperlink.xaml", "S-05b-hyperlink-styled.xaml", "S-06-lock-linebreak-tab-lang.xaml",
-                     "S-07-hr.xaml", "S-08-sire-body.xaml", "S-09-subscript.xaml", "S-10-empty-note.xaml"] {
-            let x = try RichTest.sample(name)
-            let (s, _) = RichTest.read(x)
-            print("=== \(name)\n\(s.string.debugDescription)")
-            print(RichTest.body(RichTest.roundTrip(x)))
+        var body = ""
+        var k = 0
+        while body.utf8.count < 1_000_000 {
+            body += ##"<Paragraph><Run>Line \##(k) — check the main engine </Run><Run FontWeight="Bold" Foreground="#FFC00000">oil level</Run><Span Background="#FFFFFF00"><Run> and log it.</Run></Span></Paragraph>"##
+            k += 1
+        }
+        let xaml = RichTest.doc(body)
+        for _ in 0..<(ProcessInfo.processInfo.environment["RICH_LOOP"] != nil ? 200 : 3) {
+            var t = Date()
+            guard case .success(let tree) = XamlXMLScanner.scan(xaml) else { return }
+            print("scan \(Int(Date().timeIntervalSince(t) * 1000))"); t = Date()
+            guard case .success(let d) = XamlDOMBuilder.build(source: xaml, tree: tree) else { return }
+            print("build \(Int(Date().timeIntervalSince(t) * 1000))"); t = Date()
+            let r = XamlStyleResolver(d, context: .containerEditor)
+            print("resolve \(Int(Date().timeIntervalSince(t) * 1000)) \(r.computed(d.root).fontSize)")
         }
     }
 }

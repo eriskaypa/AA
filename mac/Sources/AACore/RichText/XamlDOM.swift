@@ -286,10 +286,9 @@ public enum XamlDOM {
     /// CONT-151…155, XD.2.1. Fatal problems (malformed XML, a DTD, a root outside the presentation namespace) are a
     /// failure; everything else is tolerated and reported through `issues` and `loadability` (XD.2.12).
     public static func parse(_ xaml: String) -> Result<XamlDocument, XamlFatalError> {
-        let units = Array(xaml.utf16)
-        switch XamlXMLScanner.scan(units) {
+        switch XamlXMLScanner.scan(xaml) {
         case .failure(let f): return .failure(f)
-        case .success(let tree): return XamlDOMBuilder.build(source: xaml, units: units, tree: tree)
+        case .success(let tree): return XamlDOMBuilder.build(source: xaml, tree: tree)
         }
     }
 }

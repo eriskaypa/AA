@@ -4,12 +4,20 @@
 import Foundation
 
 public enum XamlValues {
+    /// `string.Trim()` without allocating when there is nothing to trim (the common case).
+    @inline(__always) public static func trim(_ s: String) -> String {
+        guard let f = s.utf16.first, let l = s.utf16.last else { return s }
+        if !NetText.isWhiteSpace(f) && !NetText.isWhiteSpace(l) { return s }
+        return NetText.trim(s)
+    }
+
     // MARK: Numbers
 
     /// XD.2.2 Length: `[+-]digits[.digits][e±n][px|in|cm|pt]`, invariant, case-insensitive unit; `Auto`/`NaN` → NaN
     /// when `allowAuto`. Returns nil when the text does not parse.
     public static func parseLength(_ text: String, allowAuto: Bool) -> Double? {
-        let t = NetText.trim(text)
+        let t = trim(text)
+        if let v = Double(t), v.isFinite, isPlainNumber(t) { return v }          // fast path: a plain number
         if allowAuto, NetText.equalsIgnoreCase(t, "Auto") || NetText.equalsIgnoreCase(t, "NaN") { return .nan }
         var s = Substring(t)
         var factor = 1.0
@@ -54,7 +62,7 @@ public enum XamlValues {
 
     /// Integer as .NET `int.Parse` (invariant, surrounding whitespace, optional sign).
     public static func parseInt(_ text: String) -> Int? {
-        let t = NetText.trim(text)
+        let t = trim(text)
         guard !t.isEmpty, let v = Int(t.hasPrefix("+") ? String(t.dropFirst()) : t), v >= Int(Int32.min),
               v <= Int(Int32.max) else { return nil }
         return v
@@ -119,7 +127,13 @@ public enum XamlValues {
     // MARK: Font tokens
 
     public static func parseFontWeight(_ text: String) -> Int? {
-        let t = NetText.trim(text)
+        let t = trim(text)
+        switch t {                                                       // canonical spellings first (no allocation)
+        case "Normal": return 400
+        case "Bold": return 700
+        case "SemiBold": return 600
+        default: break
+        }
         switch t.lowercased() {
         case "thin": return 100
         case "extralight", "ultralight": return 200
@@ -154,7 +168,9 @@ public enum XamlValues {
     }
 
     public static func parseFontStyle(_ text: String) -> XamlFontStyle? {
-        switch NetText.trim(text).lowercased() {
+        let t = trim(text)
+        if let exact = XamlFontStyle(rawValue: t) { return exact }
+        switch t.lowercased() {
         case "normal": return .normal
         case "italic": return .italic
         case "oblique": return .oblique
@@ -180,13 +196,17 @@ public enum XamlValues {
 
     // MARK: Enums
 
+    @inline(__always)
     static func parseEnum<E: RawRepresentable & CaseIterable>(_ text: String, _: E.Type) -> E? where E.RawValue == String {
-        let t = NetText.trim(text)
+        let t = trim(text)
+        if let exact = E(rawValue: t) { return exact }
         return E.allCases.first { NetText.equalsIgnoreCase($0.rawValue, t) }
     }
 
     public static func parseBool(_ text: String) -> Bool? {
-        let t = NetText.trim(text)
+        let t = trim(text)
+        if t == "True" { return true }
+        if t == "False" { return false }
         if NetText.equalsIgnoreCase(t, "True") { return true }
         if NetText.equalsIgnoreCase(t, "False") { return false }
         return nil
@@ -248,7 +268,12 @@ public enum XamlValues {
 
     /// Brush attribute grammar (XD.2.2). `{x:Null}` → `.null`; any other `{…}` → nil with `isMarkupExtension`.
     public static func parseBrush(_ text: String) -> XamlBrush? {
-        let t = NetText.trim(text)
+        let t = trim(text)
+        if t.utf8.count == 9, t.utf8.first == 0x23,
+           t.utf8.dropFirst().allSatisfy({ ($0 >= 0x30 && $0 <= 0x39) || ($0 >= 0x41 && $0 <= 0x46) || ($0 >= 0x61 && $0 <= 0x66) }),
+           let v = UInt32(t.dropFirst(), radix: 16) {                    // `#AARRGGBB` fast path
+            return .solid(argb: v, opacity: 1, isScRgb: false)
+        }
         if t.hasPrefix("{") {
             let inner = t.replacingOccurrences(of: " ", with: "")
             return inner == "{x:Null}" ? .null : nil

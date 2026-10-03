@@ -690,6 +690,7 @@ struct XamlWriterEmitter {
             while j < merged.count, merged[j].0.hyperlink == h { j += 1 }
             if let h {
                 var linkStyle = paraStyle
+                linkParentForeground = paraStyle.foreground
                 linkStyle.foreground = .linkDefault
                 open("Hyperlink")
                 hyperlinkAttributes(h, merged[i].2)
@@ -726,6 +727,7 @@ struct XamlWriterEmitter {
     }
 
     private var pendingLinkPropertyElements: [String] = []
+    private var linkParentForeground: XamlBrush = .null
 
     private mutating func lockGroups(_ segs: [(RunKey, Seg, [NSAttributedString.Key: Any])], _ style: XamlComputedStyle,
                                      inLink: Bool) {
@@ -760,6 +762,11 @@ struct XamlWriterEmitter {
             var fgOverride: XamlBrush?? = nil
             if s.0.linkStyled && !inLink {
                 fgOverride = .some(s.0.underlying.map { .solid(argb: $0, opacity: 1, isScRgb: false) })
+            } else if inLink, !s.0.linkStyled, s.0.hyperlink?.hasPrefix("link:") == true, let fg = s.0.wanted.foreground,
+                      XamlValues.sameBrush(fg, linkParentForeground) {
+                // A link made on the Mac around text that only inherited its colour: WPF would show it in the link
+                // style, so it is written link-styled (no Foreground), never pinned to the old colour.
+                fgOverride = .some(.linkDefault)
             }
             characterAttributes(s.0.wanted, base: &base, emptyParagraph: false, foregroundOverride: fgOverride)
             for a in s.0.extraAttributes where a.count == 3 {

@@ -8,12 +8,6 @@ import Foundation
 
 /// Which properties each element kind recognises (XD.2.3 "Writable on", §4.3.3) and how they parse.
 enum XamlAttributeTable {
-    static let blocks: Set<String> = ["Section", "Paragraph", "List", "Table", "BlockUIContainer"]
-    static let inlines: Set<String> = ["Run", "Span", "Bold", "Italic", "Underline", "Hyperlink", "LineBreak",
-                                       "InlineUIContainer", "Figure", "Floater"]
-    static let textElements: Set<String> = blocks.union(inlines).union(["ListItem", "TableRowGroup", "TableRow",
-                                                                         "TableCell"])
-
     static func name(_ k: XamlNodeKind) -> String {
         switch k {
         case .section: return "Section"
@@ -69,12 +63,26 @@ enum XamlAttributeTable {
         }
     }
 
+    private static func isBlock(_ k: XamlNodeKind) -> Bool {
+        switch k { case .section, .paragraph, .list, .table, .blockUIContainer: return true; default: return false }
+    }
+
+    private static func isInline(_ k: XamlNodeKind) -> Bool {
+        switch k {
+        case .run, .span, .bold, .italic, .underline, .hyperlink, .lineBreak, .inlineUIContainer, .figure, .floater: return true
+        default: return false
+        }
+    }
+
+    private static func isTextElement(_ k: XamlNodeKind) -> Bool {
+        isBlock(k) || isInline(k) || k == .listItem || k == .tableRowGroup || k == .tableRow || k == .tableCell
+    }
+
     /// Is `property` (a plain attribute name) writable on element `k`?
     static func recognises(_ property: String, on k: XamlNodeKind) -> Bool {
-        let n = name(k)
-        let isTE = textElements.contains(n)
+        let isTE = isTextElement(k)
         let isFD = k == .flowDocument
-        let isBlock = blocks.contains(n), isInline = inlines.contains(n)
+        let isBlock = Self.isBlock(k), isInline = Self.isInline(k)
         switch property {
         case "FontFamily", "FontSize", "FontWeight", "FontStyle", "FontStretch", "Foreground":
             return isTE || isFD
@@ -101,8 +109,7 @@ enum XamlAttributeTable {
 
     /// Known WPF properties that carry no semantics here (kept raw, never `unknownAttribute`).
     static func isKnownRawOnly(_ property: String, on k: XamlNodeKind) -> Bool {
-        let n = name(k)
-        let isTE = textElements.contains(n) || k == .flowDocument || k == .tableColumn
+        let isTE = isTextElement(k) || k == .flowDocument || k == .tableColumn
         switch property {
         case "Name", "Tag", "ToolTip", "Uid", "Cursor", "ForceCursor", "Focusable", "IsEnabled", "DataContext",
              "Style", "ContextMenu", "InputScope", "AllowDrop", "Language", "Resources", "FocusVisualStyle",
@@ -110,7 +117,7 @@ enum XamlAttributeTable {
             return isTE
         case "KeepWithNext", "MinOrphanLines", "MinWidowLines": return k == .paragraph
         case "BreakPageBefore", "BreakColumnBefore", "ClearFloaters":
-            return blocks.contains(n)
+            return isBlock(k)
         case "Command", "CommandParameter", "CommandTarget": return k == .hyperlink
         case "PagePadding", "PageWidth", "PageHeight", "MinPageWidth", "MaxPageWidth", "MinPageHeight", "MaxPageHeight",
              "ColumnWidth", "ColumnGap", "ColumnRuleWidth", "ColumnRuleBrush", "IsColumnWidthFlexible",
@@ -128,7 +135,7 @@ enum XamlAttributeTable {
 
     /// Parses `value` into `local` for a recognised `property`.
     static func apply(_ property: String, _ value: String, to local: inout XamlLocalValues) -> Outcome {
-        let t = NetText.trim(value)
+        let t = XamlValues.trim(value)
         let isBrush = property == "Foreground" || property == "Background" || property == "BorderBrush"
         if t.hasPrefix("{"), !t.hasPrefix("{}") {
             if isBrush, let b = XamlValues.parseBrush(t), case .null = b {
@@ -239,7 +246,7 @@ struct XamlDOMBuilder {
     }
 
     private let source: String
-    private let units: [UInt16]
+    private var unitsCache: [UInt16]?
     private let raw: XamlRawXMLTree
     private var nodes: [MNode] = []
     private var issues: [XamlIssue] = []
@@ -249,13 +256,13 @@ struct XamlDOMBuilder {
         case text(String, Range<Int>)
     }
 
-    static func build(source: String, units: [UInt16], tree: XamlRawXMLTree) -> Result<XamlDocument, XamlFatalError> {
-        var b = XamlDOMBuilder(source: source, units: units, raw: tree)
+    static func build(source: String, tree: XamlRawXMLTree) -> Result<XamlDocument, XamlFatalError> {
+        var b = XamlDOMBuilder(source: source, raw: tree)
         return b.run()
     }
 
-    private init(source: String, units: [UInt16], raw: XamlRawXMLTree) {
-        self.source = source; self.units = units; self.raw = raw
+    private init(source: String, raw: XamlRawXMLTree) {
+        self.source = source; self.raw = raw
     }
 
     private mutating func run() -> Result<XamlDocument, XamlFatalError> {
@@ -313,7 +320,7 @@ struct XamlDOMBuilder {
     /// nil = a property element (`Owner.Prop`).
     private func classify(_ e: XamlRawXMLElement) -> XamlNodeKind? {
         if e.namespaceURI == XamlXMLNamespaces.presentation {
-            if e.localName.contains(".") { return nil }
+            if e.localName.utf8.contains(0x2E) { return nil }
             return XamlAttributeTable.kind(localName: e.localName) ?? .unknown(e.qualifiedName)
         }
         return .unknown(e.qualifiedName)
@@ -321,7 +328,7 @@ struct XamlDOMBuilder {
 
     private func isPropertyElement(_ rawIndex: Int) -> Bool {
         let e = raw.elements[rawIndex]
-        return e.namespaceURI == XamlXMLNamespaces.presentation && e.localName.contains(".")
+        return e.namespaceURI == XamlXMLNamespaces.presentation && e.localName.utf8.contains(0x2E)
     }
 
     private func xmlSpacePreserve(_ e: XamlRawXMLElement, inherited: Bool) -> Bool {
@@ -331,7 +338,11 @@ struct XamlDOMBuilder {
         return inherited
     }
 
-    private func slice(_ r: Range<Int>) -> String { String(decoding: units[r], as: UTF16.self) }
+    /// The verbatim source of a UTF-16 range (property elements; the code units are materialised on first use).
+    private mutating func slice(_ r: Range<Int>) -> String {
+        if unitsCache == nil { unitsCache = Array(source.utf16) }
+        return String(decoding: unitsCache![r], as: UTF16.self)
+    }
 
     private mutating func addImplicit(_ kind: XamlNodeKind, parent: Int?) -> Int {
         let idx = nodes.count
@@ -366,7 +377,7 @@ struct XamlDOMBuilder {
             let name = a.qualifiedName
             if name.hasPrefix("Typography.") { n.local.typography[name] = NetText.trim(a.value); continue }
             if name.hasPrefix("NumberSubstitution.") { n.local.numberSubstitution[name] = NetText.trim(a.value); continue }
-            if name.contains(".") { continue }                                    // other attached properties
+            if name.utf8.contains(0x2E) { continue }                              // other attached properties
             if XamlAttributeTable.recognises(name, on: kind) {
                 switch XamlAttributeTable.apply(name, a.value, to: &n.local) {
                 case .ok: break
@@ -658,7 +669,7 @@ struct XamlDOMBuilder {
                 _ = makeElement(ci, parent: idx)
             }
         }
-        if !preserve { text = NetText.trim(Self.collapse(text)).replacingOccurrences(of: "\u{0}", with: "") }
+        if !preserve { text = Self.collapse(text) }                       // §4.3.1: collapse (Run text keeps its ends)
         let attr = nodes[idx].rawAttributes.first { $0.namespaceURI == nil && $0.qualifiedName == "Text" }
         if hasContent, attr != nil, !(text.isEmpty) { issues.append(.runTextAndContent) }
         if hasContent && !text.isEmpty {

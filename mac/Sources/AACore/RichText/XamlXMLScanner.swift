@@ -1,8 +1,10 @@
 // Spec: 05 §XD.2.1 steps 1–4 (parse pipeline: BOM, declaration, DTD, namespaces, malformed XML), §XD.5 (hand-written
 //       XML 1.0 tokenizer with UTF-16 source ranges, five predefined entities plus character references, undefined
-//       entities rejected, end-of-line and attribute-value normalisation), §4.3.1 (reading tolerance).
+//       entities rejected, end-of-line and attribute-value normalisation; budget 1 MB parse + resolve < 50 ms),
+//       §4.3.1 (reading tolerance).
 // Phase 1 of `XamlDOM.parse`: a strict, namespace-aware XML reader that produces a raw element tree whose every
-// element knows its exact UTF-16 range in the source (needed for byte-for-byte opaque preservation, §4.3.7 rule 10).
+// element knows its exact UTF-16 range in the source (byte-for-byte opaque preservation, §4.3.7 rule 10). It reads
+// the UTF-8 bytes (Swift strings are always valid UTF-8) and keeps a running UTF-16 offset.
 import Foundation
 
 /// One attribute exactly as read (after entity decoding and attribute-value normalisation).
@@ -29,7 +31,7 @@ struct XamlRawXMLElement {
     var namespaceURI: String?
     var attributes: [XamlRawXMLAttribute]
     var children: [XamlRawXMLChild]
-    /// Whole element: from `<` of the start tag to the end of the end tag (or of the empty-element tag).
+    /// Whole element (UTF-16): from `<` of the start tag to the end of the end tag (or of the empty-element tag).
     var range: Range<Int>
     /// Content between the start tag and the end tag (empty for `<X/>`).
     var contentRange: Range<Int>
@@ -48,88 +50,89 @@ enum XamlXMLNamespaces {
     static let xmlns = "http://www.w3.org/2000/xmlns/"
 }
 
-/// Strict XML 1.0 (with namespaces) scanner over UTF-16 code units.
+/// Strict XML 1.0 (with namespaces) scanner over UTF-8 bytes.
 struct XamlXMLScanner {
-    private let u: [UInt16]
+    private let b: [UInt8]
     private var i: Int = 0
+    /// UTF-16 offset of byte `i`.
+    private var p16: Int = 0
     private var elements: [XamlRawXMLElement] = []
     /// Namespace scopes: prefix ("" = default) → URI, innermost last.
     private var scopes: [[String: String]] = []
-    private var depthLimit = 2_000
+    private let depthLimit = 2_000
 
-    init(units: [UInt16]) { self.u = units }
+    init(bytes: [UInt8]) { self.b = bytes }
 
     struct Failure: Error { let fatal: XamlFatalError }
 
-    static func scan(_ units: [UInt16]) -> Result<XamlRawXMLTree, XamlFatalError> {
-        var s = XamlXMLScanner(units: units)
+    static func scan(_ source: String) -> Result<XamlRawXMLTree, XamlFatalError> {
+        var s = XamlXMLScanner(bytes: Array(source.utf8))
         do { return .success(try s.document()) } catch let f as Failure { return .failure(f.fatal) } catch {
             return .failure(.malformedXML("\(error)"))
         }
     }
 
+    /// Compatibility entry for callers holding UTF-16 code units.
+    static func scan(_ units: [UInt16]) -> Result<XamlRawXMLTree, XamlFatalError> {
+        scan(String(decoding: units, as: UTF16.self))
+    }
+
     // MARK: - Errors
 
     private func malformed(_ what: String) -> Failure {
-        let (line, col) = position(of: i)
+        var line = 1, col = 1, k = 0
+        while k < min(i, b.count) {
+            if b[k] == 0x0A { line += 1; col = 1 } else if b[k] < 0x80 || b[k] >= 0xC0 { col += 1 }
+            k += 1
+        }
         return Failure(fatal: .malformedXML("\(what) (line \(line), position \(col))"))
     }
 
-    private func position(of index: Int) -> (Int, Int) {
-        var line = 1, col = 1, k = 0
-        let end = min(index, u.count)
-        while k < end {
-            if u[k] == 0x0A { line += 1; col = 1 } else { col += 1 }
-            k += 1
-        }
-        return (line, col)
+    // MARK: - Cursor
+
+    @inline(__always) private static func width16(_ c: UInt8) -> Int {
+        c < 0x80 ? 1 : (c >= 0xF0 ? 2 : (c >= 0xC0 ? 1 : 0))
     }
 
-    // MARK: - Character classes
+    /// Advance over ASCII bytes only.
+    @inline(__always) private mutating func skipASCII(_ n: Int) { i += n; p16 += n }
 
-    @inline(__always) private static func isSpace(_ c: UInt16) -> Bool { c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D }
-
-    @inline(__always) private static func isNameStart(_ c: UInt16) -> Bool {
-        (c >= 0x61 && c <= 0x7A) || (c >= 0x41 && c <= 0x5A) || c == 0x5F || c == 0x3A
-            || (c >= 0xC0 && c != 0xD7 && c != 0xF7 && !(c >= 0x2000 && c <= 0x206F && c != 0x200C && c != 0x200D)
-                && !(c >= 0xD800 && c <= 0xDFFF) && c != 0xFFFE && c != 0xFFFF) || (c >= 0xD800 && c <= 0xDBFF)
+    @inline(__always) private mutating func step() {
+        p16 += Self.width16(b[i])
+        i += 1
     }
 
-    @inline(__always) private static func isNameChar(_ c: UInt16) -> Bool {
-        isNameStart(c) || (c >= 0x30 && c <= 0x39) || c == 0x2D || c == 0x2E || c == 0xB7
-            || (c >= 0x0300 && c <= 0x036F) || c == 0x203F || c == 0x2040 || (c >= 0xDC00 && c <= 0xDFFF)
+    @inline(__always) private static func isSpace(_ c: UInt8) -> Bool { c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D }
+
+    @inline(__always) private static func isNameStart(_ c: UInt8) -> Bool {
+        (c >= 0x61 && c <= 0x7A) || (c >= 0x41 && c <= 0x5A) || c == 0x5F || c == 0x3A || c >= 0x80
     }
 
-    /// XML 1.0 `Char` production for one UTF-16 unit; surrogates are validated as pairs by the caller.
-    @inline(__always) private static func isXMLChar(_ c: UInt16) -> Bool {
-        c == 0x09 || c == 0x0A || c == 0x0D || (c >= 0x20 && c <= 0xD7FF) || (c >= 0xE000 && c <= 0xFFFD)
-            || (c >= 0xD800 && c <= 0xDFFF)
+    @inline(__always) private static func isNameChar(_ c: UInt8) -> Bool {
+        isNameStart(c) || (c >= 0x30 && c <= 0x39) || c == 0x2D || c == 0x2E
     }
 
-    private func at(_ s: String) -> Bool {
-        var k = i
-        for c in s.utf16 {
-            guard k < u.count, u[k] == c else { return false }
-            k += 1
-        }
+    private func at(_ s: StaticString) -> Bool {
+        let n = s.utf8CodeUnitCount
+        guard i + n <= b.count else { return false }
+        let p = s.utf8Start
+        for k in 0..<n where b[i + k] != p[k] { return false }
         return true
     }
 
-    private mutating func skipSpace() { while i < u.count, Self.isSpace(u[i]) { i += 1 } }
+    private mutating func skipSpace() { while i < b.count, Self.isSpace(b[i]) { skipASCII(1) } }
 
     // MARK: - Document
 
     private mutating func document() throws -> XamlRawXMLTree {
-        if i < u.count, u[i] == 0xFEFF { i += 1 }                                     // XD.2.1 step 1
+        if b.count >= 3, b[0] == 0xEF, b[1] == 0xBB, b[2] == 0xBF { i = 3; p16 = 1 }    // XD.2.1 step 1
         skipSpace()
-        if at("<?xml"), i + 5 < u.count, Self.isSpace(u[i + 5]) || u[i + 5] == 0x3F {
-            try skipPI()
-        }
+        if at("<?xml"), i + 5 < b.count, Self.isSpace(b[i + 5]) || b[i + 5] == 0x3F { try skipPI() }
         var root: Int?
         while true {
             skipSpace()
-            if i >= u.count { break }
-            guard u[i] == 0x3C else {
+            if i >= b.count { break }
+            guard b[i] == 0x3C else {
                 throw malformed(root == nil ? "Data at the root level is invalid" : "Text after the root element")
             }
             if at("<!--") { try skipComment(); continue }
@@ -148,43 +151,48 @@ struct XamlXMLScanner {
     }
 
     private mutating func skipComment() throws {
-        i += 4
-        while i + 2 < u.count {
-            if u[i] == 0x2D, u[i + 1] == 0x2D {
-                guard u[i + 2] == 0x3E else { throw malformed("'--' is not allowed inside a comment") }
-                i += 3
+        skipASCII(4)
+        while i + 2 < b.count {
+            if b[i] == 0x2D, b[i + 1] == 0x2D {
+                guard b[i + 2] == 0x3E else { throw malformed("'--' is not allowed inside a comment") }
+                skipASCII(3)
                 return
             }
-            guard Self.isXMLChar(u[i]) else { throw malformed("Invalid character in a comment") }
-            i += 1
+            guard b[i] >= 0x20 || b[i] == 0x09 || b[i] == 0x0A || b[i] == 0x0D else {
+                throw malformed("Invalid character in a comment")
+            }
+            step()
         }
         throw malformed("Unexpected end of file in a comment")
     }
 
     private mutating func skipPI() throws {
-        i += 2
-        while i + 1 < u.count {
-            if u[i] == 0x3F, u[i + 1] == 0x3E { i += 2; return }
-            i += 1
+        skipASCII(2)
+        while i + 1 < b.count {
+            if b[i] == 0x3F, b[i + 1] == 0x3E { skipASCII(2); return }
+            step()
         }
         throw malformed("Unexpected end of file in a processing instruction")
     }
 
     // MARK: - Names
 
-    private mutating func name() throws -> String {
+    /// A name at `i`: (qualified, prefix, local).
+    private mutating func qname() throws -> (String, String?, String) {
         let start = i
-        guard i < u.count, Self.isNameStart(u[i]) else { throw malformed("Name expected") }
-        i += 1
-        while i < u.count, Self.isNameChar(u[i]) { i += 1 }
-        return String(decoding: u[start..<i], as: UTF16.self)
-    }
-
-    private func split(_ qname: String) throws -> (String?, String) {
-        guard let colon = qname.firstIndex(of: ":") else { return (nil, qname) }
-        let p = String(qname[..<colon]), l = String(qname[qname.index(after: colon)...])
-        guard !p.isEmpty, !l.isEmpty, !l.contains(":") else { throw malformed("Invalid qualified name '\(qname)'") }
-        return (p, l)
+        guard i < b.count, Self.isNameStart(b[i]) else { throw malformed("Name expected") }
+        var colon = -1
+        while i < b.count, Self.isNameChar(b[i]) {
+            if b[i] == 0x3A {
+                guard colon < 0 else { throw malformed("Invalid qualified name") }
+                colon = i
+            }
+            step()
+        }
+        let q = String(decoding: b[start..<i], as: UTF8.self)
+        guard colon >= 0 else { return (q, nil, q) }
+        guard colon > start, colon < i - 1 else { throw malformed("Invalid qualified name '\(q)'") }
+        return (q, String(decoding: b[start..<colon], as: UTF8.self), String(decoding: b[(colon + 1)..<i], as: UTF8.self))
     }
 
     private func resolve(_ prefix: String?) -> String? {
@@ -197,53 +205,51 @@ struct XamlXMLScanner {
 
     private mutating func element(parent: Int?, depth: Int) throws -> Int {
         guard depth < depthLimit else { throw malformed("The document is nested too deeply") }
-        let start = i
-        i += 1                                                          // '<'
-        let qname = try name()
+        let start16 = p16
+        skipASCII(1)                                                    // '<'
+        let (qn, prefix, local) = try qname()
         var attrs: [XamlRawXMLAttribute] = []
         var selfClosing = false
         while true {
-            let hadSpace = i < u.count && Self.isSpace(u[i])
+            let hadSpace = i < b.count && Self.isSpace(b[i])
             skipSpace()
-            guard i < u.count else { throw malformed("Unexpected end of file in a start tag") }
-            if u[i] == 0x3E { i += 1; break }
-            if u[i] == 0x2F {
-                guard i + 1 < u.count, u[i + 1] == 0x3E else { throw malformed("'/' must be followed by '>'") }
-                i += 2
+            guard i < b.count else { throw malformed("Unexpected end of file in a start tag") }
+            if b[i] == 0x3E { skipASCII(1); break }
+            if b[i] == 0x2F {
+                guard i + 1 < b.count, b[i + 1] == 0x3E else { throw malformed("'/' must be followed by '>'") }
+                skipASCII(2)
                 selfClosing = true
                 break
             }
             guard hadSpace else { throw malformed("Whitespace expected between attributes") }
-            let an = try name()
+            let (an, ap, al) = try qname()
             skipSpace()
-            guard i < u.count, u[i] == 0x3D else { throw malformed("'=' expected after attribute '\(an)'") }
-            i += 1
+            guard i < b.count, b[i] == 0x3D else { throw malformed("'=' expected after attribute '\(an)'") }
+            skipASCII(1)
             skipSpace()
             let value = try attributeValue()
-            if attrs.contains(where: { $0.qualifiedName == an }) {
-                throw malformed("'\(an)' is a duplicate attribute name")
-            }
-            let (ap, al) = try split(an)
+            for a in attrs where a.qualifiedName == an { throw malformed("'\(an)' is a duplicate attribute name") }
             let isDecl = an == "xmlns" || ap == "xmlns"
             attrs.append(XamlRawXMLAttribute(qualifiedName: an, prefix: ap, localName: al, namespaceURI: nil,
                                              value: value, isNamespaceDeclaration: isDecl))
         }
         // Namespace scope of this element.
         var scope: [String: String] = [:]
+        var hasScope = false
         for a in attrs where a.isNamespaceDeclaration {
+            hasScope = true
             if a.qualifiedName == "xmlns" { scope[""] = a.value } else {
                 guard !a.value.isEmpty else { throw malformed("Cannot undeclare prefix '\(a.localName)'") }
                 guard a.localName != "xmlns" else { throw malformed("The 'xmlns' prefix cannot be declared") }
                 scope[a.localName] = a.value
             }
         }
-        scopes.append(scope)
-        defer { scopes.removeLast() }
-        let (prefix, local) = try split(qname)
+        if hasScope { scopes.append(scope) }
+        defer { if hasScope { scopes.removeLast() } }
         if prefix == "xmlns" { throw malformed("Element names cannot use the 'xmlns' prefix") }
         let ns = resolve(prefix)
-        if prefix != nil, ns == nil { throw malformed("'\(prefix!)' is an undeclared prefix") }
-        var seen = Set<String>()
+        if let p = prefix, ns == nil { throw malformed("'\(p)' is an undeclared prefix") }
+        var seen: Set<String>?
         for k in attrs.indices {
             if attrs[k].isNamespaceDeclaration {
                 attrs[k].namespaceURI = XamlXMLNamespaces.xmlns
@@ -253,113 +259,125 @@ struct XamlXMLScanner {
                 guard let uri = resolve(p) else { throw malformed("'\(p)' is an undeclared prefix") }
                 attrs[k].namespaceURI = uri
                 let key = uri + "|" + attrs[k].localName
-                if seen.contains(key) { throw malformed("'\(attrs[k].qualifiedName)' is a duplicate attribute") }
-                seen.insert(key)
+                if seen == nil { seen = [] }
+                if seen!.contains(key) { throw malformed("'\(attrs[k].qualifiedName)' is a duplicate attribute") }
+                seen!.insert(key)
             }
         }
         let index = elements.count
-        elements.append(XamlRawXMLElement(qualifiedName: qname, prefix: prefix, localName: local, namespaceURI: ns,
-                                          attributes: attrs, children: [], range: start..<i, contentRange: i..<i,
-                                          parent: parent))
+        elements.append(XamlRawXMLElement(qualifiedName: qn, prefix: prefix, localName: local, namespaceURI: ns,
+                                          attributes: attrs, children: [], range: start16..<p16,
+                                          contentRange: p16..<p16, parent: parent))
         if selfClosing { return index }
-        let contentStart = i
+        let content16 = p16
         var children: [XamlRawXMLChild] = []
-        var textStart = -1
-        var text: [UInt16] = []
-        func flushText(_ end: Int, into children: inout [XamlRawXMLChild]) {
-            if textStart >= 0 {
-                children.append(.text(String(decoding: text, as: UTF16.self), textStart..<end, isCData: false))
+        var text: [UInt8] = []
+        var textStart16 = -1
+        func flush(_ end16: Int, _ children: inout [XamlRawXMLChild], _ text: inout [UInt8], _ textStart16: inout Int) {
+            if textStart16 >= 0 {
+                children.append(.text(String(decoding: text, as: UTF8.self), textStart16..<end16, isCData: false))
                 text.removeAll(keepingCapacity: true)
-                textStart = -1
+                textStart16 = -1
             }
         }
         while true {
-            guard i < u.count else { throw malformed("Unexpected end of file; element '\(qname)' is not closed") }
-            let c = u[i]
+            guard i < b.count else { throw malformed("Unexpected end of file; element '\(qn)' is not closed") }
+            let c = b[i]
             if c == 0x3C {
-                if i + 1 < u.count, u[i + 1] == 0x2F {
-                    flushText(i, into: &children)
-                    let contentEnd = i
-                    i += 2
-                    let endName = try name()
+                if i + 1 < b.count, b[i + 1] == 0x2F {
+                    flush(p16, &children, &text, &textStart16)
+                    let contentEnd16 = p16
+                    skipASCII(2)
+                    let (endName, _, _) = try qname()
                     skipSpace()
-                    guard i < u.count, u[i] == 0x3E else { throw malformed("'>' expected in the end tag") }
-                    i += 1
-                    guard endName == qname else {
-                        throw malformed("The '\(qname)' start tag does not match the end tag of '\(endName)'")
+                    guard i < b.count, b[i] == 0x3E else { throw malformed("'>' expected in the end tag") }
+                    skipASCII(1)
+                    guard endName == qn else {
+                        throw malformed("The '\(qn)' start tag does not match the end tag of '\(endName)'")
                     }
                     elements[index].children = children
-                    elements[index].range = start..<i
-                    elements[index].contentRange = contentStart..<contentEnd
+                    elements[index].range = start16..<p16
+                    elements[index].contentRange = content16..<contentEnd16
                     return index
                 }
-                if at("<!--") { flushText(i, into: &children); try skipComment(); continue }
+                if at("<!--") { flush(p16, &children, &text, &textStart16); try skipComment(); continue }
                 if at("<![CDATA[") {
-                    flushText(i, into: &children)
-                    let cs = i
-                    i += 9
-                    var buf: [UInt16] = []
+                    flush(p16, &children, &text, &textStart16)
+                    let cs = p16
+                    skipASCII(9)
+                    var buf: [UInt8] = []
                     while true {
-                        guard i + 2 < u.count else { throw malformed("Unexpected end of file in CDATA") }
-                        if u[i] == 0x5D, u[i + 1] == 0x5D, u[i + 2] == 0x3E { i += 3; break }
+                        guard i + 2 < b.count else { throw malformed("Unexpected end of file in CDATA") }
+                        if b[i] == 0x5D, b[i + 1] == 0x5D, b[i + 2] == 0x3E { skipASCII(3); break }
                         try appendLiteral(&buf)
                     }
-                    children.append(.text(String(decoding: buf, as: UTF16.self), cs..<i, isCData: true))
+                    children.append(.text(String(decoding: buf, as: UTF8.self), cs..<p16, isCData: true))
                     continue
                 }
-                if at("<?") { flushText(i, into: &children); try skipPI(); continue }
+                if at("<?") { flush(p16, &children, &text, &textStart16); try skipPI(); continue }
                 if at("<!") { throw malformed("Unexpected markup declaration inside an element") }
-                flushText(i, into: &children)
+                flush(p16, &children, &text, &textStart16)
                 let child = try element(parent: index, depth: depth + 1)
                 children.append(.element(child))
                 continue
             }
-            if textStart < 0 { textStart = i }
-            if c == 0x26 {
-                try reference(&text)
+            if textStart16 < 0 { textStart16 = p16 }
+            if c == 0x26 { try reference(&text); continue }
+            // Fast path: a run of ordinary bytes.
+            let runStart = i
+            var w = 0
+            while i < b.count {
+                let d = b[i]
+                if d == 0x3C || d == 0x26 || d == 0x0D || d == 0x5D || (d < 0x20 && d != 0x09 && d != 0x0A) || d == 0xEF {
+                    break
+                }
+                w += Self.width16(d)
+                i += 1
+            }
+            if i > runStart {
+                text.append(contentsOf: b[runStart..<i])
+                p16 += w
                 continue
             }
-            if c == 0x5D, i + 2 < u.count, u[i + 1] == 0x5D, u[i + 2] == 0x3E {
+            if c == 0x5D, i + 2 < b.count, b[i + 1] == 0x5D, b[i + 2] == 0x3E {
                 throw malformed("']]>' is not allowed in content")
             }
             try appendLiteral(&text)
         }
     }
 
-    /// Appends one literal character (or surrogate pair) with XML end-of-line normalisation.
-    @inline(__always) private mutating func appendLiteral(_ out: inout [UInt16]) throws {
-        let c = u[i]
+    /// Appends one literal character with XML end-of-line normalisation and character validation.
+    @inline(__always) private mutating func appendLiteral(_ out: inout [UInt8]) throws {
+        let c = b[i]
         if c == 0x0D {
             out.append(0x0A)
-            i += (i + 1 < u.count && u[i + 1] == 0x0A) ? 2 : 1
+            skipASCII((i + 1 < b.count && b[i + 1] == 0x0A) ? 2 : 1)
             return
         }
-        if c >= 0xD800 && c <= 0xDBFF {
-            guard i + 1 < u.count, u[i + 1] >= 0xDC00, u[i + 1] <= 0xDFFF else { throw malformed("Invalid surrogate") }
-            out.append(c); out.append(u[i + 1])
-            i += 2
-            return
+        if c < 0x20, c != 0x09, c != 0x0A { throw malformed(String(format: "'\\u%04X' is an invalid character", Int(c))) }
+        if c == 0xEF, i + 2 < b.count, b[i + 1] == 0xBF, b[i + 2] == 0xBE || b[i + 2] == 0xBF {
+            throw malformed("'\\uFFFE' / '\\uFFFF' is an invalid character")
         }
-        guard Self.isXMLChar(c), !(c >= 0xDC00 && c <= 0xDFFF) else {
-            throw malformed(String(format: "'\\u%04X' is an invalid character", Int(c)))
-        }
-        out.append(c)
-        i += 1
+        // One whole UTF-8 sequence.
+        let n = c < 0x80 ? 1 : (c >= 0xF0 ? 4 : (c >= 0xE0 ? 3 : 2))
+        out.append(contentsOf: b[i..<min(b.count, i + n)])
+        p16 += n == 4 ? 2 : 1
+        i += n
     }
 
     /// `&…;` at `i` → decoded into `out`.
-    private mutating func reference(_ out: inout [UInt16]) throws {
+    private mutating func reference(_ out: inout [UInt8]) throws {
         let start = i
-        i += 1
-        guard i < u.count else { throw malformed("Unexpected end of file in an entity reference") }
-        if u[i] == 0x23 {
-            i += 1
+        skipASCII(1)
+        guard i < b.count else { throw malformed("Unexpected end of file in an entity reference") }
+        if b[i] == 0x23 {
+            skipASCII(1)
             var hex = false
-            if i < u.count, u[i] == 0x78 { hex = true; i += 1 }
+            if i < b.count, b[i] == 0x78 { hex = true; skipASCII(1) }
             var v: UInt32 = 0
             var digits = 0
-            while i < u.count, u[i] != 0x3B {
-                let d = u[i]
+            while i < b.count, b[i] != 0x3B {
+                let d = b[i]
                 let dv: UInt32
                 if d >= 0x30 && d <= 0x39 { dv = UInt32(d - 0x30) }
                 else if hex && d >= 0x61 && d <= 0x66 { dv = UInt32(d - 0x61 + 10) }
@@ -368,22 +386,27 @@ struct XamlXMLScanner {
                 v = v &* (hex ? 16 : 10) &+ dv
                 digits += 1
                 if v > 0x10FFFF { throw malformed("Invalid character reference") }
-                i += 1
+                skipASCII(1)
             }
-            guard digits > 0, i < u.count else { throw malformed("Invalid character reference") }
-            i += 1
+            guard digits > 0, i < b.count else { throw malformed("Invalid character reference") }
+            skipASCII(1)
             guard let sc = Unicode.Scalar(v),
                   v == 0x9 || v == 0xA || v == 0xD || (v >= 0x20 && v <= 0xD7FF) || (v >= 0xE000 && v <= 0xFFFD)
                     || (v >= 0x10000 && v <= 0x10FFFF) else {
                 i = start
                 throw malformed("Character reference to an invalid character")
             }
-            out.append(contentsOf: String(Character(sc)).utf16)
+            out.append(contentsOf: Array(String(Character(sc)).utf8))
             return
         }
-        let n = try name()
-        guard i < u.count, u[i] == 0x3B else { throw malformed("';' expected after an entity reference") }
-        i += 1
+        let ns = i
+        while i < b.count, Self.isNameChar(b[i]), b[i] < 0x80 { skipASCII(1) }
+        guard i < b.count, b[i] == 0x3B, i > ns else {
+            i = start
+            throw malformed("';' expected after an entity reference")
+        }
+        let n = String(decoding: b[ns..<i], as: UTF8.self)
+        skipASCII(1)
         switch n {
         case "lt": out.append(0x3C)
         case "gt": out.append(0x3E)
@@ -397,24 +420,24 @@ struct XamlXMLScanner {
     }
 
     private mutating func attributeValue() throws -> String {
-        guard i < u.count, u[i] == 0x22 || u[i] == 0x27 else { throw malformed("Quote expected for an attribute value") }
-        let q = u[i]
-        i += 1
-        var out: [UInt16] = []
+        guard i < b.count, b[i] == 0x22 || b[i] == 0x27 else { throw malformed("Quote expected for an attribute value") }
+        let q = b[i]
+        skipASCII(1)
+        var out: [UInt8] = []
         while true {
-            guard i < u.count else { throw malformed("Unexpected end of file in an attribute value") }
-            let c = u[i]
-            if c == q { i += 1; break }
+            guard i < b.count else { throw malformed("Unexpected end of file in an attribute value") }
+            let c = b[i]
+            if c == q { skipASCII(1); break }
             if c == 0x3C { throw malformed("'<' is not allowed in an attribute value") }
             if c == 0x26 { try reference(&out); continue }
             if c == 0x0D {                                              // CR LF / CR → one space
                 out.append(0x20)
-                i += (i + 1 < u.count && u[i + 1] == 0x0A) ? 2 : 1
+                skipASCII((i + 1 < b.count && b[i + 1] == 0x0A) ? 2 : 1)
                 continue
             }
-            if c == 0x0A || c == 0x09 { out.append(0x20); i += 1; continue }
+            if c == 0x0A || c == 0x09 { out.append(0x20); skipASCII(1); continue }
             try appendLiteral(&out)
         }
-        return String(decoding: out, as: UTF16.self)
+        return String(decoding: out, as: UTF8.self)
     }
 }
