@@ -92,20 +92,20 @@ struct BuilderSheetHeader: View {
     var body: some View {
         HStack(alignment: .top, spacing: AASpacing.m) {
             Image(systemName: symbol)
-                .font(.system(size: 20, weight: .semibold))
+                .font(.aaMono(20, weight: .semibold))
                 .foregroundStyle(AAColor.tint)
                 .frame(width: 34, height: 34)
                 .background(AAColor.tint.opacity(0.12), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.aaMono(15, weight: .bold))
                     .foregroundStyle(AAColor.fg)
                     .lineLimit(2)
                     .truncationMode(.middle)
                     .textSelection(.enabled)
                 if let subtitle {
                     Text(subtitle)
-                        .font(.system(size: AAType.caption))
+                        .font(.aaMono(AAType.caption))
                         .foregroundStyle(AAColor.muted)
                         .fixedSize(horizontal: false, vertical: true)
                 }

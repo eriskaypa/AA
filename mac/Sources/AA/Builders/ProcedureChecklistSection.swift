@@ -38,10 +38,10 @@ struct ProcedureChecklistSection: View {
         let done = rows.filter(\.done).count
         return VStack(alignment: .leading, spacing: AASpacing.s) {
             HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
-                Text("Checklist Steps").font(.system(size: AAType.body, weight: .bold)).foregroundStyle(AAColor.fg)
+                Text("Checklist Steps").font(.aaMono(AAType.body, weight: .bold)).foregroundStyle(AAColor.fg)
                 if !rows.isEmpty {
                     Text("\(done) of \(rows.count) done")
-                        .font(.system(size: AAType.caption, weight: .medium))
+                        .font(.aaMono(AAType.caption, weight: .medium))
                         .foregroundStyle(done == rows.count ? AAColor.Status.ok : AAColor.muted)
                         .monospacedDigit()
                     ProgressView(value: Double(done), total: Double(max(rows.count, 1)))
@@ -66,7 +66,7 @@ struct ProcedureChecklistSection: View {
                 }
             } label: {
                 Label("Open Comprehensive Checklist Builder", systemImage: "hammer")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.aaMono(14, weight: .bold))
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 2)
             }
@@ -150,12 +150,12 @@ struct ProcedureChecklistSection: View {
             }
             .width(min: 90, ideal: 120, max: 160)
         }
-        .tableStyle(.inset(alternatesRowBackgrounds: true))
+        .tableStyle(.inset(alternatesRowBackgrounds: false))
         .frame(minHeight: 160, maxHeight: .infinity)
         .overlay {
             if rows.isEmpty {
                 Text("No checklist steps yet — click + Step or open the builder.")
-                    .font(.system(size: AAType.small)).foregroundStyle(AAColor.muted)
+                    .font(.aaMono(AAType.small)).foregroundStyle(AAColor.muted)
                     .allowsHitTesting(false)
             }
         }

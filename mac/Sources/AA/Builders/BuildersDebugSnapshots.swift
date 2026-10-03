@@ -71,7 +71,7 @@ struct BuilderSnapshotFrame<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: AASpacing.m) {
-            Text(title).font(.system(size: AAType.small, weight: .semibold)).foregroundStyle(AAColor.muted)
+            Text(title).font(.aaMono(AAType.small, weight: .semibold)).foregroundStyle(AAColor.muted)
             content()
         }
         .padding(AASpacing.l)

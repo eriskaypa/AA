@@ -17,10 +17,10 @@ enum ChecklistBuilderHost: Hashable { case procedure(UUID), crew(UUID), savedLis
 final class BuilderChecklistModel {
     let host: ChecklistBuilderHost
     @ObservationIgnored let store: AppStore
-    /// Saved-list host: the template's items materialised as detached steps (`ToSteps`, BUILD-063).
+    /// Saved-list host: the template editor session (detached `ToSteps` clones, write-back — BUILD-063, D3).
+    @ObservationIgnored let session: BuilderTemplateSession?
+    /// The detached steps (observed copy of the session's steps, so the list re-renders).
     var detached: [ChecklistStep] = []
-    /// The template's name when the editor opened (for the vanished-template rescue, D3).
-    @ObservationIgnored private(set) var templateName = ""
     var selection: Set<UUID> = []
     @ObservationIgnored private(set) var committed = false
     @ObservationIgnored private var flushToken: EditorFlushCenter.Token?
@@ -29,12 +29,18 @@ final class BuilderChecklistModel {
     init(host: ChecklistBuilderHost, store: AppStore) {
         self.host = host
         self.store = store
-        if case .savedList(let id) = host, let t = store.template(id: id) {
-            detached = ChecklistTemplateService.toSteps(t)
-            templateName = t.name
+        if case .savedList(let id) = host {
+            let s = BuilderTemplateSession(store: store, templateID: id)
+            session = s
+            detached = s.steps
+        } else {
+            session = nil
         }
         engine = makeEngine()
     }
+
+    /// The template's name when the editor opened (for the vanished-template rescue, D3).
+    var templateName: String { session?.openedName ?? "" }
 
     // MARK: Host resolution (ARCH §2.4)
 
@@ -60,7 +66,7 @@ final class BuilderChecklistModel {
         switch host {
         case .procedure: return procedure?.name ?? ""
         case .crew: return crew?.fullName ?? ""
-        case .savedList: return template?.name ?? templateName
+        case .savedList: return session?.ownerName ?? ""
         }
     }
 
@@ -105,7 +111,7 @@ final class BuilderChecklistModel {
         switch host {
         case .procedure: procedure?.steps = steps
         case .crew: crew?.checklist = steps
-        case .savedList: detached = steps
+        case .savedList: detached = steps; session?.steps = steps
         }
     }
 
@@ -124,27 +130,14 @@ final class BuilderChecklistModel {
         flushToken = nil
     }
 
-    /// Writes the detached steps back into the template when they differ (F2's `writeBackFromSteps` skips unchanged
-    /// content — DECISIONS 02 Q-12). Returns false when the template no longer exists.
+    /// Writes the detached steps back into the template when they differ (DECISIONS 02 Q-12). Returns false when
+    /// the template no longer exists.
     @discardableResult
-    func writeBack() -> Bool {
-        guard isSavedList else { return true }
-        guard let t = template else { return false }
-        if ChecklistTemplateService.hasChanges(t, steps: detached) {
-            ChecklistTemplateService.writeBackFromSteps(t, steps: detached)
-            store.markDirty()
-        }
-        return true
-    }
+    func writeBack() -> Bool { session?.writeBack() ?? true }
 
     /// D3 rescue: the edited items saved as a new list named after the vanished one.
     @discardableResult
-    func saveAsNewList() -> ChecklistTemplate {
-        let t = ChecklistTemplateService.captureFromSteps(name: templateName, steps: detached)
-        store.data.checklistTemplates.append(t)
-        store.logAdded(kind: "Saved list", name: t.name, detail: "\(t.items.count) item(s)")
-        return t
-    }
+    func saveAsNewList() -> ChecklistTemplate? { session?.saveAsNewList() }
 
     /// Closing: the one commit of the sheet (idempotent). Saved-list host → write back + Save (BUILD-063); other
     /// hosts → Flush (BUILD-018). Returns false when a saved-list template vanished (the caller warns).
@@ -308,7 +301,7 @@ struct ChecklistBuilderSheet: View {
         HStack {
             if m.isSavedList {
                 Label("Changes are written back to the saved list when you close.", systemImage: "info.circle")
-                    .font(.system(size: AAType.caption))
+                    .font(.aaMono(AAType.caption))
                     .foregroundStyle(AAColor.muted)
             }
             Spacer()

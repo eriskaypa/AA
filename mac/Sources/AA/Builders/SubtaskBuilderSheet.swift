@@ -71,7 +71,7 @@ struct SubtaskBuilderSheet: View {
                         if nested > 0 {
                             Label("\(nested) deeper subtask\(nested == 1 ? "" : "s") travel with their parents.",
                                   systemImage: "arrow.turn.down.right")
-                                .font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
+                                .font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
                                 .help("Open a subtask's editor to work on its own subtasks.")
                         }
                     }

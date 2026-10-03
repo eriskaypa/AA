@@ -15,6 +15,8 @@ struct SavedListsTabView: View {
     @State private var statusOverride: String?
     @State private var busy = false
     @State private var itemSelection: Set<UUID> = []
+    /// The list to bring into view after + List, Duplicate and reorders (BUILD-080, 083, 085).
+    @State private var scrollTarget: UUID?
 
     init() {}
 
@@ -48,7 +50,7 @@ struct SavedListsTabView: View {
         let reorder = reorderAvailability(sortAZ: sortAZ)
         return VStack(spacing: 0) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Saved Lists").font(.system(size: 15, weight: .bold)).foregroundStyle(AAColor.accent)
+                Text("Saved Lists").font(.aaMono(15, weight: .bold)).foregroundStyle(AAColor.accent)
                 Spacer()
                 Toggle(isOn: Binding(get: { sortAZ }, set: { _ in toggleSortAZ() })) {
                     Label("Sort A-Z", systemImage: "textformat.abc")
@@ -65,21 +67,30 @@ struct SavedListsTabView: View {
                 .padding(.horizontal, AASpacing.m)
                 .padding(.bottom, AASpacing.s)
             Divider()
-            List(selection: $selection) {
-                ForEach(sections) { section in
-                    Section {
-                        ForEach(section.rows) { row in
-                            BuilderSavedListRowView(row: row).tag(row.id)
-                        }
-                        .onMove(perform: sortAZ ? nil : { src, dst in dropMove(section, src, dst) })
-                    } header: {
-                        HStack(spacing: 4) {
-                            Image(systemName: section.groupID == nil ? "tray" : "folder")
-                                .foregroundStyle(AAColor.muted)
-                            Text(section.title).font(.system(size: AAType.small, weight: .bold)).foregroundStyle(AAColor.accent)
-                            Text(" (\(section.count))").font(.system(size: AAType.small)).foregroundStyle(AAColor.muted)
+            ScrollViewReader { proxy in
+                List(selection: $selection) {
+                    ForEach(sections) { section in
+                        Section {
+                            ForEach(section.rows) { row in
+                                BuilderSavedListRowView(row: row).tag(row.id)
+                                    .listRowSeparator(.visible)
+                            }
+                            .onMove(perform: sortAZ ? nil : { src, dst in dropMove(section, src, dst) })
+                        } header: {
+                            HStack(spacing: 4) {
+                                Image(systemName: section.groupID == nil ? "tray" : "folder")
+                                    .foregroundStyle(AAColor.muted)
+                                Text(section.title).font(.aaMono(AAType.small, weight: .bold))
+                                    .foregroundStyle(AAColor.accent)
+                                Text(" (\(section.count))").font(.aaMono(AAType.small)).foregroundStyle(AAColor.muted)
+                            }
                         }
                     }
+                }
+                .onChange(of: scrollTarget) { _, id in
+                    guard let id else { return }
+                    withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo(id) }
+                    scrollTarget = nil
                 }
             }
             .listStyle(.inset)
@@ -105,7 +116,7 @@ struct SavedListsTabView: View {
             Divider()
             Text(statusOverride ?? BuilderSavedLists.statusLine(lists: env.store.data.checklistTemplates.count,
                                                                 groups: env.store.data.listGroups.count))
-                .font(.system(size: AAType.caption))
+                .font(.aaMono(AAType.caption))
                 .foregroundStyle(AAColor.muted)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -132,7 +143,7 @@ struct SavedListsTabView: View {
             .menuStyle(.button)
             .controlSize(.small)
             .fixedSize()
-            .help("+ List: create a new empty saved list (hold for + Group).")
+            .help("+ List: create a new empty saved list. Use the arrow for + Group (a new List Group).")
             .accessibilityLabel("New list or group")
             BuilderBarButton(title: "Rename", symbol: "pencil", help: "Rename the selected saved list.", iconOnly: true) {
                 run { await rename() }
@@ -194,12 +205,12 @@ struct SavedListsTabView: View {
                 BuilderCard {
                     VStack(alignment: .leading, spacing: AASpacing.s) {
                         Text(BuilderSavedLists.displayName(t))
-                            .font(.system(size: 18, weight: .bold))
+                            .font(.aaMono(18, weight: .bold))
                             .foregroundStyle(AAColor.fg)
                             .fixedSize(horizontal: false, vertical: true)
                             .textSelection(.enabled)
                         Text(BuilderSavedLists.detailSub(t, groups: env.store.data.listGroups))
-                            .font(.system(size: AAType.small))
+                            .font(.aaMono(AAType.small))
                             .foregroundStyle(AAColor.muted)
                         BuilderFlowLayout(spacing: 8, lineSpacing: 8) {
                             Button { run { await editItems() } } label: { Label("Edit items…", systemImage: "pencil") }
@@ -242,34 +253,35 @@ struct SavedListsTabView: View {
         }
         return VStack(alignment: .leading, spacing: AASpacing.s) {
             HStack(alignment: .firstTextBaseline) {
-                Text("Items").font(.system(size: AAType.body, weight: .bold)).foregroundStyle(AAColor.fg)
-                Text("\(rows.count)").font(.system(size: AAType.caption, weight: .semibold)).foregroundStyle(AAColor.muted)
+                Text("Items").font(.aaMono(AAType.body, weight: .bold)).foregroundStyle(AAColor.fg)
+                Text("\(rows.count)").font(.aaMono(AAType.caption, weight: .semibold)).foregroundStyle(AAColor.muted)
                 Spacer()
                 Text("Double-click an item to view its notes and files.")
-                    .font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
+                    .font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
             }
             List(selection: $itemSelection) {
                 ForEach(rows) { row in
                     HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
                         Text("\(row.index).").font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
                             .monospacedDigit().frame(minWidth: 22, alignment: .trailing)
-                        Text(row.title).fixedSize(horizontal: false, vertical: true)
+                        Text(row.title).font(.aaMono(AAType.body)).fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                         if !row.meta.isEmpty {
-                            Text(row.meta).font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted).fixedSize()
+                            Text(row.meta).font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted).fixedSize()
                         }
                     }
                     .padding(.vertical, 2)
                     .tag(row.id)
+                    .listRowSeparator(.visible)
                     .help("Double-click an item to view its notes and files (read-only) — links open straight from there.")
                 }
             }
             .listStyle(.inset)
-            .alternatingRowBackgrounds(.enabled)
+            .alternatingRowBackgrounds(.disabled)
             .overlay {
                 if rows.isEmpty {
                     Text("This saved list has no items yet — click Edit items… to add some.")
-                        .font(.system(size: AAType.small)).foregroundStyle(AAColor.muted).allowsHitTesting(false)
+                        .font(.aaMono(AAType.small)).foregroundStyle(AAColor.muted).allowsHitTesting(false)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
@@ -323,6 +335,7 @@ struct SavedListsTabView: View {
 
     private func select(_ id: UUID) {
         withAnimation(.snappy(duration: 0.2)) { selection = [id] }
+        scrollTarget = id
     }
 
     // MARK: Actions — groups (BUILD-077, 078, 079)
@@ -471,6 +484,7 @@ struct SavedListsTabView: View {
         env.store.markDirty()
         BuilderUI.save(env)
         withAnimation(.snappy(duration: 0.2)) { selection = Set(picks.map(\.id)) }
+        scrollTarget = picks.first?.id
         statusOverride = BuilderSavedLists.orderSavedStatus
     }
 
@@ -518,14 +532,14 @@ struct BuilderSavedListRowView: View {
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: AASpacing.s) {
-            Image(systemName: "list.bullet").foregroundStyle(AAColor.muted).font(.system(size: AAType.caption))
+            Image(systemName: "list.bullet").foregroundStyle(AAColor.muted).font(.aaMono(AAType.caption))
             Text(row.name)
-                .font(.system(size: AAType.body, weight: .semibold))
+                .font(.aaMono(AAType.body, weight: .semibold))
                 .foregroundStyle(AAColor.fg)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Text(row.countText)
-                .font(.system(size: AAType.caption))
+                .font(.aaMono(AAType.caption))
                 .foregroundStyle(AAColor.muted)
                 .monospacedDigit()
                 .fixedSize()

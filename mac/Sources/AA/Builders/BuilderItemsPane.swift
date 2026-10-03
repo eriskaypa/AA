@@ -103,6 +103,8 @@ struct BuilderItemsPane<Item: AnyObject>: View {
     @State private var bulkText = ""
     @State private var replaceExisting = false
     @State private var busy = false
+    /// The row to bring into view after add / insert / Move to (BUILD-006, BUILD-009 `SelectByReference`).
+    @State private var scrollTarget: UUID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -121,7 +123,7 @@ struct BuilderItemsPane<Item: AnyObject>: View {
     private var savedListsStrip: some View {
         HStack(spacing: AASpacing.s) {
             Label("Saved lists:", systemImage: "list.bullet.rectangle")
-                .font(.system(size: AAType.small, weight: .bold))
+                .font(.aaMono(AAType.small, weight: .bold))
                 .foregroundStyle(AAColor.accent)
             BuilderBarButton(title: "Save as list…", symbol: "square.and.arrow.down", help: strings.saveHelp) {
                 run { await BuilderTemplateFlows.saveAsList(engine, env: env, dialogs: dialogs,
@@ -152,7 +154,7 @@ struct BuilderItemsPane<Item: AnyObject>: View {
 
     private var bulkPane: some View {
         VStack(alignment: .leading, spacing: AASpacing.s) {
-            Text(strings.bulkHeader).font(.system(size: AAType.small, weight: .bold)).foregroundStyle(AAColor.fg)
+            Text(strings.bulkHeader).font(.aaMono(AAType.small, weight: .bold)).foregroundStyle(AAColor.fg)
             HStack(spacing: AASpacing.s) {
                 Button {
                     addAll()
@@ -168,7 +170,7 @@ struct BuilderItemsPane<Item: AnyObject>: View {
                     .help("Clear the text box.")
                 Toggle("Replace existing", isOn: $replaceExisting)
                     .toggleStyle(.checkbox)
-                    .font(.system(size: AAType.small))
+                    .font(.aaMono(AAType.small))
                     .controlSize(.small)
                     .help(strings.replaceHelp)
                 Spacer(minLength: 0)
@@ -178,7 +180,7 @@ struct BuilderItemsPane<Item: AnyObject>: View {
                 .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
             let lineCount = BuilderBulk.lines(bulkText).count
             Text(lineCount == 0 ? "One \(strings.noun) per line." : "\(lineCount) line\(lineCount == 1 ? "" : "s") ready to add.")
-                .font(.system(size: AAType.caption))
+                .font(.aaMono(AAType.caption))
                 .foregroundStyle(AAColor.muted)
                 .contentTransition(.numericText())
         }
@@ -201,12 +203,12 @@ struct BuilderItemsPane<Item: AnyObject>: View {
         let count = rows.count
         return VStack(alignment: .leading, spacing: AASpacing.s) {
             HStack(alignment: .firstTextBaseline) {
-                Text(strings.currentHeader).font(.system(size: AAType.small, weight: .bold)).foregroundStyle(AAColor.fg)
-                Text("\(count)").font(.system(size: AAType.caption, weight: .semibold)).foregroundStyle(AAColor.muted)
+                Text(strings.currentHeader).font(.aaMono(AAType.small, weight: .bold)).foregroundStyle(AAColor.fg)
+                Text("\(count)").font(.aaMono(AAType.caption, weight: .semibold)).foregroundStyle(AAColor.muted)
                     .monospacedDigit()
                 Spacer(minLength: 0)
                 if !selection.isEmpty {
-                    Text("\(selection.count) selected").font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
+                    Text("\(selection.count) selected").font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
                 }
             }
             BuilderFlowLayout(spacing: 6, lineSpacing: 6) {
@@ -233,22 +235,30 @@ struct BuilderItemsPane<Item: AnyObject>: View {
                 BuilderBarButton(title: "Delete", symbol: "trash", help: "Delete the selected \(strings.noun)s.",
                                  disabled: selection.isEmpty) { run { await delete(selection) } }
             }
-            List(selection: $selection) {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
-                    BuilderItemRowView(index: index + 1, row: row)
-                        .tag(row.id)
+            ScrollViewReader { proxy in
+                List(selection: $selection) {
+                    ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
+                        BuilderItemRowView(index: index + 1, row: row)
+                            .tag(row.id)
+                            .listRowSeparator(.visible)
+                    }
+                    .onMove { source, destination in
+                        let moved = engine.dropMove(from: source, to: destination)
+                        if !moved.isEmpty { selection = Set(moved) }
+                    }
                 }
-                .onMove { source, destination in
-                    let moved = engine.dropMove(from: source, to: destination)
-                    if !moved.isEmpty { selection = Set(moved) }
+                .onChange(of: scrollTarget) { _, id in
+                    guard let id else { return }
+                    withAnimation(.snappy(duration: 0.2)) { proxy.scrollTo(id) }
+                    scrollTarget = nil
                 }
             }
             .listStyle(.inset)
-            .alternatingRowBackgrounds(.enabled)
+            .alternatingRowBackgrounds(.disabled)
             .overlay {
                 if rows.isEmpty {
                     Text(strings.emptyListHint)
-                        .font(.system(size: AAType.small))
+                        .font(.aaMono(AAType.small))
                         .foregroundStyle(AAColor.muted)
                         .multilineTextAlignment(.center)
                         .padding(AASpacing.xl)
@@ -324,6 +334,7 @@ struct BuilderItemsPane<Item: AnyObject>: View {
               let title = await BuilderUI.nonBlankPrompt(dialogs, title: strings.promptTitle, prompt: strings.promptLabel),
               let id = engine.insert(title: title, at: index) else { return }
         withAnimation(.snappy(duration: 0.2)) { selection = [id] }
+        scrollTarget = id
     }
 
     /// BUILD-010: the primary selected item (first in list order) opens in its editor; then Flush and refresh.
@@ -350,7 +361,9 @@ struct BuilderItemsPane<Item: AnyObject>: View {
                                                    rows: options.map { (display: $0.display, tag: $0.target) })
         else { return }
         let moved = engine.moveTo(selection, target: target)
-        if !moved.isEmpty { withAnimation(.snappy(duration: 0.2)) { selection = Set(moved) } }
+        guard let first = moved.first else { return }
+        withAnimation(.snappy(duration: 0.2)) { selection = Set(moved) }
+        scrollTarget = first
     }
 
     /// BUILD-014: "Confirm" / "Delete {n} item(s)?" → permanent removal.
@@ -377,13 +390,14 @@ struct BuilderItemRowView: View {
                 .monospacedDigit()
                 .frame(minWidth: 22, alignment: .trailing)
             Text(row.title.isEmpty ? " " : row.title)
+                .font(.aaMono(AAType.body))
                 .strikethrough(row.struck)
                 .foregroundStyle(row.struck ? AAColor.muted : AAColor.fg)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if row.nested > 0 {
                 Label("\(row.nested)", systemImage: "arrow.turn.down.right")
-                    .font(.system(size: AAType.caption))
+                    .font(.aaMono(AAType.caption))
                     .foregroundStyle(AAColor.muted)
                     .labelStyle(.titleAndIcon)
                     .fixedSize()
@@ -391,7 +405,7 @@ struct BuilderItemRowView: View {
             }
             if !row.trailing.isEmpty {
                 Text(row.trailing)
-                    .font(.system(size: AAType.caption))
+                    .font(.aaMono(AAType.caption))
                     .foregroundStyle(AAColor.muted)
                     .monospacedDigit()
                     .fixedSize()

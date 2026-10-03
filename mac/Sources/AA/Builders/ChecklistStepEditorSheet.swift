@@ -112,7 +112,7 @@ struct ChecklistStepEditorSheet: View {
                         if isSavedListItem {
                             Text(step.deadline?.format(.isoDate) ?? "—").foregroundStyle(AAColor.muted)
                             Text("Set when the list is applied")
-                                .font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
+                                .font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
                         } else {
                             OptionalDatePicker(value: Binding(get: { step.deadline },
                                                               set: { BuilderEditing.setDeadline(env.store, step, $0) }))
@@ -130,7 +130,7 @@ struct ChecklistStepEditorSheet: View {
                             .disabled(isSavedListItem)
                         if isSavedListItem {
                             Text("Set when the list is applied")
-                                .font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
+                                .font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
                         }
                     }
                 }
@@ -166,7 +166,7 @@ struct ChecklistStepEditorSheet: View {
         HStack {
             Text(isSavedListItem ? "Changes go back into the saved list when you close its editor."
                                  : "Changes save as you type — closing keeps them.")
-                .font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
+                .font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
             Spacer()
             Button("Close") {
                 commit()
@@ -232,7 +232,7 @@ struct BuilderLinkedChips: View {
     private func chip(_ text: String, kind: ItemKind) -> some View {
         HStack(spacing: 4) {
             Circle().fill(AAColor.kind(kind)).frame(width: 7, height: 7)
-            Text(text.isEmpty ? "(unnamed)" : text).font(.system(size: AAType.caption)).lineLimit(1)
+            Text(text.isEmpty ? "(unnamed)" : text).font(.aaMono(AAType.caption)).lineLimit(1)
         }
         .padding(.horizontal, 7).padding(.vertical, 2)
         .background(AAColor.kind(kind).opacity(0.18), in: Capsule())

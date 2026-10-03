@@ -162,7 +162,7 @@ struct TaskItemEditorSheet: View {
             let hint = BuilderRange.hint(start: task.rangeStart, deadline: task.deadline)
             if !hint.isEmpty {
                 Text(hint)
-                    .font(.system(size: AAType.caption, weight: .medium))
+                    .font(.aaMono(AAType.caption, weight: .medium))
                     .foregroundStyle(AAColor.tint)
                     .padding(.horizontal, 7).padding(.vertical, 2)
                     .background(AAColor.tint.opacity(0.12), in: Capsule())
@@ -185,7 +185,7 @@ struct TaskItemEditorSheet: View {
     private var footer: some View {
         HStack {
             Text("Changes save as you type — closing keeps them.")
-                .font(.system(size: AAType.caption)).foregroundStyle(AAColor.muted)
+                .font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
             Spacer()
             Button("Close") { commit(); dismiss() }
                 .keyboardShortcut(.defaultAction)
@@ -239,9 +239,9 @@ struct BuilderNestedSubtasksPane: View {
         let rows = engine.items.map(BuilderUI.subtaskRow)
         HStack(alignment: .firstTextBaseline) {
             Label("Subtasks", systemImage: "list.bullet.indent")
-                .font(.system(size: AAType.small, weight: .bold))
+                .font(.aaMono(AAType.small, weight: .bold))
                 .foregroundStyle(AAColor.fg)
-            Text("\(rows.count)").font(.system(size: AAType.caption, weight: .semibold)).foregroundStyle(AAColor.muted)
+            Text("\(rows.count)").font(.aaMono(AAType.caption, weight: .semibold)).foregroundStyle(AAColor.muted)
             Spacer(minLength: 0)
             Button {
                 run { await dialogs.presentSheet(.closeType) { _ in SubtaskBuilderSheet(taskID: taskID) } }
@@ -253,7 +253,7 @@ struct BuilderNestedSubtasksPane: View {
         }
         List(selection: $m.selection) {
             ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
-                BuilderItemRowView(index: i + 1, row: row).tag(row.id)
+                BuilderItemRowView(index: i + 1, row: row).tag(row.id).listRowSeparator(.visible)
             }
             .onMove { src, dst in
                 let moved = engine.dropMove(from: src, to: dst)
@@ -263,7 +263,7 @@ struct BuilderNestedSubtasksPane: View {
         .listStyle(.inset)
         .overlay {
             if rows.isEmpty {
-                Text("No subtasks.").font(.system(size: AAType.small)).foregroundStyle(AAColor.muted)
+                Text("No subtasks.").font(.aaMono(AAType.small)).foregroundStyle(AAColor.muted)
                     .allowsHitTesting(false)
             }
         }
