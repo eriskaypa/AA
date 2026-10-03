@@ -26,10 +26,10 @@ final class FlashFrameSender {
     private var lastLinkTick: CFTimeInterval = 0
     private var activity: NSObjectProtocol?
     private var ready: FlashRenderedFrame?
-    private var rendering = false
+    /// At most one background render; a replaced encoder frees the slot (a stale completion is ignored).
+    private var gate = FlashRenderGate()
     private var lastShown: CFTimeInterval = 0
     private(set) var isRunning = false
-    private var generation = 0
 
     var fps = FlashSendFlow.defaultFps
     /// Called with every frame as it is shown.
@@ -38,11 +38,13 @@ final class FlashFrameSender {
     var onFailure: ((String) -> Void)?
 
     /// Replaces the stream (a new session after every prepare). Stops a running clock.
+    /// A render still in flight for the old encoder is abandoned: `gate.reset()` frees the slot, so the new stream's
+    /// first render is never blocked by the old one's late completion (FLASH-013/020/023 after a confirm or apply).
     func setEncoder(_ e: FlashEncoder?) {
         stop()
         encoder = e
         ready = nil
-        generation += 1
+        gate.reset()
     }
 
     var hasEncoder: Bool { encoder != nil }
@@ -96,9 +98,7 @@ final class FlashFrameSender {
     }
 
     private func renderNext() {
-        guard let encoder, !rendering, ready == nil else { return }
-        rendering = true
-        let gen = generation
+        guard let encoder, ready == nil, let gen = gate.begin() else { return }
         renderQueue.async { [weak self] in
             let text = encoder.next()
             let result: Result<FlashRenderedFrame, Error>
@@ -113,8 +113,7 @@ final class FlashFrameSender {
                 result = .failure(error)
             }
             Task { @MainActor [weak self] in
-                guard let self, gen == self.generation else { return }
-                self.rendering = false
+                guard let self, self.gate.complete(gen) else { return }
                 switch result {
                 case .success(let f): self.ready = f
                 case .failure(let e):

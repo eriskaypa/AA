@@ -151,7 +151,9 @@ public struct FlashReceiveFlow: Sendable, Equatable {
         switch a {
         case .denied: status(FlashSyncTexts.cameraDenied, problem: true)
         case .unbundled: status(FlashSyncTexts.unbundledCamera, problem: true)
-        default: break
+        case .granted, .unknown:
+            // DEV-FLASH-26: the user allowed the camera in System Settings and came back — the denied text goes.
+            if statusText == FlashSyncTexts.cameraDenied { status("", problem: false) }
         }
     }
 

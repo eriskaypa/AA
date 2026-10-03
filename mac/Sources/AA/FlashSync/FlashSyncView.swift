@@ -63,7 +63,7 @@ private struct FlashHeader: View {
     var body: some View {
         HStack(alignment: .top, spacing: AASpacing.m) {
             Image(systemName: "qrcode")
-                .font(.system(size: 22, weight: .medium))
+                .font(.system(size: AAType.brand, weight: .medium))
                 .foregroundStyle(.white)
                 .frame(width: 40, height: 40)
                 .background(AAColor.tint.gradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -71,10 +71,7 @@ private struct FlashHeader: View {
                 Text(FlashSyncTexts.header)
                     .font(.aaMono(AAType.title, weight: .bold))
                     .foregroundStyle(AAColor.accent)
-                Text(FlashSyncTexts.intro)
-                    .font(.system(size: AAType.small))
-                    .foregroundStyle(AAColor.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                AAHelpText(FlashSyncTexts.intro)
             }
         }
         .padding(.horizontal, AASpacing.l)
@@ -94,19 +91,25 @@ private struct FlashMoreMenu: View {
                 Menu(FlashSyncTexts.fullScreen) {
                     ForEach(Array(NSScreen.screens.enumerated()), id: \.offset) { _, screen in
                         Button(screen.localizedName) { model.enterFullScreen(on: screen) }
+                            .help(FlashSyncTexts.fullScreenHelp)
                     }
                 }
+                .help(FlashSyncTexts.fullScreenHelp)
             } else {
                 Button(FlashSyncTexts.fullScreen) { model.enterFullScreen(on: nil) }
+                    .help(FlashSyncTexts.fullScreenHelp)
             }
             Divider()
             Button(FlashSyncTexts.resetPairing) { Task { await model.resetPairing() } }
                 .disabled(!model.send.canResetPairing || !model.hasBaseline)
+                .help(FlashSyncTexts.resetPairingHelp)
         } label: {
-            Label("More", systemImage: "ellipsis.circle")
+            Label(FlashSyncTexts.more, systemImage: "ellipsis.circle")
+                .symbolRenderingMode(.hierarchical)
         }
         .menuIndicator(.hidden)
-        .help(FlashSyncTexts.fullScreenHelp)
+        .help(FlashSyncTexts.moreHelp)
+        .accessibilityLabel(FlashSyncTexts.moreHelp)
     }
 }
 
@@ -156,24 +159,24 @@ private struct FlashSendPane: View {
     private var summary: some View {
         HStack(alignment: .top, spacing: AASpacing.s) {
             Image(systemName: summarySymbol.0)
-                .symbolRenderingMode(.monochrome)
+                .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(summarySymbol.1)
-                .font(.system(size: 18))
+                .font(.aaMono(AAType.title))
                 .frame(width: 24)
             VStack(alignment: .leading, spacing: 4) {
                 if model.preparing && flow.summaryText.isEmpty {
-                    HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Preparing…").foregroundStyle(AAColor.muted) }
+                    HStack(spacing: AASpacing.s) {
+                        ProgressView().controlSize(.small)
+                        Text("Preparing…").font(.aaMono(AAType.body)).foregroundStyle(AAColor.muted)
+                    }
                 } else {
                     Text(flow.summaryText)
-                        .font(.system(size: AAType.body, weight: .medium))
+                        .font(.aaMono(AAType.body, weight: .semibold).monospacedDigit())
                         .foregroundStyle(AAColor.fg)
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
                 }
-                Text(FlashSyncTexts.sendHint)
-                    .font(.system(size: AAType.small))
-                    .foregroundStyle(AAColor.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                AAHelpText(FlashSyncTexts.sendHint)
             }
         }
         .animation(.easeInOut(duration: 0.2), value: flow.summaryText)
@@ -192,13 +195,13 @@ private struct FlashSendPane: View {
             .disabled(!flow.stopEnabled)
             .help("Stop flashing (⌘.)")
             Spacer(minLength: AASpacing.l)
-            Text(FlashSyncTexts.speed).font(.system(size: AAType.body)).foregroundStyle(AAColor.muted)
+            Text(FlashSyncTexts.speed).font(.aaMono(AAType.body)).foregroundStyle(AAColor.muted)
             Slider(value: Binding(get: { Double(model.fps) }, set: { model.fps = Int($0.rounded()) }),
                    in: Double(FlashSendFlow.minFps) ... Double(FlashSendFlow.maxFps), step: 1)
                 .frame(width: 140)
                 .labelsHidden()
             Text(FlashSyncTexts.fpsText(model.fps))
-                .font(.system(size: AAType.body).monospacedDigit())
+                .font(.aaMono(AAType.body).monospacedDigit())
                 .foregroundStyle(AAColor.fg)
                 .fixedSize()
                 .frame(minWidth: 52, alignment: .leading)
@@ -216,14 +219,14 @@ private struct FlashSendPane: View {
                     Image(systemName: "qrcode")
                         .font(.system(size: 44, weight: .ultraLight))
                     Text(flow.startEnabled ? "Press Start flashing, then point the iPhone at this code." : " ")
-                        .font(.system(size: AAType.small))
+                        .font(.aaMono(AAType.caption))
                 }
-                .foregroundStyle(Color(white: 0.72))
+                .foregroundStyle(AAColor.Status.neutral)                     // the plate is white in both appearances
                 .allowsHitTesting(false)
             }
         }
         .overlay(RoundedRectangle(cornerRadius: AARadius.control, style: .continuous)
-            .strokeBorder(Color.black.opacity(0.12), lineWidth: 1))
+            .strokeBorder(AAColor.border, lineWidth: 1))
         .overlay(alignment: .topTrailing) {
             if flow.isFlashing {
                 AAStatusCapsule(text: "Flashing", symbol: "dot.radiowaves.left.and.right", color: AAColor.Status.ok)
@@ -238,9 +241,8 @@ private struct FlashSendPane: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: AASpacing.s) {
             Text(flow.progressText.isEmpty ? " " : flow.progressText)
-                .font(.system(size: AAType.small))
+                .font(.aaMono(AAType.caption).monospacedDigit())
                 .foregroundStyle(AAColor.muted)
-                .monospacedDigit()
                 .lineLimit(1)
                 .truncationMode(.tail)
             HStack(alignment: .center, spacing: AASpacing.m) {
@@ -252,16 +254,14 @@ private struct FlashSendPane: View {
                 .disabled(!flow.confirmEnabled)
                 .help(FlashSyncTexts.confirmTooltip)
                 Label(FlashSyncTexts.brightnessHint, systemImage: "sun.max")
-                    .font(.system(size: AAType.caption))
+                    .font(.aaMono(AAType.caption))
+                    .symbolRenderingMode(.hierarchical)
                     .foregroundStyle(AAColor.muted)
                     .labelStyle(.titleAndIcon)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .multilineTextAlignment(.trailing)
             }
-            Text(FlashSyncTexts.confirmCaution)
-                .font(.system(size: AAType.small))
-                .foregroundStyle(AAColor.muted)
-                .fixedSize(horizontal: false, vertical: true)
+            AAHelpText(FlashSyncTexts.confirmCaution)
         }
     }
 }
@@ -278,13 +278,10 @@ private struct FlashReceivePane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: AASpacing.m) {
             controls
-            VStack(alignment: .leading, spacing: 4) {
-                Text(FlashSyncTexts.receiveHint)
-                Text(FlashSyncTexts.macCameraHint)
+            VStack(alignment: .leading, spacing: AASpacing.xs) {
+                AAHelpText(FlashSyncTexts.receiveHint)
+                AAHelpText(FlashSyncTexts.macCameraHint)
             }
-            .font(.system(size: AAType.small))
-            .foregroundStyle(AAColor.muted)
-            .fixedSize(horizontal: false, vertical: true)
             preview
             progress
         }
@@ -292,7 +289,7 @@ private struct FlashReceivePane: View {
 
     private var controls: some View {
         HStack(spacing: AASpacing.s) {
-            Text(FlashSyncTexts.camera).font(.system(size: AAType.body)).foregroundStyle(AAColor.muted)
+            Text(FlashSyncTexts.camera).font(.aaMono(AAType.body)).foregroundStyle(AAColor.muted)
             Picker("", selection: Binding(get: { flow.selectedCamera ?? -1 }, set: { model.selectCamera($0) })) {
                 if model.cameras.isEmpty { Text("None").tag(-1) }
                 ForEach(Array(model.cameras.enumerated()), id: \.offset) { i, c in Text(c.name).tag(i) }
@@ -338,15 +335,15 @@ private struct FlashReceivePane: View {
         VStack(spacing: AASpacing.m) {
             Image(systemName: placeholderSymbol)
                 .font(.system(size: 40, weight: .light))
-                .foregroundStyle(Color(white: 0.55))
+                .foregroundStyle(AAColor.Status.neutral)                     // the preview is black in both appearances
             if flow.access == .denied {
                 Button(FlashSyncTexts.openSystemSettings) { model.openCameraSettings() }
                     .buttonStyle(.bordered)
                     .environment(\.colorScheme, .dark)
             } else if flow.access != .unbundled && !model.cameras.isEmpty {
                 Text("Press Start camera, then hold the iPhone in view.")
-                    .font(.system(size: AAType.small))
-                    .foregroundStyle(Color(white: 0.6))
+                    .font(.aaMono(AAType.caption))
+                    .foregroundStyle(AAColor.Status.neutral)
             }
         }
         .padding()
@@ -369,15 +366,18 @@ private struct FlashReceivePane: View {
                 .animation(.easeOut(duration: 0.2), value: flow.solved)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 if flow.statusIsProblem {
-                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(AAColor.Status.dueSoon)
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .symbolRenderingMode(.hierarchical)
+                        .font(.aaMono(AAType.caption))
+                        .foregroundStyle(AAColor.Status.dueSoon)
                 }
                 Text(flow.statusText.isEmpty ? " " : flow.statusText)
-                    .font(.system(size: AAType.small))
+                    .font(.aaMono(AAType.caption).monospacedDigit())
                     .foregroundStyle(flow.statusIsProblem ? AAColor.fg : AAColor.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Text(flow.labelText.isEmpty ? " " : flow.labelText)
-                .font(.system(size: AAType.body, weight: .bold))
+                .font(.aaMono(AAType.body, weight: .bold))                   // §6.6: the bold "Incoming:" line
                 .foregroundStyle(AAColor.fg)
                 .fixedSize(horizontal: false, vertical: true)
         }

@@ -86,6 +86,31 @@ public struct FlashIncomingChange: Sendable {
     }
 }
 
+/// What a prepared payload was built from, as cheap file stamps (path, size, modification date, inode) of the data file,
+/// settings.json and the baseline. §6.6 point 3 refreshes the summary when the window becomes key and is idle; when
+/// nothing is dirty and this is unchanged since the last prepare, the refresh is skipped (the payload would be the
+/// same; only the session id would change).
+public struct FlashSourceFingerprint: Sendable, Equatable {
+    public struct Stamp: Sendable, Equatable {
+        public let path: String
+        public let size: Int?
+        public let modified: Date?
+        /// The inode: an atomic write replaces the file, so this changes even within one timestamp tick.
+        public let fileNumber: Int?
+    }
+    public let stamps: [Stamp]
+
+    public init(files: [URL]) {
+        stamps = files.map { url in
+            let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)
+            return Stamp(path: url.standardizedFileURL.path,
+                         size: (attrs?[.size] as? NSNumber)?.intValue,
+                         modified: attrs?[.modificationDate] as? Date,
+                         fileNumber: (attrs?[.systemFileNumber] as? NSNumber)?.intValue)
+        }
+    }
+}
+
 /// Bridges Flash Sync's JSON-tree world to the database and settings.json.
 @MainActor
 public final class FlashSyncStore {
@@ -136,6 +161,11 @@ public final class FlashSyncStore {
     // MARK: The baseline (qrsync-baseline.json)
 
     public var hasBaseline: Bool { FileManager.default.fileExists(atPath: baselineURL.path) }
+
+    /// The stamps of everything `captureSendInputs()` reads (see `FlashSourceFingerprint`).
+    public func sourceFingerprint() -> FlashSourceFingerprint {
+        FlashSourceFingerprint(files: [dataStore.currentDataFile, dataStore.settingsFile, baselineURL])
+    }
 
     /// The decrypted baseline bytes, or nil when missing or unreadable (never an error, FLASH-102).
     public func readBaselineJSON() -> Data? {

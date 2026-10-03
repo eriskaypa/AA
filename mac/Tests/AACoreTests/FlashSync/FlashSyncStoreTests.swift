@@ -81,6 +81,28 @@ import Testing
         #expect(cs["Created"]?.stringValue == "2026-09-27T12:00:00")
     }
 
+    // TV: 13 §6.6 point 3 — the idle refresh is skipped while the sources are unchanged: the fingerprint is stable
+    //     across reads and moves with a data save, a settings write and a baseline write or clear
+    @Test func sourceFingerprintTracksEverySource() throws {
+        let env = Env()
+        try env.writeData { $0.tasks = [TaskItem(name: "Check fire dampers")] }
+        try env.writeSettings(#"{"DarkMode":false}"#)
+        let a = env.store.sourceFingerprint()
+        _ = try env.store.buildOutgoing(from: "Mac")
+        #expect(env.store.sourceFingerprint() == a)
+        try env.writeData { $0.tasks = [TaskItem(name: "Check fire dampers"), TaskItem(name: "Grease davits")] }
+        let b = env.store.sourceFingerprint()
+        #expect(b != a)
+        try env.writeSettings(#"{"DarkMode":true}"#)
+        let c = env.store.sourceFingerprint()
+        #expect(c != b)
+        env.store.writeBaseline(data: FlashTestKit.object(#"{"Tasks":[]}"#), settings: nil)
+        let d = env.store.sourceFingerprint()
+        #expect(d != c)
+        env.store.clearBaseline()
+        #expect(env.store.sourceFingerprint() != d)
+    }
+
     // TV: 13 §4.4 — baseline shape, StampedUtc "O" format; FLASH-102 unreadable baseline → snapshot, never an error
     @Test func baselineFileShapeAndTolerance() throws {
         let env = Env()

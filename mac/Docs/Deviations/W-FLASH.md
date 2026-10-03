@@ -40,6 +40,8 @@ wire protocol v1 or what a well-formed peer sends; every file written stays read
 | DEV-FLASH-35 | 13 §8 Q-13, FLASH-130 | An incoming `DarkMode` takes effect immediately (the reload re-applies the appearance). |
 | DEV-FLASH-36 | 13 §3.14 | `AAFlashSyncInterop` prints `Swift …` where the C# harness prints `C# …`, writes LF frame files, splits frame files on bytes (CRLF safe), and answers missing arguments with the usage line (exit 2) instead of an exception. Change sets use `From = "Windows"` and 2026-09-27 12:00:00 like the C# harness, so outputs compare byte for byte. |
 | DEV-FLASH-37 | 13 §6.6 | Applying is refused in a read-only instance (another AA owns the data folder), with the safe-mode message. |
+| DEV-FLASH-38 | 13 §6.6 point 3 | The refresh when the window becomes key and is idle is skipped when nothing changed since the last prepare: the editors are flushed, nothing is dirty, and the data file, settings.json and the baseline carry the same path/size/modification date/inode (`FlashSourceFingerprint`). Returning from the window's own alerts or from the main window therefore no longer rebuilds the whole payload (and keeps the same session). Any change, or a failed last prepare, still re-prepares. |
+| DEV-FLASH-39 | 13 §6.4 step 1, DEV-FLASH-26 | The camera permission is re-read on **Rescan** and whenever the window becomes key, so after the user allows the camera in System Settings the denied text clears and **Start camera** enables without reopening the window (and a revoked permission shows the text again). |
 
 ## Not shipped
 
