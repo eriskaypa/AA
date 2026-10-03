@@ -156,6 +156,7 @@ final class SireViewModel {
     /// `ApplyFilters`: re-filters, keeps rows of the selection that are still visible (SIRE-015).
     func applyFilters() {
         guard let browser else { return }
+        body.flush()                                            // SIRE-015: flush before the list is swapped
         let list = browser.apply(criteria, session: session)
         displayed = list
         let visible = Set(list.map(\.questionNumber))
