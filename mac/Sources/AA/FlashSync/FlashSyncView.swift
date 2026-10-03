@@ -156,7 +156,7 @@ private struct FlashSendPane: View {
     private var summary: some View {
         HStack(alignment: .top, spacing: AASpacing.s) {
             Image(systemName: summarySymbol.0)
-                .symbolRenderingMode(.hierarchical)
+                .symbolRenderingMode(.monochrome)
                 .foregroundStyle(summarySymbol.1)
                 .font(.system(size: 18))
                 .frame(width: 24)
@@ -198,11 +198,10 @@ private struct FlashSendPane: View {
                 .frame(width: 140)
                 .labelsHidden()
             Text(FlashSyncTexts.fpsText(model.fps))
-                .font(.aaMono(AAType.small))
-                .foregroundStyle(AAColor.muted)
-                .monospacedDigit()
+                .font(.system(size: AAType.body).monospacedDigit())
+                .foregroundStyle(AAColor.fg)
                 .fixedSize()
-                .frame(minWidth: 72, alignment: .leading)
+                .frame(minWidth: 52, alignment: .leading)
         }
         .controlSize(.regular)
     }

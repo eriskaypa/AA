@@ -34,7 +34,7 @@ public enum FlashReviewBreakdown {
 
         if change.isSnapshot {
             let data = FlashChangeSet.isSnapshotEnvelope(.object(p)) ? (p["Data"]?.objectValue ?? JSONObject()) : p
-            add("Whole database", "replaces everything on this Mac", .removed, "externaldrive.badge.exclamationmark")
+            add("Whole database", "replaces everything on this Mac", .removed, "exclamationmark.arrow.triangle.2.circlepath")
             for (name, value) in data where !FlashChangeSet.isExcludedDataKey(name) {
                 if case .array(let a) = value { add(name, plural(a.count, "item"), .changed, "list.bullet") }
             }
