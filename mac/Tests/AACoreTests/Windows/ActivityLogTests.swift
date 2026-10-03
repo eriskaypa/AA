@@ -17,6 +17,9 @@ import Testing
         #expect(ActivityLog.csvField("a\r\nb") == "\"a\r\nb\"")
         #expect(ActivityLog.csvField("plain") == "plain")
         #expect(ActivityLog.csvField("") == "")
+        // .NET tests and doubles per UTF-16 char: a `,` / `"` carrying a combining mark still quotes / doubles.
+        #expect(ActivityLog.csvField("a,\u{0301}b") == "\"a,\u{0301}b\"")
+        #expect(ActivityLog.csvField("x\"\u{0301}") == "\"x\"\"\u{0301}\"")
     }
 
     @Test func csvLineAndHeader() throws {
@@ -70,8 +73,11 @@ import Testing
         let e = entry("2026-09-29T08:15:30Z", "Added", "Task", "x")
         #expect(ActivityLog.timeUtc(e) == "2026-09-29 08:15:30 UTC")
         #expect(ActivityLog.timeLocal(e, zone: TZ.newYork) == "2026-09-29 04:15:30")
+        // An offset-bearing stamp is a .NET Local value: `TimeUtc` prints its (machine-local) wall clock unconverted,
+        // `TimeLocal` (`ToLocalTime()` of a Local value) prints the same wall clock.
         let local = entry("2026-09-29T11:15:30+03:00", "Added", "Task", "y")
-        #expect(ActivityLog.timeUtc(local).hasSuffix(" UTC"))
+        #expect(ActivityLog.timeUtc(local) == local.timestampUtc.format(.isoSecond) + " UTC")
+        #expect(ActivityLog.timeUtc(local) == ActivityLog.timeLocal(local) + " UTC")
         #expect(ActivityLog.exportFileName(utcNow: NetDateTime(parsing: "2026-10-02T07:08:09Z")!)
                 == "aa-activity-log-20261002-070809.csv")
         #expect(ActivityLogText.clearMessage(12) == "Clear all 12 activity-log entries? This can't be undone.")

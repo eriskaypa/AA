@@ -23,11 +23,14 @@ import AACore
 
     var isVisible: Bool { panel?.isVisible ?? false }
 
-    /// QUICK-001: re-open = activate (the caller refreshes); else create, size from `Ui`, place bottom-right, show.
+    /// QUICK-001: re-open = `Activate()` then `Refresh()` (every entry point — ⌘R, toolbar, Tools menu, notification
+    /// click, digest — goes through here, so none can show a stale list); else create, size from `Ui`, place
+    /// bottom-right, show.
     func show(env: AppEnvironment) {
         self.env = env
         if let p = panel {
             p.makeKeyAndOrderFront(nil)
+            refresh()
             return
         }
         let p = DuePanel(contentRect: NSRect(x: 0, y: 0, width: DueWindowGeometry.defaultWidth,

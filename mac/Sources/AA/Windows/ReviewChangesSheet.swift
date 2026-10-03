@@ -12,9 +12,15 @@ struct ReviewChangesSheet: View {
     let request: ReviewChangesRequest
     let finish: (Bool) -> Void
 
-    init(request: ReviewChangesRequest, finish: @escaping (Bool) -> Void) { self.request = request; self.finish = finish }
+    /// QUICK-192: top-level rows start expanded, deeper rows collapsed. Seeded here (not in `onAppear`) so the
+    /// outline never re-enters its NSTableView delegate while it lays out the first pass.
+    init(request: ReviewChangesRequest, finish: @escaping (Bool) -> Void) {
+        self.request = request
+        self.finish = finish
+        _expanded = State(initialValue: Set(request.diff.roots.map(\.id)).union(request.otherData.roots.map(\.id)))
+    }
 
-    @State private var expanded: Set<UUID> = []
+    @State private var expanded: Set<UUID>
     @State private var showOther = false
     @State private var finished = false
 
@@ -31,7 +37,6 @@ struct ReviewChangesSheet: View {
                 .padding(.vertical, 14)
         }
         .frame(minWidth: 760, idealWidth: 760, minHeight: 580, idealHeight: 580)
-        .onAppear { expanded = Set(request.diff.roots.map(\.id)).union(request.otherData.roots.map(\.id)) }
         .onDisappear { complete(false) }
         .aaSheet(.decision)
     }

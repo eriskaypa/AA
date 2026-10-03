@@ -61,9 +61,11 @@ public enum ActivityLog {
         return out
     }
 
-    /// `LogEntry.TimeUtc`: `yyyy-MM-dd HH:mm:ss UTC` of the stored instant.
+    /// `LogEntry.TimeUtc` = `TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss 'UTC'")` — the stored wall clock, NOT converted
+    /// (P3 / §4.6 byte parity): a `Z` stamp prints its UTC time; an offset-bearing stamp from a hand-edited file was
+    /// read as a .NET Local value, so Windows prints its local wall clock with the ` UTC` suffix, and so does the Mac.
     public static func timeUtc(_ e: LogEntry) -> String {
-        utcValue(e.timestampUtc).format(.isoSecond) + " UTC"
+        e.timestampUtc.format(.isoSecond) + " UTC"
     }
 
     /// `LogEntry.TimeLocal`: `TimestampUtc.ToLocalTime()` as `yyyy-MM-dd HH:mm:ss` (evaluated in `zone`).
@@ -71,16 +73,25 @@ public enum ActivityLog {
         e.timestampUtc.toLocalTime(zone: zone).format(.isoSecond)
     }
 
-    /// A `.local` stamp (hand-edited files) is shown as its UTC instant, like `.ToUniversalTime()`.
+    /// `DateTime.UtcNow` for the export file name: a `.local` clock value is converted to its UTC instant.
     static func utcValue(_ d: NetDateTime) -> NetDateTime {
         guard d.kind == .local else { return d }
         return NetDateTime(date: d.foundationDate(), kind: .utc)
     }
 
     /// 08 §3.5 `Csv(s)`: quoted (inner `"` doubled) when it contains `,`, `"` or `\n`; a lone `\r` does not quote.
+    /// The test runs per scalar (like .NET's per-char `Contains`), so `,` / `"` / `\n` inside a grapheme cluster
+    /// (`,` + a combining mark, `\r\n`) still quote.
     public static func csvField(_ s: String) -> String {
-        if s.contains(",") || s.contains("\"") || s.unicodeScalars.contains("\n") {
-            return "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        if s.unicodeScalars.contains(where: { $0 == "," || $0 == "\"" || $0 == "\n" }) {
+            var out = String.UnicodeScalarView()
+            out.append("\"")
+            for u in s.unicodeScalars {
+                out.append(u)
+                if u == "\"" { out.append("\"") }
+            }
+            out.append("\"")
+            return String(out)
         }
         return s
     }

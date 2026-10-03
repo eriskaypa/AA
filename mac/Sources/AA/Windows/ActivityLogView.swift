@@ -32,29 +32,29 @@ struct ActivityLogView: View {
                 TableColumn(ActivityLogText.columns[0]) { r in
                     Text(r.timeUtc).font(.aaMono(AAType.caption)).monospacedDigit().lineLimit(1)
                 }
-                .width(min: 160, ideal: 172)
+                .width(min: 164, ideal: 166)
                 TableColumn(ActivityLogText.columns[1]) { r in
                     Text(r.timeLocal).font(.aaMono(AAType.caption)).monospacedDigit().foregroundStyle(AAColor.muted)
                         .lineLimit(1)
                 }
-                .width(min: 130, ideal: 142)
+                .width(min: 134, ideal: 136)
                 TableColumn(ActivityLogText.columns[2]) { r in
                     ActivityLogActionBadge(action: r.action)
                 }
-                .width(min: 70, ideal: 76)
+                .width(min: 68, ideal: 72)
                 TableColumn(ActivityLogText.columns[3]) { r in
                     Text(r.kind).lineLimit(2)
                 }
-                .width(min: 80, ideal: 100)
+                .width(min: 90, ideal: 104)
                 TableColumn(ActivityLogText.columns[4]) { r in
                     Text(r.name).lineLimit(4).fixedSize(horizontal: false, vertical: true).help(r.name)
                 }
-                .width(min: 110, ideal: 160)
+                .width(min: 110, ideal: 140)
                 TableColumn(ActivityLogText.columns[5]) { r in
                     Text(r.detail).foregroundStyle(AAColor.muted).lineLimit(4)
                         .fixedSize(horizontal: false, vertical: true).help(r.detail)
                 }
-                .width(min: 100)
+                .width(min: 110, ideal: 140)
             }
             .tableStyle(.inset(alternatesRowBackgrounds: true))
             .font(.aaMono(AAType.small))
