@@ -70,6 +70,9 @@ struct GoldOutputRef: Sendable, Hashable, CustomStringConvertible {
     var file: String
     var pointer: String?
     var compare: GoldCompareMode?
+    /// `"mac": false` in the record: a Windows record only (e.g. the bytes of a settings file the Mac writes with
+    /// a key-level merge, or a .NET exception detail) — never compared on the Mac.
+    var macCompared: Bool = true
 
     var description: String { "\(role) → \(file)\(pointer.map { "#\($0)" } ?? "")" }
 }
@@ -85,6 +88,7 @@ struct GoldMacExpectation: Sendable, Hashable {
     /// The spec clause that mandates the divergence (GF.9 item 8).
     var reason: String?
     var compare: GoldCompareMode?
+    var pointer: String?
 
     static let same = GoldMacExpectation(kind: .same)
 }
@@ -237,7 +241,8 @@ struct GoldManifest: Sendable {
             }
             outputs.append(GoldOutputRef(role: oo["role"]?.stringValue ?? "result", file: file,
                                          pointer: oo["pointer"]?.stringValue,
-                                         compare: try mode(oo["compare"]?.stringValue, "outputs.compare")))
+                                         compare: try mode(oo["compare"]?.stringValue, "outputs.compare"),
+                                         macCompared: oo["mac"]?.boolValue ?? true))
         }
         var mac = GoldMacExpectation.same
         if let m = o["macExpectation"]?.objectValue {
@@ -248,6 +253,12 @@ struct GoldManifest: Sendable {
             mac = GoldMacExpectation(kind: kind, file: m["file"]?.stringValue, role: m["role"]?.stringValue,
                                      reason: m["reason"]?.stringValue,
                                      compare: try mode(m["compare"]?.stringValue, "macExpectation.compare"))
+            if let f = mac.file, f.contains("#") {
+                // `file#pointer` form: the Mac expectation is a sub-document of another golden.
+                let parts = f.split(separator: "#", maxSplits: 1).map(String.init)
+                mac.file = parts[0]
+                mac.pointer = parts.count > 1 ? parts[1] : nil
+            }
             if kind == .divergent && (mac.reason ?? "").isEmpty {
                 throw DecodeError.invalid("\(id).macExpectation", "a divergent expectation must cite its spec clause (GF.9 item 8)")
             }

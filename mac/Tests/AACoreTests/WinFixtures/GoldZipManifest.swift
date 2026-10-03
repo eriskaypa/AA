@@ -187,6 +187,10 @@ struct GoldZipManifest: Sendable {
         for g in entries {
             guard let a = actual.entries.first(where: { Ordinal.equals($0.name, g.name) }) else { continue }
             if g.isDirectory != a.isDirectory { problems.append("\(g.name): isDirectory \(g.isDirectory) vs \(a.isDirectory)") }
+            // A masked AA-format payload (source.json carries the machine name and the write time) cannot have the
+            // same size or CRC; its bytes are compared bytes-masked through the payload file instead.
+            let masked = GoldZipManifest.isAAFormat(g.name) && g.payload != nil
+            if masked { continue }
             if g.uncompressedSize != a.uncompressedSize {
                 problems.append("\(g.name): uncompressedSize \(g.uncompressedSize) vs \(a.uncompressedSize)")
             }

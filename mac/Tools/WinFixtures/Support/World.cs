@@ -74,7 +74,7 @@ internal static class Shapes
         }
         catch (Exception ex)
         {
-            return new JsonObject { ["input"] = input, ["ok"] = false, ["error"] = new JsonObject { ["type"] = ex.GetType().FullName } };
+            return new JsonObject { ["input"] = input, ["ok"] = false, ["error"] = new JsonObject { ["type"] = ex.GetType().FullName, ["aaAuthored"] = false } };
         }
     }
 

@@ -106,11 +106,21 @@ struct GoldReproducer: Sendable {
     /// When set, the reproducer needs another wave owner's real code; until that owner flips its ContractStatus the
     /// case is reported as pending (a failure only under AA_REQUIRE_FIXTURES=1).
     var requires: ContractOwner?
+    /// Set when the Mac API this case needs is private to another owner (ARCH §6.8 last paragraph): the case is
+    /// pending until a reproducer is written against it (Docs/Requests/W-GOLD.md names each one).
+    var pendingNote: String?
     var run: @MainActor @Sendable (GoldCaseContext) async throws -> GoldActual
 
     init(requires: ContractOwner? = nil, _ run: @escaping @MainActor @Sendable (GoldCaseContext) async throws -> GoldActual) {
         self.requires = requires
         self.run = run
+    }
+
+    /// A case whose Swift side cannot be written yet (the API is another owner's private code).
+    static func pending(_ owner: ContractOwner, _ note: String) -> GoldReproducer {
+        var r = GoldReproducer(requires: owner) { _ in [:] }
+        r.pendingNote = note
+        return r
     }
 }
 
@@ -136,6 +146,13 @@ enum GoldCaseRunner {
         guard let repro = table.reproducer(for: c) else {
             report(["no Swift reproducer is registered for case \(c.id) (\(c.title)); add one to the family suite"],
                    case: c, attachments: [])
+            return
+        }
+        if let note = repro.pendingNote {
+            // A must-case without a Swift side is a visible gap at release (AA_REQUIRE_FIXTURES=1), never silent.
+            if GoldEnv.requireFixtures && c.normative == .must {
+                Issue.record(Comment(rawValue: "\(c.id): no Swift reproducer yet — \(note)"))
+            }
             return
         }
         if let owner = repro.requires, !ContractStatus.isImplemented(owner) {
@@ -165,36 +182,36 @@ enum GoldCaseRunner {
     /// drive it without the Testing issue machinery.
     static func compareAll(_ c: GoldFixtureCase, actual: GoldActual, ctx: GoldCaseContext) -> Outcome {
         var out = Outcome()
-        let divergentRole = c.macExpectation.kind == .divergent ? (c.macExpectation.role ?? c.outputs.first?.role) : nil
-        for ref in c.outputs {
-            var file = ref.file
-            var mode = ref.compare ?? c.compare
-            var pointer = ref.pointer
-            if ref.role == divergentRole, let macFile = c.macExpectation.file {
-                file = macFile
-                mode = c.macExpectation.compare ?? mode
-                pointer = nil
+        // What the Mac must reproduce: every Mac-compared output (`same`), or only the Mac-expected golden of the
+        // divergent role (`divergent`; the other outputs are the Windows record). A divergence without a Mac golden
+        // is asserted by the owner's own tests — nothing to compare here.
+        var expectations: [(role: String, file: String, pointer: String?, mode: GoldCompareMode)] = []
+        if c.macExpectation.kind == .divergent {
+            guard let macFile = c.macExpectation.file else { return out }
+            let role = c.macExpectation.role ?? c.outputs.first?.role ?? "result"
+            let base = c.outputs.first { $0.role == role }
+            expectations.append((role, macFile, c.macExpectation.pointer,
+                                 c.macExpectation.compare ?? base?.compare ?? c.compare))
+        } else {
+            for ref in c.outputs where ref.macCompared {
+                expectations.append((ref.role, ref.file, ref.pointer, ref.compare ?? c.compare))
             }
-            guard let value = actual[ref.role] else {
-                if c.macExpectation.kind == .divergent && ref.role != divergentRole { continue }
-                out.problems.append("\(ref.role): the reproducer produced no output for this role")
+        }
+        for e in expectations {
+            guard let value = actual[e.role] else {
+                out.problems.append("\(e.role): the reproducer produced no output for this role")
                 continue
             }
-            if case .skip(let why) = value {
-                if mode != .recordOnly && c.normative != .recordOnly && ref.role == divergentRole {
-                    out.problems.append("\(ref.role): skipped by the reproducer (\(why)) although the Mac expectation names it")
-                }
-                continue
-            }
+            if case .skip = value { continue }
             let golden: Data
-            do { golden = try ctx.goldenData(file) } catch {
-                out.problems.append("\(ref.role): golden \(file) is missing from the fixture tree")
+            do { golden = try ctx.goldenData(e.file) } catch {
+                out.problems.append("\(e.role): golden \(e.file) is missing from the fixture tree")
                 continue
             }
-            if let problem = compare(value, golden: golden, pointer: pointer, mode: mode, goldenFile: file, ctx: ctx) {
-                out.problems.append("\(ref.role) (\(file), \(mode.rawValue)): \(problem)")
-                out.attachments.append((name: "\(c.id).\(ref.role).golden", data: goldenBytes(golden, pointer: pointer)))
-                out.attachments.append((name: "\(c.id).\(ref.role).actual", data: actualBytes(value)))
+            if let problem = compare(value, golden: golden, pointer: e.pointer, mode: e.mode, goldenFile: e.file, ctx: ctx) {
+                out.problems.append("\(e.role) (\(e.file), \(e.mode.rawValue)): \(problem)")
+                out.attachments.append((name: "\(c.id).\(e.role).golden", data: goldenBytes(golden, pointer: e.pointer)))
+                out.attachments.append((name: "\(c.id).\(e.role).actual", data: actualBytes(value)))
             }
         }
         return out

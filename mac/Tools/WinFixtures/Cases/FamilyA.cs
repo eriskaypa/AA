@@ -411,7 +411,7 @@ internal static class FamilyA
                     var root = Chain(n);
                     var o = new JsonObject { ["n"] = n };
                     try { DataStore.SerializeForSave(KitchenSink.WithTasks(new[] { root })); o["ok"] = true; }
-                    catch (Exception ex) { o["ok"] = false; o["error"] = ex.GetType().FullName; }
+                    catch (Exception ex) { o["ok"] = false; o["exception"] = Shapes.ExceptionShape(ex, false)["exception"]!.DeepClone(); }
                     ser.Add(o);
                 }
                 var de = new JsonArray();
@@ -422,7 +422,7 @@ internal static class FamilyA
                     docs.Add(doc);
                     var o = new JsonObject { ["depth"] = depth };
                     try { JsonSerializer.Deserialize<AppData>(doc, Opts); o["ok"] = true; }
-                    catch (Exception ex) { o["ok"] = false; o["error"] = ex.GetType().FullName; }
+                    catch (Exception ex) { o["ok"] = false; o["exception"] = Shapes.ExceptionShape(ex, false)["exception"]!.DeepClone(); }
                     de.Add(o);
                 }
                 r.Input("documents", docs);

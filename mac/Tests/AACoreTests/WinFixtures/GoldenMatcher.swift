@@ -17,6 +17,9 @@ enum GoldToken: Hashable, Sendable, CustomStringConvertible {
     case nowUTC
     case machine
     case dataDir
+    /// W-GOLD extension of the GF.4.5 grammar: the data folder upper-cased (A25 stores it that way to probe
+    /// case-insensitive matching). Literal substitution like `%%DATADIR%%`.
+    case dataDirUpper
     case temp
     case salt16
     case hash32
@@ -30,6 +33,7 @@ enum GoldToken: Hashable, Sendable, CustomStringConvertible {
         case .nowUTC: return "%%NOWUTC%%"
         case .machine: return "%%MACHINE%%"
         case .dataDir: return "%%DATADIR%%"
+        case .dataDirUpper: return "%%DATADIRUPPER%%"
         case .temp: return "%%TEMP%%"
         case .salt16: return "%%SALT16%%"
         case .hash32: return "%%HASH32%%"
@@ -45,6 +49,7 @@ enum GoldToken: Hashable, Sendable, CustomStringConvertible {
         case "NOWUTC": self = .nowUTC
         case "MACHINE": self = .machine
         case "DATADIR": self = .dataDir
+        case "DATADIRUPPER": self = .dataDirUpper
         case "TEMP": self = .temp
         case "SALT16": self = .salt16
         case "HASH32": self = .hash32
@@ -72,9 +77,9 @@ enum GoldToken: Hashable, Sendable, CustomStringConvertible {
         case .salt16: return #"[A-Za-z0-9+/]{22}=="#
         case .hash32: return #"[A-Za-z0-9+/]{43}="#
         case .encBlob: return #"enc:[A-Za-z0-9+/]+={0,2}"#
-        case .dataDir:
+        case .dataDir, .dataDirUpper:
             guard let dir = dataDir else { return "(?!)" }       // no data folder → can never match
-            let forms = GoldenMatcher.dataDirForms(dir)
+            let forms = GoldenMatcher.dataDirForms(self == .dataDirUpper ? NetText.toUpperInvariant(dir) : dir)
             return "(?:" + forms.map { NSRegularExpression.escapedPattern(for: $0) }.joined(separator: "|") + ")"
         }
     }
@@ -202,7 +207,7 @@ enum GoldenMatcher {
                       bindings: GoldBindings = GoldBindings()) -> GoldMismatch? {
         if golden == actual { return nil }
         guard let g = String(data: golden, encoding: .utf8) else { return byteMismatch(golden, actual) }
-        if !hasTokens(g) && !g.contains("%%DATADIR%%") { return byteMismatch(golden, actual) }
+        if !hasTokens(g) { return byteMismatch(golden, actual) }
         guard let a = String(data: actual, encoding: .utf8) else {
             return GoldMismatch(reason: "actual output is not valid UTF-8 but the golden carries tokens")
         }
@@ -219,7 +224,7 @@ enum GoldenMatcher {
             switch s {
             case .literal(let t): pattern += NSRegularExpression.escapedPattern(for: t)
             case .token(let k):
-                if k == .dataDir { pattern += k.pattern(dataDir: context.dataDir) }
+                if k == .dataDir || k == .dataDirUpper { pattern += k.pattern(dataDir: context.dataDir) }
                 else { pattern += "(" + k.pattern(dataDir: context.dataDir) + ")"; tokens.append(k) }
             }
         }
@@ -372,7 +377,7 @@ enum GoldJSONSemantic {
         case (.string(let g), _), (.rawString(let g), _):
             guard let a = actual.stringValue else { return GoldMismatch(reason: "expected a string, got \(kind(actual))", path: here) }
             if Ordinal.equals(g, a) { return nil }
-            if GoldenMatcher.hasTokens(g) || g.contains("%%DATADIR%%") {
+            if GoldenMatcher.hasTokens(g) {
                 if var m = GoldenMatcher.match(golden: g, actual: a, context: context, bindings: bindings) {
                     m.path = here; return m
                 }
@@ -387,7 +392,13 @@ enum GoldJSONSemantic {
                 if let m = compare(golden: x, actual: y, path: path + "/\(i)", context: context, bindings: bindings) { return m }
             }
             return nil
-        case (.object(let g), .object(let a)):
+        case (.object(var g), .object(var a)):
+            // GF.4.7: exception messages (and .NET type names) are compared only when the text is written in AA's
+            // own source (`aaAuthored`); a framework exception only has to be an exception on both sides.
+            if g["aaAuthored"]?.boolValue == false {
+                for k in ["type", "message"] { _ = g.removeValue(forKey: k); _ = a.removeValue(forKey: k) }
+                _ = g.removeValue(forKey: "aaAuthored"); _ = a.removeValue(forKey: "aaAuthored")
+            }
             let missing = g.keys.filter { !a.containsKey($0) }
             if !missing.isEmpty { return GoldMismatch(reason: "missing key(s) \(missing)", path: here) }
             let extra = a.keys.filter { !g.containsKey($0) }
