@@ -39,7 +39,7 @@ private struct ShellXSignInNotice: View {
     @Environment(AppEnvironment.self) private var env
     var body: some View {
         if !env.mainLoaded {
-            Label("Sign in to AA to change these settings.", systemImage: "person.badge.key")
+            Label(ShellXSettingsGate.signInNotice, systemImage: "person.badge.key")
                 .font(.callout)
                 .foregroundStyle(.secondary)
         }
@@ -58,8 +58,14 @@ struct ShellXSettingsGeneralTab: View {
 
     private var defaultName: String { SettingsStore.defaultIdentity() }
 
+    /// SHELL-004 / §6.1: before sign-in nothing here may write `settings.json` or the data folder.
+    private func enabled(_ c: ShellXSettingsGate.GeneralControl) -> Bool {
+        ShellXSettingsGate.isEnabled(c, mainLoaded: env.mainLoaded)
+    }
+
     var body: some View {
         Form {
+            ShellXSignInNotice()
             Section {
                 LabeledContent("Name") {
                     HStack(spacing: AASpacing.s) {
@@ -76,6 +82,7 @@ struct ShellXSettingsGeneralTab: View {
                         }
                         .help("Reset the identity to this Mac's name (\(defaultName)).")
                     }
+                    .disabled(!enabled(.appIdentity))
                 }
                 LabeledContent("Window title") {
                     Text(env.windowTitle).foregroundStyle(.secondary)
@@ -92,11 +99,12 @@ struct ShellXSettingsGeneralTab: View {
                     Label("Dark", systemImage: AASymbol.darkMode).tag(AppearanceMode.dark)
                 }
                 .pickerStyle(.segmented)
+                .disabled(!enabled(.appearance))
                 ShellXSettingsHelp("Light and Dark are remembered with your data (Dark mode); System follows this Mac and leaves that setting as it is.")
                 Toggle("Show the keyboard shortcut bar", isOn: Binding(
                     get: { env.store.data.ui.showShortcutBar },
                     set: { env.setShortcutBarVisible($0) }))
-                    .disabled(!env.mainLoaded)
+                    .disabled(!enabled(.shortcutBar))
             }
 
             Section("Menu Bar and Notifications") {
@@ -116,6 +124,7 @@ struct ShellXSettingsGeneralTab: View {
                     HStack(spacing: AASpacing.s) {
                         ShellXPathText(path: env.dataStore.appFolder.path, maxWidth: 250)
                         Button("Show in Finder") { run(.openDataFolder) }
+                            .disabled(!enabled(.showDataFolder))
                     }
                 }
                 LabeledContent("Active data file") { ShellXPathText(path: env.dataStore.currentDataFile.path) }
@@ -140,6 +149,7 @@ struct ShellXSettingsGeneralTab: View {
 
     /// B1: blank → this Mac's name, else trimmed; the status shows the stored value.
     private func commitIdentity() {
+        guard enabled(.appIdentity) else { identityDraft = env.settings.appIdentity; return }
         let stored = ShellXDataFlows.setAppIdentity(identityDraft, settings: env.settings)
         identityDraft = stored
         env.postSettingStatus(ShellXText.identitySet(stored))
@@ -147,6 +157,7 @@ struct ShellXSettingsGeneralTab: View {
     }
 
     private func setAppearance(_ mode: AppearanceMode) {
+        guard enabled(.appearance) else { return }
         appearance = mode
         ShellAppearance.set(mode, settings: env.settings)
         env.router.darkModeChecked = ShellAppearance.isEffectivelyDark

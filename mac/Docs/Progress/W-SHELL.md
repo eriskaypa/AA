@@ -81,3 +81,17 @@ zip without `._` entries).
 * Settings ▸ File Links / AI / Sync show W-PERSIST's, W-SIRE's and W-DRIVE's sections once they land.
 * REQ-W-SHELL-01 (adoptSharedFile semantics), REQ-W-SHELL-02 (MenuBarExtra binding writes "off"; local guard in
   `ReminderCenter` since the audit), REQ-W-SHELL-03 (`Docs/Progress/` in the ownership checker).
+
+## Verification fixes, round 2 (FIX2-W-SHELL, 2026-10-03)
+
+| Finding | Status | Change |
+|---|---|---|
+| V2-J6 D-5 orphaned-notes dialogs titled "Password" | **fixed** | `ShellXText.olderEncryptedNotesTitle` ("Older Encrypted Notes") on the pre-change confirmation (`orphanConfirmMessage`, "Change Password" destructive, Cancel default) and the post-change warning; failures keep "Password". `ShellXOrphanedNotesDialogTests`: title/message pins, ShellFlows wiring, and V2-J6's journey (1 migrated, 1 undecryptable kept, new hash persisted, master accepted). |
+| V2-J8 Settings ▸ General writable before sign-in | **fixed** | `ShellXSettingsGate` (AACore): identity, appearance, shortcut bar and Show in Finder need the main phase; the menu-bar toggle and Notification Settings… stay. The General tab shows the sign-in notice, disables those controls, and `commitIdentity` / `setAppearance` refuse before sign-in (the focus-loss commit bypasses `.disabled`). `ShellXSettingsGateTests`. |
+| V2-J8 / V2-DESIGN Keyboard Shortcuts: reentrancy warning, zebra stripes, system font | **fixed** | Root cause (lldb on `NSLog`): `Table` rows with `Section` make SwiftUI build an outline view; `AppKitOutlineTableCoordinator.configTableView` → `expandItem` → `NSTableRowHeightData _cacheRowSpansInRange` re-enters itself. Neither memoising the groups (tried: a static constant still warned), the style nor fixed row heights helped; removing the sections did. The menus are now title rows of one flat `Table(rows)` (`ShellXShortcutCatalog.tableRows`, rebuilt into `@State` on query / section-title change). `.tableStyle(.inset)` + `.alternatingRowBackgrounds(.disabled)`, cells `aaMono(12)`, title `aaMono(16, bold)`, count `aaMono(11)` monospaced digits, muted secondary columns; keycaps keep the rounded system face. `ShellXShortcutTableRowTests`. |
+| V2-DESIGN Settings debug sheets in mono | **fixed** | `View.shellXSettingsChrome()` (system 13) is applied by `SettingsView` and by every `w-shell.settings.*` registration, so the sheets show the real window's look. `ShellXSettingsSnapshotChromeTests`. |
+
+Snapshots (worktree binary, scratch copies of `snapdata-full`, light and dark, `scratchpad/snapshots/fix2-W-SHELL/`):
+`shortcuts-{before,after}`, `settings-after`, `settings-security-after`, `sheet-w-shell.settings.{general,security,sync,file-links,ai}-after`.
+`--snapshot shortcuts` stderr: 1 reentrancy warning before, 0 after (light and dark); every other run prints no AppKit warning.
+The pre-login Settings state cannot be rendered by the hook (it loads the main phase); it is pinned by the gate tests.

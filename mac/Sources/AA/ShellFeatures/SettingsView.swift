@@ -30,8 +30,7 @@ struct SettingsView: View {
                 .tabItem { Label("AI", systemImage: "sparkles") }
                 .tag(SettingsTab.ai)
         }
-        // Settings is chrome: native controls keep the system font (ARCH §8.3); paths stay monospaced.
-        .font(.system(size: AAType.body))
+        .shellXSettingsChrome()
         .onAppear { consumeRequest() }
         .onChange(of: env.requestedSettingsTab) { _, _ in consumeRequest() }
         .onChange(of: tab) { _, t in ShellXSettingsTabMemory.remember(t) }
@@ -43,6 +42,12 @@ struct SettingsView: View {
         withAnimation(.snappy) { tab = requested }
         env.requestedSettingsTab = nil
     }
+}
+
+extension View {
+    /// Settings is chrome: native controls keep the system font (ARCH §8.3); paths stay monospaced. The Settings scene
+    /// and the DEBUG `w-shell.settings.*` sheets both use this, so a snapshot shows the look users see.
+    func shellXSettingsChrome() -> some View { font(.system(size: AAType.body)) }
 }
 
 /// The last tab shown (per Mac, `aa.shellx.settingsTab`); DEBUG snapshot runs may force one with `AA_SETTINGS_TAB`.

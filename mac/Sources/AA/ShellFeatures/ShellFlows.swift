@@ -354,8 +354,9 @@ import AACore
         if env.passwords.hasPassword,
            let w = LegacyBodyMigration.orphanWarning(
                count: env.passwords.undecryptableLegacyBodyCount(in: env.store, current: current)),
-           !(await dialogs.confirm(ShellXText.passwordFailedTitle, w + " Change the password anyway?",
-                                   confirm: "Change Password", destructive: true, defaultIsCancel: true)) {
+           !(await dialogs.confirm(ShellXText.olderEncryptedNotesTitle, ShellXText.orphanConfirmMessage(w),
+                                   confirm: ShellXText.changePasswordAnyway, destructive: true,
+                                   defaultIsCancel: true)) {
             return
         }
         do {
@@ -366,7 +367,7 @@ import AACore
                 env.status.post(status)
                 postIfSettingsUnwritable(env)
                 if let w = LegacyBodyMigration.orphanWarning(count: r.undecryptable) {
-                    await dialogs.warning(ShellXText.passwordFailedTitle, w)
+                    await dialogs.warning(ShellXText.olderEncryptedNotesTitle, w)
                 }
             }
         } catch {

@@ -128,6 +128,12 @@ public enum ShellXText {
     // MARK: Password (SHELL-101, DATA-080)
 
     public static let passwordFailedTitle = "Password"
+    /// 01 §8.1 D-5 (Mac fix): title of the confirmation before, and the warning after, a password change that leaves
+    /// legacy `enc:` notes undecryptable. Distinct from the failure title so it reads as a data-loss decision.
+    public static let olderEncryptedNotesTitle = "Older Encrypted Notes"
+    public static let changePasswordAnyway = "Change Password"
+    /// The D-5 confirmation body: the orphan warning plus the question.
+    public static func orphanConfirmMessage(_ warning: String) -> String { warning + " Change the password anyway?" }
 
     // MARK: Translocation (SHELL-190 — Mac-only strings)
 

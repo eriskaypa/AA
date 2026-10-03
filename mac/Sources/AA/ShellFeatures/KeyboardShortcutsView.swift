@@ -9,57 +9,80 @@ import AACore
 struct KeyboardShortcutsView: View {
     @Environment(AppEnvironment.self) private var env
     @State private var query = ""
+    /// The table's rows, rebuilt only when the query or the section titles change (ARCH §9.7), never per body pass.
+    @State private var rows: [ShellXShortcutTableRow] = []
+    @State private var shown = 0
 
-    private var groups: [ShellXShortcutGroup] {
-        ShellXShortcutCatalog.groups(sectionTitles: env.navigator.sectionOrder.map(\.title), query: query)
-    }
+    private var sectionTitles: [String] { env.navigator.sectionOrder.map(\.title) }
 
     var body: some View {
-        let groups = self.groups
         VStack(spacing: 0) {
-            header(count: ShellXShortcutCatalog.count(groups))
+            header(count: shown)
             Divider()
-            if groups.isEmpty {
+            if rows.isEmpty {
                 AAEmptyState(title: "No Matching Shortcuts", symbol: "magnifyingglass",
                              message: "Nothing in the registry matches “\(NetText.trim(query))”.")
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // A native table: real column headers that always line up with the cells, resizable columns.
-                Table(of: ShellXShortcutEntry.self) {
-                    TableColumn("Command") { ShellXShortcutCommandCell(entry: $0) }
-                        .width(min: 190, ideal: 260)
-                    TableColumn("Mac") { ShellXKeycaps(chords: $0.chords) }
-                        .width(min: 100, ideal: 140)
-                    TableColumn("Windows") { e in
-                        Text(e.windows)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                            .help(e.windows)
-                    }
-                    .width(min: 150, ideal: 250)
-                    TableColumn("Menu") { e in
-                        Text(e.menu)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                            .help(e.menu)
-                    }
-                    .width(min: 90, ideal: 150)
-                } rows: {
-                    ForEach(groups) { group in
-                        Section {
-                            ForEach(group.entries) { TableRow($0) }
-                        } header: {
-                            AASectionHeader(title: group.title, count: group.entries.count)
-                        }
-                    }
-                }
-                .tableStyle(.inset(alternatesRowBackgrounds: true))
-                .font(.system(size: AAType.small))
+                table
             }
         }
         .frame(minWidth: 820, minHeight: 480)
         .background(AAColor.bg)
+        .onAppear(perform: rebuild)
+        .onChange(of: query) { _, _ in rebuild() }
+        .onChange(of: sectionTitles) { _, _ in rebuild() }
+    }
+
+    /// A native table (real column headers that line up with the cells, resizable columns). The menu groups are title
+    /// rows of the same flat table: `Section`s make SwiftUI build an outline view that logs an AppKit reentrancy
+    /// warning on every render (rule 18).
+    private var table: some View {
+        Table(rows) {
+            TableColumn("Command") { row in
+                switch row {
+                case .header(let title, let count, let isFirst):
+                    AASectionHeader(title: title, count: count)
+                        .padding(.top, isFirst ? 2 : AASpacing.m)
+                        .accessibilityAddTraits(.isHeader)
+                case .entry(let e):
+                    ShellXShortcutCommandCell(entry: e)
+                }
+            }
+            .width(min: 190, ideal: 260)
+            TableColumn("Mac") { row in
+                if let e = row.entry { ShellXKeycaps(chords: e.chords) }
+            }
+            .width(min: 100, ideal: 140)
+            TableColumn("Windows") { row in
+                if let e = row.entry {
+                    Text(e.windows)
+                        .foregroundStyle(AAColor.muted)
+                        .lineLimit(2)
+                        .help(e.windows)
+                }
+            }
+            .width(min: 150, ideal: 250)
+            TableColumn("Menu") { row in
+                if let e = row.entry {
+                    Text(e.menu)
+                        .foregroundStyle(AAColor.muted)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .help(e.menu)
+                }
+            }
+            .width(min: 90, ideal: 150)
+        }
+        .tableStyle(.inset)
+        .alternatingRowBackgrounds(.disabled)
+        .font(.aaMono(AAType.small))
+    }
+
+    private func rebuild() {
+        let groups = ShellXShortcutCatalog.groups(sectionTitles: sectionTitles, query: query)
+        rows = ShellXShortcutCatalog.tableRows(groups)
+        shown = ShellXShortcutCatalog.count(groups)
     }
 
     private func header(count: Int) -> some View {
@@ -67,11 +90,12 @@ struct KeyboardShortcutsView: View {
             Image(systemName: "keyboard")
                 .font(.system(size: 22, weight: .regular))
                 .foregroundStyle(AAColor.tint)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 1) {
-                Text("AA Keyboard Shortcuts").font(.system(size: AAType.title, weight: .semibold))
+                Text("AA Keyboard Shortcuts").font(.aaMono(AAType.title, weight: .bold))
                 Text(count == 1 ? "1 shortcut" : "\(count) shortcuts")
-                    .font(.system(size: AAType.caption))
-                    .foregroundStyle(.secondary)
+                    .font(.aaMono(AAType.caption))
+                    .foregroundStyle(AAColor.muted)
                     .monospacedDigit()
             }
             Spacer()
@@ -105,7 +129,7 @@ private struct ShellXKeycaps: View {
 
     var body: some View {
         if chords.isEmpty {
-            Text("—").foregroundStyle(.tertiary)
+            Text("—").foregroundStyle(AAColor.muted)
         } else {
             HStack(spacing: 4) {
                 ForEach(Array(chords.prefix(3).enumerated()), id: \.offset) { _, chord in
@@ -119,7 +143,7 @@ private struct ShellXKeycaps: View {
                         .fixedSize()
                 }
                 if chords.count > 3 {
-                    Text("+\(chords.count - 3)").font(.system(size: AAType.caption)).foregroundStyle(.secondary)
+                    Text("+\(chords.count - 3)").font(.aaMono(AAType.caption)).foregroundStyle(AAColor.muted)
                 }
             }
             .help(chords.joined(separator: ", "))
