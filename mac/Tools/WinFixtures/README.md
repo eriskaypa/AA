@@ -56,8 +56,12 @@ dotnet run --project WinFixtures -c Release -- check-mac ..\Tests\AACoreTests\Fi
 git status --porcelain -- ..\..\AA ..\..\Tests     # must print nothing (rule zero)
 ```
 
-`mac/Scripts/fixtures.sh` wraps all of these (`generate`, `verify-generated`, `selfcheck`, `check-mac`, `verify`,
-`require`, `emit-mac-out`, `ci`, `status`).
+`mac/Scripts/fixtures.sh` wraps all of these (`verify-sources`, `generate`, `verify-generated`, `selfcheck`,
+`xlsx-golden`, `check-mac`, `verify`, `require`, `emit-mac-out`, `emit-xlsx-inputs`, `real-data`, `ci`, `status`).
+
+No process of the tool ever resolves the operator's real `%LOCALAPPDATA%\AA` (DATA-314): the parent process pins
+`AA_DATA_DIR` to a scratch path (never created) before the case catalogue touches `DataStore`, and every child gets
+its own scratch data folder from the driver.
 
 ## What a run does (GF.3.4)
 
@@ -104,4 +108,5 @@ services/ ext/` and the `any`/`unix` records; the windows run owns `windows/` an
 
 Every fixture is synthetic. A real `data.json` (crew passports, dates of birth, next of kin) is never committed.
 The optional local-only round trip of a real file is a Swift test: `AA_REAL_DATA_JSON=/path/to/data.json swift
-test --filter GoldRealDataRoundTrip` — it reports pass/fail and byte offsets only and writes nothing.
+test --filter GoldRealDataRoundTrip` (or `Scripts/fixtures.sh real-data /path/to/data.json`) — it reads a copy in a
+temporary folder, reports pass/fail and byte offsets only, and writes nothing.

@@ -22,6 +22,12 @@ internal static class Cli
     public static int Main(string[] args)
     {
         if (args.Length == 0) { Usage(); return 2; }
+        // DATA-314: no process of this tool may resolve the operator's real %LOCALAPPDATA%\AA. DataStore.AppFolder is
+        // a static read once from AA_DATA_DIR, and building the case catalogue already touches DataStore, so the
+        // parent pins a scratch path (never created) before anything else; children get their own from the driver.
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("AA_DATA_DIR")))
+            Environment.SetEnvironmentVariable("AA_DATA_DIR",
+                Path.Combine(Path.GetTempPath(), "aa-winfixtures-parent-" + Environment.ProcessId.ToString(System.Globalization.CultureInfo.InvariantCulture)));
         try
         {
             return args[0] switch

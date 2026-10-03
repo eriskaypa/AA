@@ -85,13 +85,14 @@ internal static class Program
 
     private static JsonObject Golden(string file, string culture)
     {
-        using var hashStream = File.OpenRead(file);
+        // Hash from a full read that is closed again before ClosedXML opens the file (no overlapping handles).
+        var sha256 = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file))).ToLowerInvariant();
         var root = new JsonObject
         {
             ["$meta"] = new JsonObject
             {
                 ["fixture"] = Path.GetFileName(file),
-                ["sha256"] = Convert.ToHexString(SHA256.HashData(hashStream)).ToLowerInvariant(),
+                ["sha256"] = sha256,
                 ["closedXml"] = typeof(XLWorkbook).Assembly.GetName().Version?.ToString(),
                 ["runtime"] = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
                 ["culture"] = culture,

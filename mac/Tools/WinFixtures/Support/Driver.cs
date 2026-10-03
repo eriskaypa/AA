@@ -115,7 +115,7 @@ internal static class Driver
     private static List<Group> Groups(RunPlatform platform, string[] families)
     {
         var groups = new List<Group>();
-        foreach (var family in Catalog.Families.Where(families.Contains))
+        foreach (var family in Catalog.Families.Where(f => families.Contains(f)))
         {
             var cases = Catalog.All.Where(c => c.Family == family && c.RunsOn(platform)).ToList();
             // Shared groups first: the bundle matrix reads the B/R archives the shared bundles group writes.
