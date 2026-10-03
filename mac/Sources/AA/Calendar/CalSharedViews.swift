@@ -224,3 +224,14 @@ extension NSItemProvider {
         return p
     }
 }
+
+/// The keyboard modifiers held right now (click handlers on app-drawn cards and chips).
+@MainActor
+func calCurrentModifiers() -> EventModifiers {
+    let f = NSEvent.modifierFlags
+    var m: EventModifiers = []
+    if f.contains(.command) { m.insert(.command) }
+    if f.contains(.shift) { m.insert(.shift) }
+    if f.contains(.option) { m.insert(.option) }
+    return m
+}
