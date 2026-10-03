@@ -11,9 +11,11 @@ import Foundation
     }
 
     /// REPO-132 with the D-1 fix: false when the picks are empty or span groups, the group has fewer than two lists,
-    /// or the first pick is already first (up) / the last pick already last (down). Otherwise each pick swaps with
-    /// its group neighbour (ascending for up, descending for down) in the group's order, and the group is
-    /// re-anchored into its own flat slots exactly like `moveTo`'s final loop.
+    /// or the first pick is already first (up) / the last pick already last (down). A single pick, or a group whose
+    /// lists are contiguous in the collection, moves exactly as on Windows (which is correct there). Otherwise —
+    /// several picks in an interleaved group, where Windows mis-orders — each pick swaps with its group neighbour
+    /// (ascending for up, descending for down) in the group's order, and the group is re-anchored into its own flat
+    /// slots exactly like `moveTo`'s final loop.
     public static func nudge(_ all: inout [ChecklistTemplate], picks: [ChecklistTemplate], up: Bool) -> Bool {
         guard let gid = sameGroup(picks) else { return false }
         let span = groupSpan(all, groupID: gid)
@@ -24,6 +26,15 @@ import Foundation
         guard let first = at.first, let last = at.last else { return false }
         if up && first == 0 { return false }
         if !up && last == span.count - 1 { return false }
+        if at.count == 1 || span[span.count - 1] - span[0] == span.count - 1 {
+            // A single pick, or a group contiguous in the flat collection: the Windows algorithm is correct here, so
+            // run it verbatim and the flat order stays byte-identical to Windows (06 §7.4, OC-16).
+            for pos in (up ? at : at.reversed()) {
+                let x = all.remove(at: span[pos])
+                all.insert(x, at: span[up ? pos - 1 : pos + 1])
+            }
+            return true
+        }
         var desired = span.map { all[$0] }
         for pos in (up ? at : at.reversed()) {
             desired.swapAt(pos, up ? pos - 1 : pos + 1)

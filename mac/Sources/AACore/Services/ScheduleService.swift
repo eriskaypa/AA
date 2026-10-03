@@ -2,7 +2,7 @@
 //       indented, 2-space indent, `"Key": value`, nulls written, default escaping, CRLF; declared keys only).
 import Foundation
 
-public enum ScheduleImportError: Error, LocalizedError, Sendable {
+public enum ScheduleImportError: Error, LocalizedError, Sendable, Equatable {
     /// The file's JSON is `null` (STJ `Deserialize` returned null).
     case notASchedule
     /// Unreadable JSON or a value of the wrong type (the parser / decoder message).
