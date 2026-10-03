@@ -119,9 +119,11 @@ struct FileBacklinksSection: View {
     }
 
     private func quickLook(_ model: FileBankBacklinksModel, _ ids: Set<String>, toggle: Bool) {
+        if toggle, QuickLookCoordinator.shared.isVisible { QuickLookCoordinator.shared.close(); return }
         let sel = model.rows.filter { ids.contains($0.id) }.map(\.link.file)
+        guard !sel.isEmpty else { NSSound.beep(); return }
         FileBankOpening.quickLook(sel.count > 1 ? sel : model.rows.map(\.link.file), selected: sel.first, env: env,
-                                  toggle: toggle)
+                                  toggle: false)
     }
 
     /// Removes this item from the picked files' `LinkedItemIds` (MarkDirty, like CONT-093).

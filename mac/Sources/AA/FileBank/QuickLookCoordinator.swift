@@ -33,10 +33,17 @@ import AACore
             panel.currentPreviewItemIndex = index
             return
         }
-        guard let window = NSApp.keyWindow ?? NSApp.mainWindow else { NSSound.beep(); return }
+        guard let window = NSApp.keyWindow ?? NSApp.mainWindow
+                ?? NSApp.orderedWindows.first(where: { $0.isVisible && $0.canBecomeKey }) else { NSSound.beep(); return }
         splice(into: window)
         panel.updateController()
         panel.makeKeyAndOrderFront(nil)
+        if !isControlling {
+            // No key window chain reached this responder (the app is not active): never show an empty panel.
+            panel.orderOut(nil)
+            unsplice()
+            NSSound.beep()
+        }
     }
 
     /// Space semantics (Finder): close the panel when it is showing our items, else preview.

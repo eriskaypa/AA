@@ -140,13 +140,22 @@ public enum FileBankDisplay {
 
     /// Added column: the user's locale short date + time (05 §8 K-17; Windows printed en-US).
     public static func added(_ d: NetDateTime, locale: Locale = .current, zone: TimeZone = .current) -> String {
+        added(d, formatter: addedFormatter(locale: locale, zone: zone))
+    }
+
+    /// One formatter per render (lists build it once, ARCH §9.7).
+    public static func addedFormatter(locale: Locale = .current, zone: TimeZone = .current) -> DateFormatter {
         let f = DateFormatter()
         f.locale = locale
         f.timeZone = zone
         f.calendar = Calendar(identifier: .gregorian)
         f.dateStyle = .short
         f.timeStyle = .short
-        return f.string(from: d.foundationDate(zone: zone))
+        return f
+    }
+
+    public static func added(_ d: NetDateTime, formatter: DateFormatter) -> String {
+        formatter.string(from: d.foundationDate(zone: formatter.timeZone ?? .current))
     }
 
     /// CONT-090 / HIER-136: more than 15 entries ask first.

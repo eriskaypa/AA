@@ -140,6 +140,7 @@ struct FileBankRow: Identifiable {
     init(container: Container, scope: FileBankScope, env: AppEnvironment) {
         let ds = env.dataStore
         let index = FileBankItemIndex(store: env.store)
+        let formatter = FileBankDisplay.addedFormatter()
         for t in FileBankTab.allCases { counts[t] = t.filter(container.files).count }
         let sharers = env.store.allContainers().filter {
             $0 !== container && $0.sharedWithContainerIds.contains(container.id)
@@ -155,7 +156,7 @@ struct FileBankRow: Identifiable {
             occurrences[key] = n + 1
             return FileBankRow(id: .init(container: ObjectIdentifier(c), file: key, occurrence: n), file: f, container: c,
                                owner: owner, visual: FileBankVisual(f, dataStore: ds),
-                               linkedSummary: index.linkedSummary(f.linkedItemIds), added: FileBankDisplay.added(f.added))
+                               linkedSummary: index.linkedSummary(f.linkedItemIds), added: FileBankDisplay.added(f.added, formatter: formatter))
         }
         switch scope {
         case .tab(let t):
@@ -311,9 +312,11 @@ struct FileBankPane: View {
             open: { ids in Task { await c.open(files(ids)) } },
             showInFinder: { ids in if let r = first(ids) { Task { await c.showInFinder(r.file) } } },
             quickLook: { ids, toggle in
+                if toggle, QuickLookCoordinator.shared.isVisible { QuickLookCoordinator.shared.close(); return }
                 let sel = files(ids)
-                let pool = sel.count > 1 ? sel : shownFiles
-                FileBankOpening.quickLook(pool, selected: sel.first, env: env, toggle: toggle)
+                guard !sel.isEmpty else { NSSound.beep(); return }
+                let pool = sel.count > 1 ? sel : shownFiles               // one selected: ← / → browse the tab
+                FileBankOpening.quickLook(pool, selected: sel.first, env: env, toggle: false)
             },
             rename: { ids in if let r = first(ids) { Task { await c.rename(r.file) } } },
             linkToItems: { ids in if let r = first(ids) { Task { await c.linkToItems(r.file) } } },

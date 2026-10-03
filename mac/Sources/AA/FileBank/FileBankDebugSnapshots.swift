@@ -1,6 +1,7 @@
 // Debug snapshot registrations of W-FILES (ARCHITECTURE.md §9.6; sheet ids "w-files.<name>"). They render the file
 // bank, the read-only viewer and the backlinks section over the fixture data folder
 // `Tests/AACoreTests/Fixtures/ui/w-files/` (copied to a scratch folder, `sample-data.json` → `data.json`).
+import QuickLookUI
 import SwiftUI
 import AACore
 
@@ -38,6 +39,9 @@ extension SnapshotRegistry {
         register("w-files.viewer-empty") { _ in
             AnyView(ContainerViewerSheet(title: "Close sea chest valves", container: Container()))
         }
+        register("w-files.quicklook") { env in
+            AnyView(FileBankQuickLookProbe(env: env))
+        }
         register("w-files.backlinks") { env in
             let id = env.store.data.equipment.first { $0.name == "Main engine" }?.id ?? UUID()
             return AnyView(FileBacklinksSection(itemID: id)
@@ -45,6 +49,31 @@ extension SnapshotRegistry {
                 .frame(width: 620)
                 .background(AAColor.panel))
         }
+    }
+}
+
+/// Verifies the responder-chain Quick Look controller (SHELL-669, HIER-M06): opens the panel on the fixture's local
+/// files and reports to stderr whether the panel is visible and controlled by `QuickLookCoordinator`.
+struct FileBankQuickLookProbe: View {
+    let env: AppEnvironment
+    @State private var report = "Opening Quick Look…"
+
+    var body: some View {
+        Text(report).font(.aaMono(AAType.small)).padding(AASpacing.l).frame(width: 520)
+            .task {
+                let c = FileBankDebug.absolutized(env.store.allItems().first { $0.name == "Main engine" }?.container
+                                                  ?? Container(), env)
+                try? await Task.sleep(for: .milliseconds(50))
+                NSApp.activate()
+                NSApp.windows.first { $0.sheetParent != nil }?.makeKeyAndOrderFront(nil)
+                try? await Task.sleep(for: .milliseconds(100))
+                FileBankOpening.quickLook(c.files, selected: c.files.first, env: env, toggle: false)
+                try? await Task.sleep(for: .milliseconds(450))
+                let panel = QLPreviewPanel.sharedPreviewPanelExists() ? QLPreviewPanel.shared() : nil
+                report = "Quick Look: active=\(NSApp.isActive) key=\(NSApp.keyWindow.map { String(describing: type(of: $0)) } ?? "nil") sheetKey=\(NSApp.keyWindow?.sheetParent != nil) controller=\(panel?.currentController.map { String(describing: type(of: $0)) } ?? "nil") visible=\(panel?.isVisible ?? false) items=\(QuickLookCoordinator.shared.urls.count) " +
+                    "controlled=\(QuickLookCoordinator.shared.isVisible)"
+                FileHandle.standardError.write(Data((report + "\n").utf8))
+            }
     }
 }
 

@@ -202,8 +202,10 @@ struct FileBankViewerContent: View {
     }
 
     private func quickLook(_ rows: [FileBankRow], _ ids: Set<FileBankRow.ID>, toggle: Bool) {
+        if toggle, QuickLookCoordinator.shared.isVisible { QuickLookCoordinator.shared.close(); return }
         let sel = rows.filter { ids.contains($0.id) }.map(\.file)
-        FileBankOpening.quickLook(sel.count > 1 ? sel : rows.map(\.file), selected: sel.first, env: env, toggle: toggle)
+        guard !sel.isEmpty else { NSSound.beep(); return }
+        FileBankOpening.quickLook(sel.count > 1 ? sel : rows.map(\.file), selected: sel.first, env: env, toggle: false)
     }
 
     /// HIER-136: none → "This item has no files."; more than 15 → "Open all {n} files?" (Yes/No).

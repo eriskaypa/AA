@@ -21,7 +21,11 @@ and Quick Look routing. Gated on other owners (run in Stage V): `realAttachmentS
 (TV-OWN-06), `unmappedWindowsPaths` (W-PERSIST); `viewerRendersXamlWithLinks` (W-RICH).
 
 Snapshots (both appearances, fixture `Tests/AACoreTests/Fixtures/ui/w-files/`, sheet ids `w-files.*`): file bank (list,
-icons, Images, Links, Shared, narrow, empty), viewer (with files, empty), backlinks.
+icons, Images, Links, Shared, narrow, empty), viewer (with files, empty), backlinks. `w-files.quicklook` is a probe
+that opens Quick Look on the fixture's local files and prints `Quick Look: … visible=… controlled=…` to stderr: in a
+headless snapshot run the app cannot become active (no key window), so the panel correctly refuses to show
+(`controlled=false`); with the app frontmost the coordinator's responder sits after the key window and the panel
+shows the files (Stage V manual check: select a row, press Space / ⌘Y).
 
 Not done in-worktree (post-merge, Stage V — need other owners' real code): opening / revealing through the real
 `AttachmentOpener` and Windows-path mapping (W-PERSIST); real copy import into `files/` (W-PERSIST); rich-text rendering
